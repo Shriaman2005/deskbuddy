@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="buddy.css">
 </head>
 <body>
-<div id="app">
+<div id="app" class="pixel">
 
   <!-- 0: face -->
   <section class="screen active" id="s-face">
@@ -15,33 +15,7 @@
     <div id="scene" aria-hidden="true"><canvas></canvas></div>
     <div id="head">
       <canvas id="pix" width="62" height="42" aria-hidden="true"></canvas>
-      <svg id="phones" viewBox="0 0 200 120" aria-hidden="true">
-        <path class="band" d="M14 84 C14 -6 186 -6 186 84"/>
-        <rect class="cup" x="3" y="68" width="26" height="44" rx="11"/>
-        <rect class="cup" x="171" y="68" width="26" height="44" rx="11"/>
-      </svg>
-      <div id="face">
-        <div class="ew l">
-          <div class="eye"><i class="shine"></i><i class="shine s2"></i><i class="lid t"></i><i class="lid b"></i></div>
-          <svg class="sym star" viewBox="0 0 100 100"><path d="M50 6l12 30 32 2-25 20 9 32-28-18-28 18 9-32L6 38l32-2z"/></svg>
-          <svg class="sym heart" viewBox="0 0 100 100"><path d="M50 88 12 50a22 22 0 0 1 38-30 22 22 0 0 1 38 30z"/></svg>
-          <svg class="sym spiral" viewBox="0 0 100 100"><path d="M50 50m0-4a4 4 0 1 1-4 4 10 10 0 0 1 10-10 16 16 0 0 1 16 16 22 22 0 0 1-22 22 28 28 0 0 1-28-28 34 34 0 0 1 34-34 40 40 0 0 1 40 40"/></svg>
-        </div>
-        <div class="ew r">
-          <div class="eye"><i class="shine"></i><i class="shine s2"></i><i class="lid t"></i><i class="lid b"></i></div>
-          <svg class="sym star" viewBox="0 0 100 100"><path d="M50 6l12 30 32 2-25 20 9 32-28-18-28 18 9-32L6 38l32-2z"/></svg>
-          <svg class="sym heart" viewBox="0 0 100 100"><path d="M50 88 12 50a22 22 0 0 1 38-30 22 22 0 0 1 38 30z"/></svg>
-          <svg class="sym spiral" viewBox="0 0 100 100"><path d="M50 50m0-4a4 4 0 1 1-4 4 10 10 0 0 1 10-10 16 16 0 0 1 16 16 22 22 0 0 1-22 22 28 28 0 0 1-28-28 34 34 0 0 1 34-34 40 40 0 0 1 40 40"/></svg>
-          <i class="sweat"></i>
-        </div>
-        <i class="cheek l"></i><i class="cheek r"></i>
-        <svg id="mouth" viewBox="0 0 100 40" aria-hidden="true"><path/></svg>
-        <svg id="mask" viewBox="0 0 200 80" aria-hidden="true">
-          <path class="strap" d="M30 30 L-10 10 M30 50 L-10 60 M170 30 L210 10 M170 50 L210 60"/>
-          <path class="cloth" d="M30 18 Q100 6 170 18 L166 58 Q100 78 34 58 Z"/>
-          <path class="pleat" d="M40 32 Q100 24 160 32 M42 44 Q100 38 158 44"/>
-        </svg>
-      </div>
+      <div id="face"></div>  <!-- carries the mood classes and gaze that pixel.js draws -->
     </div>
     <div id="focusbar"><i></i></div>
     <button id="tpill" aria-label="Open timer">
@@ -157,7 +131,6 @@
     <div class="toggles">
       <button data-toggle="sounds"></button>
       <button data-toggle="talk"></button>
-      <button data-toggle="pixel"></button>
       <button data-toggle="fastDictation"></button>
       <button data-toggle="dictateOnLaptop"></button>
       <button data-toggle="flashlight"></button>

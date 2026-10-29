@@ -44,14 +44,13 @@
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoLongEvery: 4, pomoAutoBreak: true, pomoAutoFocus: false, pomoGoal: 8,
     workScene: true, typingScene: true, typingAfter: 10, accent: "cyan",
-    pixel: C.pixel ?? true, brightnessDay: C.brightness.day,
+    brightnessDay: C.brightness.day,
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
   };
   const prefs = Object.assign({}, DEFAULT_PREFS,
-    { sounds: store.get("sounds", C.sounds), talk: store.get("talk", C.talk), pixel: store.get("pixel", C.pixel ?? true),
+    { sounds: store.get("sounds", C.sounds), talk: store.get("talk", C.talk),
       fastDictation: store.get("fastDictation", C.fastDictation ?? false) },  // drawer toggles from before the dashboard
     store.get("prefs", {}));
-  app.classList.toggle("pixel", prefs.pixel);
 
   const state = {
     night: false, wakeUntil: 0, lastTouch: now(), lastHour: -1,
@@ -1150,7 +1149,6 @@
     const set = (k, on, label) => { const b = $(`[data-toggle="${k}"]`); b.textContent = label; b.classList.toggle("on", on); };
     set("sounds", prefs.sounds, prefs.sounds ? "🔊 Sounds on" : "🔈 Sounds off");
     set("talk", prefs.talk, prefs.talk ? "🗣️ Talking on" : "🤐 Talking off");
-    set("pixel", prefs.pixel, prefs.pixel ? "👾 Pixel look" : "✨ Smooth look");
     set("fastDictation", prefs.fastDictation, prefs.fastDictation ? "⚡ Fast dictation" : "🎙 Best dictation");
     set("dictateOnLaptop", prefs.dictateOnLaptop, prefs.dictateOnLaptop ? "💻 Dictation on laptop" : "📱 Dictation on phone");
     set("flashlight", !!state.flashlight, state.flashlight ? "🔦 Torch on" : "🔦 Torch off");
@@ -1161,7 +1159,7 @@
     if (!b) return;
     if (b.dataset.app) { $("#drawer").classList.remove("open"); return phone.launch(b.dataset.app); }
     const k = b.dataset.toggle;
-    if (["sounds", "talk", "pixel", "fastDictation", "dictateOnLaptop"].includes(k)) setPrefs({ [k]: !prefs[k] });
+    if (["sounds", "talk", "fastDictation", "dictateOnLaptop"].includes(k)) setPrefs({ [k]: !prefs[k] });
     if (k === "flashlight") { state.flashlight = !state.flashlight; post(`/api/torch?on=${state.flashlight ? 1 : 0}`); }
     if (k === "reload") return location.reload();
     if (k === "viz") { $("#drawer").classList.remove("open"); return go(VIZ); }
@@ -1228,7 +1226,6 @@
   function applyPrefs(p) {
     const was = brightnessNow();
     for (const k in DEFAULT_PREFS) if (typeof p[k] === typeof DEFAULT_PREFS[k]) prefs[k] = p[k];
-    if (preview.get("look")) prefs.pixel = preview.get("look") === "pixel";  // previews: ?look=smooth&accent=sage
     if (preview.get("accent")) prefs.accent = preview.get("accent");
     store.set("prefs", prefs);
     // the accent colour (Chip's eyes, glow and scenes), from the design's palettes in robot.js
@@ -1241,7 +1238,6 @@
     if (isPomo() && !timerActive() && !alarmUntil && focus.total !== prefs[POMO[focus.mode]] * 60000) {
       focus.total = focus.left = prefs[POMO[focus.mode]] * 60000; saveFocus();
     }
-    app.classList.toggle("pixel", prefs.pixel);
     for (const [k, sel] of Object.entries(SHOWS)) $$(sel).forEach((el) => el.classList.toggle("off", !prefs[k]));
     $("#c-panel").classList.toggle("off", !prefs.clockNow && !prefs.clockHours && !prefs.clockAir);
     $(".rings").classList.toggle("off", !prefs.ringCpu && !prefs.ringRam && !prefs.ringGpu && !prefs.ringBattery);
@@ -1258,7 +1254,7 @@
     prefsBusy = false;
     if (!s) return;
     // Nothing saved on the laptop yet: hand it what the drawer toggles were before there was a dashboard.
-    if (s.rev === 0 && onPhone) return setPrefs({ sounds: prefs.sounds, talk: prefs.talk, pixel: prefs.pixel, fastDictation: prefs.fastDictation });
+    if (s.rev === 0 && onPhone) return setPrefs({ sounds: prefs.sounds, talk: prefs.talk, fastDictation: prefs.fastDictation });
     prefsRev = s.rev; store.set("prefsRev", s.rev); applyPrefs(s);
   }
   function setPrefs(p) {  // changed on this screen

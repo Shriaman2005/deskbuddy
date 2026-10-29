@@ -1,13 +1,12 @@
 // Pixel-art face: draws the buddy on a tiny canvas that CSS scales up with crisp pixels.
-// It mirrors the normal face (mood classes, blink, gaze, accessories set by buddy.js),
-// so turning the pixel look on or off doesn't change any behaviour.
+// It reads the state buddy.js puts on the (invisible) #face: mood classes, blink, gaze, accessories.
 (() => {
   "use strict";
   const app = document.getElementById("app"), face = document.getElementById("face");
   const cv = document.getElementById("pix"), g = cv.getContext("2d");
   const CW = cv.width, CH = cv.height;                 // 62 × 42 pixels
   const EW = 18, EH = 24, EY = 8, LX = 6, RX = 38;    // eye size and left edges
-  const MOUTH = { x: 22, y: 33, w: 17, h: 7 };         // the smooth face's mouth box, in pixels
+  const MOUTH = { x: 22, y: 33, w: 17, h: 7 };         // the mouth box, in pixels
 
   // lid closure (fraction of eye height), lid tilt (degrees) and eye scale for each mood
   const MOODS = {
@@ -19,7 +18,7 @@
     whistle: { top: .08 }, bored: { top: .4, bot: .06 }, smirk: { bot: .26, topR: .2 },
     listen: { sc: 1.06 }, think: { top: .18, topR: .3, rot: -6 },
   };
-  // mouth outlines (same shapes as the smooth face): x0 y0, upper-lip control, x1 y1, lower-lip control
+  // mouth outlines: x0 y0, upper-lip control, x1 y1, lower-lip control
   const MOUTHS = {
     neutral: [32, 18, 50, 22, 68, 18, 50, 30], happy: [24, 14, 50, 18, 76, 14, 50, 38],
     joy: [18, 10, 50, 12, 82, 10, 50, 46], flat: [36, 21, 50, 20, 64, 21, 50, 23],
@@ -77,7 +76,7 @@
       music: app.classList.contains("music"), masked: app.classList.contains("masked"),
     });
     cv.style.setProperty("--tilt", face.style.getPropertyValue("--tilt") || "0deg");
-    const key = JSON.stringify([tgt, st, app.classList.contains("pixel")]);
+    const key = JSON.stringify([tgt, st]);
     if (key !== lastKey) { lastKey = key; kick(); }
   }
 
@@ -111,7 +110,7 @@
     const slope = Math.tan((s.rot * Math.PI) / 180) * (side < 0 ? 1 : -1);
     const rx = Math.max(1, w * 0.3), ry = Math.max(1, h * 0.26), mid = (w - 1) / 2;
     const c = st.color, light = mix(c, WHITE, 0.3), base = css(c), dark = mix(c, BLACK, 0.28);
-    // highlight blocks drift with the gaze, like the smooth face's shine
+    // highlight blocks drift with the gaze
     const gx = Math.round(s.lx), gy = Math.round(s.ly);
     const shine = (i, j) =>
       (i >= w * 0.6 + gx && i < w * 0.83 + gx && j >= h * 0.12 + gy && j < h * 0.3 + gy) ||
@@ -224,7 +223,7 @@
   }
   function frame(t) {
     raf = 0;
-    if (!app.classList.contains("pixel") || app.classList.contains("scene")) return;  // robot.js's scene instead
+    if (app.classList.contains("scene")) return;  // robot.js's scene instead
     if (t - last < 45) { raf = requestAnimationFrame(frame); return; }
     const dt = last ? Math.min(120, t - last) : 50;
     last = t;

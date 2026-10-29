@@ -4,9 +4,8 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
 
 ## On the phone
 - **Face** (home screen, via kiFOSSk): blinks, looks around, reacts.
-  - Pixel look (default): `phone/www/pixel.js` draws the face on a 62×42 canvas scaled up with crisp pixels,
-    plus the VT323 pixel font, notched pixel borders and CRT scanlines. Swipe up → "👾 Pixel look" switches
-    back to the smooth face (or set `pixel: false` in config.js).
+  - Pixel look (the only look): `phone/www/pixel.js` draws the face on a 62×42 canvas scaled up with crisp pixels,
+    plus the VT323 pixel font, notched pixel borders and CRT scanlines.
   - tap: happy · double-tap: hearts · rub back and forth: pets · poke 6×: grumpy · shake: dizzy
   - drag a finger: the eyes follow it · tap while it wears its mask: takes it off for 15 s
   - idle: whistles, sneezes, peeks off-screen, spins, wiggles, smirks; yawns and nods off when you're away
@@ -26,7 +25,7 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
     Pomodoro). A running or paused timer shows as a pill on the face; tap it to open the timer. A finished
     countdown rings for up to 30 s — tap to stop it.
   - Chip's two scenes are from the Claude Design project "Robot Focus" / "Robot Typing", ported to a canvas in
-    `robot.js` (pixel or smooth to match the look, in the accent colour):
+    `robot.js` (pixel art, in the accent colour):
     - Focus mode, while a focus session runs (dashboard > Timer & Pomodoro > "Focus mode on the face screen"):
       the room dims, a moon comes up and Chip types away on a laptop; it gets into flow (closer camera) while you
       type fast, and notifications that arrive meanwhile pop up as muted bubbles. It lets go when the session ends.
@@ -36,14 +35,14 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
       without a key) and powers down. The bridge only counts key presses (the USB keyboard's transfer count in
       /sys/bus/usb/devices/*/urbnum, the built-in keyboard's interrupts), never which keys.
     - Previews: `?typing` or `?mood=focus`, plus `&wpm=90`, `&idle=3`, `&sceneT=<seconds into the design>`,
-      `&look=smooth`, `&accent=sage`.
+      `&accent=sage`.
     - Cost on the phone: ~80% of a core for kiFOSSk during a scene (8 fps while a section loops, 12 for the
       moves; the canvas is drawn at the design's grid size and scaled up by CSS).
   - Accent colour (dashboard > Look): cyan, terracotta or sage, the design's palettes. It colours Chip's eyes and
     glow, the scenes and the dashboard itself.
   - Rotates with the phone (kiFOSSk orientation: Auto-rotate); every screen has a portrait layout.
   - swipe up: apps (Brave, Termux, Files, Settings, All apps) and toggles (sounds, talking,
-    pixel look, dictation speed, visualizer, reload)
+    dictation speed, visualizer, reload)
   - **Dictation:** hold Chip's face with two fingers, speak (English or Hinglish), let go: the text is typed
     wherever the cursor is on the laptop. Slide a finger away before letting go to cancel. Fully offline:
     the phone records and runs whisper.cpp itself (`phone/dictation.py`, binary and models in `~/stt` in
@@ -77,7 +76,7 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
 ## On the laptop
 - **Dashboard:** http://127.0.0.1:8765 (also **Chip Dashboard** in the app grid). Switches for every
   feature (tabs, dock items, clock and laptop panels, face extras, sounds, talking, alerts, dictation,
-  pixel look, brightness) and Chip's sleep time, with a live preview of the face. Changes save instantly
+  brightness) and Chip's sleep time, with a live preview of the face. Changes save instantly
   (`~/.config/deskbuddy/settings.json`) and reach the phone on its next poll (~3 s); the drawer toggles on
   the phone write back to the same settings. Served by the bridge, so `deskbuddy-bridge` must be running.
 - `systemctl --user start deskbuddy-bridge` — laptop stats, media and volume controls for the

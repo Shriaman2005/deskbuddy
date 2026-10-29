@@ -95,7 +95,7 @@ TOGGLES = (
     "dockPhoneBattery", "dockPhoneTemp", "timerPill", "focusBar", "dots", "musicMode", "mask",
     "clockNow", "clockHours", "clockAir", "ringCpu", "ringRam", "ringGpu", "ringBattery", "mediaCard",
     "sounds", "talk", "idle", "greetings", "hourly", "trackToasts", "laptopAlerts", "phoneAlerts", "shake",
-    "stretch", "dictation", "fastDictation", "dictateOnLaptop", "pixel", "sleep", "drowsy",
+    "stretch", "dictation", "fastDictation", "dictateOnLaptop", "sleep", "drowsy",
     # attention alerts: "torch" is the master switch (it was torch-only at first), the rest say what, how and when
     "torch", "torchAsk", "torchDone", "torchApps", "notifyAllApps", "alertTorch", "alertSound",
     "torchAway", "torchRepeat", "torchNight", "behaviourTorch",

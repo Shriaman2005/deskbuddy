@@ -7,7 +7,7 @@
 //   when you pause, Idea when you go on, Burst when you type fast; Done (a big Enter, a grin) and Sleep when
 //   you stop.
 // buddy.js sets data-focus, data-typing, data-wpm, data-idle and data-accent on #app and fires "chip:notify";
-// this adds #app.scene while a scene plays (the normal face steps aside) and follows #app.pixel for the look.
+// this adds #app.scene while a scene plays (the normal face steps aside).
 (() => {
   "use strict";
   const app = document.getElementById("app"), faceScreen = document.getElementById("s-face");
@@ -41,16 +41,13 @@
   // ---------------------------------------------------------------- accent palettes (the design's glow colours)
   const PALETTES = {
     cyan: { main: "#2ee6f2", light: "#8ef6fc", dark: "#17a3ba", deep: "#0e6a80", hi: "#effeff", rim: "#5fe8ff", bg: "#020609", floor: "#0e9ab8",
-      smoothBg: "#140b1d", smoothCenter: "#2a1838", eyeTop: "#74f0ff", eyeBot: "#2cc4dd",
       key: "#1a8db0", keyFace: "#27bfd9", keyLip: "#0f5f7a", keyGap: "#0b1a33", deck: "#14223f", deckRim: "#7489bb", lid: "#4a5a86", lidLine: "#53648f", lidEdge: "#a9bae0", lidEdgeDark: "#6f82b3", lidBottom: "#28335a", baseFront: "#8397c8", baseFrontDark: "#56689c" },
     terracotta: { main: "#ee9358", light: "#f9c49b", dark: "#b8622f", deep: "#73391a", hi: "#fff3e8", rim: "#f2a46e", bg: "#080504", floor: "#a8582a",
-      smoothBg: "#130a07", smoothCenter: "#2a1710", eyeTop: "#ffbd8f", eyeBot: "#d8743a",
       key: "#a8582a", keyFace: "#d57a40", keyLip: "#6b3517", keyGap: "#1e1210", deck: "#2a1d19", deckRim: "#a08a80", lid: "#655550", lidLine: "#6e5e58", lidEdge: "#cdbab0", lidEdgeDark: "#8e7b72", lidBottom: "#3a2d29", baseFront: "#ab978d", baseFrontDark: "#776760" },
     sage: { main: "#b4d38c", light: "#dcefc4", dark: "#7a9a5c", deep: "#465c33", hi: "#f7ffee", rim: "#c3dda2", bg: "#040604", floor: "#6f8f52",
-      smoothBg: "#0a0d09", smoothCenter: "#18211a", eyeTop: "#d6efb8", eyeBot: "#91b46b",
       key: "#6f8f52", keyFace: "#94b870", keyLip: "#465c33", keyGap: "#111a10", deck: "#1c2619", deckRim: "#8c9a84", lid: "#525c4d", lidLine: "#5b6556", lidEdge: "#bcc8b2", lidEdgeDark: "#7d8a74", lidBottom: "#2c3328", baseFront: "#98a68f", baseFrontDark: "#69765f" },
   };
-  window.CHIP_PALETTES = PALETTES;  // buddy.js colours the normal face from the same palettes
+  window.CHIP_PALETTES = PALETTES;  // buddy.js colours the face from the same palettes
   const HAND = { o: "#0a1426", w: "#f2f7ff", s: "#6a82b4", b: "#b2c6ea" };
 
   // ---------------------------------------------------------------- geometry (the logical 320×180 grid)
@@ -106,7 +103,6 @@
   ];
   const TICK = ["#.....#", "#....#.", ".#...#.", ".#..#.."];
   const TICK_BIG = ["#....#....#", "#....#....#", ".#...#...#.", ".#.......#.", "..#.....#.."];
-  const TICK_LINES = { small: [[0, 0, 1.3, 3.4], [6, 0, 4.6, 3.4]], big: [[0, 0, 2, 4.4], [5, -0.4, 5, 3.6], [10, 0, 8, 4.4]] };
   const SPARK_S = [".#.", "#+#", ".#."];
   const SPARK_B = ["..#..", "..#..", "##+##", "..#..", "..#.."];
   const BUBBLE = [
@@ -132,9 +128,6 @@
     grin: ["######################", "######################", ".####################.", "..##################..", "....##############....", ".......########......."],
     small: ["##########", "..######.."],
   };
-  const HAND_D = new Path2D("M1.5 9.5 C1.2 4.2 7 0.8 13 0.8 C19.5 0.8 25 4.4 25 9.6 C25 13.6 21.6 15.6 16.5 15.6 L8.5 15.6 C4.2 15.6 1.7 13.4 1.5 9.5 Z");
-  const HAND_THUMB = new Path2D("M8.6 7.4 C5.6 7.2 3.8 9.5 4.4 11.4 C5 13 7.2 13.4 8.8 12.6");
-  const HAND_SHINE = new Path2D("M11.5 3.2 C14.2 2.4 17.4 2.6 19.6 3.7");
 
   // ---------------------------------------------------------------- pixel helpers
   function inPoly(x, y, p) {
@@ -281,160 +274,23 @@
     drawRuns(ctx, runs);
   }
 
-  // ---------------------------------------------------------------- face (smooth)
-  function rrPath(ctx, x, y, w, h, rt, rb) {
-    rt = Math.max(0, Math.min(rt, w / 2, h / 2)); rb = Math.max(0, Math.min(rb, w / 2, h / 2));
-    ctx.beginPath();
-    ctx.moveTo(x + rt, y); ctx.lineTo(x + w - rt, y); ctx.arc(x + w - rt, y + rt, rt, -Math.PI / 2, 0);
-    ctx.lineTo(x + w, y + h - rb); ctx.arc(x + w - rb, y + h - rb, rb, 0, Math.PI / 2);
-    ctx.lineTo(x + rb, y + h); ctx.arc(x + rb, y + h - rb, rb, Math.PI / 2, Math.PI);
-    ctx.lineTo(x, y + rt); ctx.arc(x + rt, y + rt, rt, Math.PI, Math.PI * 1.5);
-    ctx.closePath();
-  }
-  function eyeGrad(ctx, pal, y0, y1) {
-    const gr = ctx.createLinearGradient(0, y0, 0, y1);
-    gr.addColorStop(0, pal.eyeTop); gr.addColorStop(1, pal.eyeBot);
-    return gr;
-  }
-  function smoothMouth(ctx, kind, mx, my, pal) {
-    const c = pal.main;
-    ctx.fillStyle = c; ctx.strokeStyle = c; ctx.lineJoin = "round"; ctx.lineCap = "round";
-    const lens = (half, up, down) => {  // the mouths that are a lens between two curves
-      ctx.beginPath(); ctx.moveTo(mx - half, my); ctx.quadraticCurveTo(mx, my + up, mx + half, my);
-      ctx.quadraticCurveTo(mx, my + down, mx - half, my); ctx.closePath(); ctx.lineWidth = 0.9; ctx.fill(); ctx.stroke();
-    };
-    switch (kind) {
-      case "neutral": return lens(7, 1.6, 6.4);
-      case "grin": return lens(11, 2, 11);
-      case "small": return lens(5, 1, 4);
-      case "flat": ctx.beginPath(); ctx.roundRect(mx - 6, my + 0.6, 12, 2.3, 1.15); return ctx.fill();
-      case "hmm": ctx.beginPath(); ctx.moveTo(mx - 6, my + 2.8); ctx.lineTo(mx + 6, my + 0.4); ctx.lineWidth = 2.3; return ctx.stroke();
-      case "o": ctx.beginPath(); ctx.ellipse(mx, my + 3, 2.6, 3, 0, 0, Math.PI * 2); ctx.lineWidth = 1.9; return ctx.stroke();
-      default: return null;
-    }
-  }
-  function starPath(ctx, x, y, r) {
-    ctx.beginPath(); ctx.moveTo(x, y - r);
-    ctx.quadraticCurveTo(x, y, x + r, y); ctx.quadraticCurveTo(x, y, x, y + r);
-    ctx.quadraticCurveTo(x, y, x - r, y); ctx.quadraticCurveTo(x, y, x, y - r); ctx.closePath();
-  }
-  function smoothFace(ctx, st, pal) {
-    const f = st.face;
-    if (f.sx > 0.001) {
-      [[EYE_L, f.lidL, 0], [EYE_R, f.lidR, f.raiseR]].forEach(([b, lid, raise]) => {
-        const open = 1 - 0.95 * f.blink;
-        const w = Math.max(1.2, b.w * f.sx * f.wide), hF = b.h * f.sy * f.wide, h = Math.max(0.9, hF * open);
-        const cx = b.cx + f.dx, cy = b.cy + f.dy + f.bob - raise;
-        if (f.happy && f.blink < 0.5) {
-          const t = w * 0.21, ry = hF * 0.33, base = cy + ry * 0.35, rx = w / 2 - t / 2;
-          ctx.beginPath(); ctx.ellipse(cx, base, rx, ry, 0, Math.PI, Math.PI * 2);
-          ctx.strokeStyle = eyeGrad(ctx, pal, base - ry - t / 2, base + t / 2); ctx.lineWidth = t; ctx.lineCap = "round"; ctx.stroke();
-          return;
-        }
-        const x = cx - w / 2, y = cy - h / 2, cut = h > 3 ? Math.min(h - 2, h * lid) : 0;
-        const r = Math.min(w * 0.3, h / 2);
-        rrPath(ctx, x, y + cut, w, h - cut, cut > 0 ? Math.min(3, r) : r, r);
-        ctx.fillStyle = f.flash ? pal.hi : eyeGrad(ctx, pal, y + cut, y + h);
-        ctx.fill();
-        if (!f.flash && open > 0.75) {
-          const top = cy - hF / 2;
-          ctx.save(); ctx.clip();
-          ctx.fillStyle = pal.hi;
-          ctx.beginPath(); ctx.arc(x + w * 0.71, top + hF * 0.23, w * 0.105, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.arc(x + w * 0.6, top + hF * 0.39, w * 0.048, 0, Math.PI * 2); ctx.fill();
-          ctx.restore();
-        }
-      });
-    }
-    if (f.mouth) smoothMouth(ctx, f.mouth, MOUTH.cx + f.dx * 0.6 + f.mouthDx, MOUTH.y + 1 + f.dy * 0.6 + f.bob, pal);
-    ctx.fillStyle = pal.main;
-    st.dots.forEach((d) => { ctx.beginPath(); ctx.arc(d.x + d.s / 2, d.y + d.s / 2, d.s * 0.6, 0, Math.PI * 2); ctx.fill(); });
-    st.sparks.forEach((sp) => {
-      const r = sp.big ? 2.8 : 1.5;
-      ctx.fillStyle = pal.main; starPath(ctx, sp.x + 0.5, sp.y + 0.5, r); ctx.fill();
-      ctx.fillStyle = pal.hi; ctx.beginPath(); ctx.arc(sp.x + 0.5, sp.y + 0.5, r * 0.28, 0, Math.PI * 2); ctx.fill();
-    });
-  }
-
   // ---------------------------------------------------------------- notification bubbles and the focus moon
-  function overlays(ctx, st, pal, smooth) {
+  function overlays(ctx, st, pal) {
     st.bubbles.forEach((b) => {
-      const c = b.muted ? pal.dark : pal.main, fillC = smooth ? pal.smoothBg : pal.keyGap;
+      const c = b.muted ? pal.dark : pal.main;
       ctx.save(); ctx.globalAlpha *= b.opacity;
-      if (smooth) {
-        ctx.translate(b.x, b.y); ctx.scale(b.scale, b.scale);
-        ctx.strokeStyle = c; ctx.fillStyle = fillC; ctx.lineWidth = 1.1; ctx.lineJoin = "round";
-        ctx.beginPath(); ctx.moveTo(-4, 4); ctx.lineTo(-5.8, 7.6); ctx.lineTo(-0.8, 4.3); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.roundRect(-7.5, -4.5, 15, 9, 4.5); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = c;
-        for (const dx of [-3.6, 0, 3.6]) { ctx.beginPath(); ctx.arc(dx, 0, 1.1, 0, Math.PI * 2); ctx.fill(); }
-      } else {
-        ctx.translate(R(b.x), R(b.y)); ctx.scale(b.scale, b.scale); ctx.translate(-7.5, -4);
-        drawRuns(ctx, spriteRuns(BUBBLE, 0, 0, { "#": c, f: fillC }));
-      }
+      ctx.translate(R(b.x), R(b.y)); ctx.scale(b.scale, b.scale); ctx.translate(-7.5, -4);
+      drawRuns(ctx, spriteRuns(BUBBLE, 0, 0, { "#": c, f: pal.keyGap }));
       ctx.restore();
     });
     if (st.moon) {
       const m = st.moon;
       ctx.save(); ctx.fillStyle = pal.main;
-      if (smooth) {
-        ctx.translate(m.x, m.y); ctx.scale(m.scale, m.scale);
-        ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.clip();  // the circle, less the one that bites it
-        ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.arc(3.6, -3, 5.9, 0, Math.PI * 2, true); ctx.fill();
-      } else {
-        ctx.translate(R(m.x), R(m.y)); ctx.scale(m.scale, m.scale);
-        for (const [x, y] of MOON_CELLS) ctx.fillRect(x, y, 1, 1);
-      }
+      ctx.translate(R(m.x), R(m.y)); ctx.scale(m.scale, m.scale);
+      for (const [x, y] of MOON_CELLS) ctx.fillRect(x, y, 1, 1);
       ctx.restore();
     }
   }
-
-  // ---------------------------------------------------------------- the laptop, keys and hands, both looks
-  const pts = (ctx, p) => { ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
-  const smoothLaptop = {
-    deck(ctx, pal) {
-      ctx.lineJoin = "round";
-      pts(ctx, [[97, 147], [165, 160], [165, 163], [97, 150]]); ctx.fillStyle = ctx.strokeStyle = pal.baseFrontDark; ctx.lineWidth = 0.8; ctx.fill(); ctx.stroke();
-      pts(ctx, [[165, 161], [219, 151], [219, 154], [165, 164]]); ctx.fillStyle = ctx.strokeStyle = pal.baseFront; ctx.fill(); ctx.stroke();
-      pts(ctx, [BL, BR, FR, FL]); ctx.fillStyle = pal.keyGap; ctx.strokeStyle = pal.deckRim; ctx.lineWidth = 1; ctx.fill(); ctx.stroke();
-    },
-    keys(ctx, pal) {
-      ctx.lineJoin = "round"; ctx.lineWidth = 0.4;
-      ctx.fillStyle = ctx.strokeStyle = pal.keyLip;
-      KEYS.forEach((k) => { pts(ctx, k.corners.map(([x, y]) => [x, y + 0.9])); ctx.fill(); ctx.stroke(); });
-      ctx.fillStyle = ctx.strokeStyle = pal.keyFace;
-      KEYS.forEach((k) => { pts(ctx, k.corners); ctx.fill(); ctx.stroke(); });
-    },
-    lid(ctx, pal) {
-      const [, B, C, D] = LID;
-      const gr = ctx.createLinearGradient(78, 96, 78 + 0.3 * 87, 160);
-      gr.addColorStop(0, pal.lidLine); gr.addColorStop(1, pal.lid);
-      pts(ctx, LID); ctx.fillStyle = gr; ctx.strokeStyle = pal.lid; ctx.lineWidth = 1.2; ctx.lineJoin = "round"; ctx.fill(); ctx.stroke();
-      ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(D[0], D[1]); ctx.lineTo(C[0], C[1]); ctx.strokeStyle = pal.lidBottom; ctx.lineWidth = 1.3; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(B[0] - 0.4, B[1] + 0.6); ctx.lineTo(C[0] - 0.4, C[1]); ctx.strokeStyle = pal.lidEdge; ctx.lineWidth = 1.9; ctx.stroke();
-    },
-    rim(ctx, pal) {
-      const [A, B, , D] = LID;
-      ctx.strokeStyle = pal.rim; ctx.lineWidth = 1; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.moveTo(A[0], A[1]); ctx.lineTo(D[0], D[1]); ctx.stroke();
-    },
-    logo(ctx, pal) {
-      const gr = ctx.createRadialGradient(115 + 0.45 * 12, 120 + 0.42 * 14, 0, 115 + 0.45 * 12, 120 + 0.42 * 14, 0.6 * 14);
-      gr.addColorStop(0, pal.hi); gr.addColorStop(0.6, pal.hi); gr.addColorStop(1, pal.light);
-      ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(121, 127, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
-    },
-    hand(ctx, x, y) {
-      ctx.save(); ctx.translate(x, y);
-      const gr = ctx.createLinearGradient(0.2 * 26, 0, 0.8 * 26, 16);
-      gr.addColorStop(0, HAND.w); gr.addColorStop(0.55, HAND.w); gr.addColorStop(1, HAND.b);
-      ctx.fillStyle = gr; ctx.fill(HAND_D); ctx.strokeStyle = HAND.o; ctx.lineWidth = 1; ctx.stroke(HAND_D);
-      ctx.lineCap = "round"; ctx.lineWidth = 0.9;
-      ctx.strokeStyle = HAND.s; ctx.stroke(HAND_THUMB);
-      ctx.globalAlpha *= 0.85; ctx.strokeStyle = "#ffffff"; ctx.stroke(HAND_SHINE);
-      ctx.restore();
-    },
-  };
 
   // ---------------------------------------------------------------- choreography (as in the design)
   function tapAt(T, streams, seed) {
@@ -668,8 +524,8 @@
   }
 
   // ---------------------------------------------------------------- drawing
-  // The scene is drawn on the design's grid (1 px a unit for the pixel look, 2 for smooth), and the grid is then
-  // drawn on screen through the camera: crisp big pixels for the pixel look. Glow comes from blurred copies (a
+  // The scene is drawn on the design's grid (1 px a unit), and the grid is then
+  // drawn on screen through the camera: crisp big pixels. Glow comes from blurred copies (a
   // wide and a narrow blur, at half size): for the face and bubbles every frame, for the keys, the lid's rim and
   // its logo once per palette (they don't change); lit keys and tap marks go without, to spare the phone.
   const gridCv = layer(), gg = gridCv.getContext("2d");
@@ -679,8 +535,8 @@
     const src = layer(GW * scale / 2, GH * scale / 2), sg = src.getContext("2d");
     sg.setTransform(scale / 2, 0, 0, scale / 2, 0, 0); draw(sg);
     const out = layer(GW * scale, GH * scale), o = out.getContext("2d");
-    o.globalAlpha = 0.5; o.filter = `blur(${(scale > 1 ? 6 : 5) * scale}px)`; o.drawImage(src, 0, 0, out.width, out.height);
-    o.globalAlpha = 0.85; o.filter = `blur(${(scale > 1 ? 2 : 1.6) * scale}px)`; o.drawImage(src, 0, 0, out.width, out.height);
+    o.globalAlpha = 0.5; o.filter = `blur(${5 * scale}px)`; o.drawImage(src, 0, 0, out.width, out.height);
+    o.globalAlpha = 0.85; o.filter = `blur(${1.6 * scale}px)`; o.drawImage(src, 0, 0, out.width, out.height);
     return out;
   }
   const cam = { fx: 162, fy: 96, s: 1 };
@@ -697,24 +553,19 @@
     glowG.globalAlpha = 1;
     if (!any) return;
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = true;
-    const smooth = scale > 1;
-    ctx.globalAlpha = 0.5; ctx.filter = `blur(${(smooth ? 6 : 5) * scale}px)`; ctx.drawImage(glowCv, 0, 0, gridCv.width, gridCv.height);
-    ctx.globalAlpha = 0.85; ctx.filter = `blur(${(smooth ? 2 : 1.6) * scale}px)`; ctx.drawImage(glowCv, 0, 0, gridCv.width, gridCv.height);
+    ctx.globalAlpha = 0.5; ctx.filter = `blur(${5 * scale}px)`; ctx.drawImage(glowCv, 0, 0, gridCv.width, gridCv.height);
+    ctx.globalAlpha = 0.85; ctx.filter = `blur(${1.6 * scale}px)`; ctx.drawImage(glowCv, 0, 0, gridCv.width, gridCv.height);
     ctx.restore();
   }
   function render(T, st) {
     const pal = PALETTES[app.dataset.accent] || PALETTES.cyan;
-    const smooth = !app.classList.contains("pixel"), scale = smooth ? 2 : 1, glow = smooth ? 0.9 : 0.65;
-    if (gridCv.width !== GW * scale) { gridCv.width = GW * scale; gridCv.height = GH * scale; glowCv.width = GW * scale / 2; glowCv.height = GH * scale / 2; }
-    const key = app.dataset.accent + (smooth ? "s" : "p");
-    if (!built || built.key !== key) built = { key, pixel: smooth ? null : buildPixelStatic(pal) };
-    const P = built.pixel, g = gg, bg = smooth ? pal.smoothBg : pal.bg;
-    const drawKeys = (c) => (smooth ? smoothLaptop.keys(c, pal) : c.drawImage(P.keys, 0, 0));
-    const drawRim = (c) => { if (smooth) smoothLaptop.rim(c, pal); else { c.fillStyle = pal.rim; for (const [x, y] of P.rim) c.fillRect(x, y, 1, 1); } };
-    const drawLogo = (c) => {
-      if (smooth) smoothLaptop.logo(c, pal);
-      else for (const p of P.logo) { c.fillStyle = p.inner ? pal.hi : pal.light; c.fillRect(p.x, p.y, 1, 1); }
-    };
+    const scale = 1, glow = 0.65;
+    const key = app.dataset.accent;
+    if (!built || built.key !== key) built = { key, pixel: buildPixelStatic(pal) };
+    const P = built.pixel, g = gg, bg = pal.bg;
+    const drawKeys = (c) => c.drawImage(P.keys, 0, 0);
+    const drawRim = (c) => { c.fillStyle = pal.rim; for (const [x, y] of P.rim) c.fillRect(x, y, 1, 1); };
+    const drawLogo = (c) => { for (const p of P.logo) { c.fillStyle = p.inner ? pal.hi : pal.light; c.fillRect(p.x, p.y, 1, 1); } };
     if (!built.glow) built.glow = { keys: blurredCopy(drawKeys, scale), rim: blurredCopy(drawRim, scale), logo: blurredCopy(drawLogo, scale) };
     const cached = (img, a) => { if (a > 0.01) { g.globalAlpha = a; g.drawImage(img, 0, 0, GW, GH); } };
     g.setTransform(scale, 0, 0, scale, 0, 0);
@@ -728,11 +579,10 @@
       gr.addColorStop(0, color + stop0); gr.addColorStop(1, color + "00");
       g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 1, 0, Math.PI * 2); g.fill(); g.restore();
     };
-    if (smooth) ellipse(166, 72, 150, 95, pal.smoothCenter, "ff", st.lights * (1 - 0.5 * dim));
     ellipse(156, 161, 88 - 30 * dim, 11, pal.floor, "8c", st.lights * (0.7 + 0.3 * st.slam));
 
-    const drawFace = (c) => (smooth ? smoothFace(c, st, pal) : pixelFace(c, T, st, pal));
-    const drawOver = (c) => overlays(c, st, pal, smooth);
+    const drawFace = (c) => pixelFace(c, T, st, pal);
+    const drawOver = (c) => overlays(c, st, pal);
     const fg = glow * (st.glowBoost || 1);
     // face and notification bubbles / moon, glowing
     glowing(g, scale, 1, [[drawFace, st.face.flicker, fg], [drawOver, 1, glow]]);
@@ -742,28 +592,21 @@
     // the laptop (fades in and out with the lights)
     const L = st.lights;
     if (L > 0.01) {
-      const hand = (c, [x, y]) => (smooth ? smoothLaptop.hand(c, x, y) : c.drawImage(P.hand, R(x), R(y)));
+      const hand = (c, [x, y]) => c.drawImage(P.hand, R(x), R(y));
       const drawLit = (c) => st.lit.forEach((l) => {
         c.fillStyle = pal[l.c];
-        if (smooth) { const k = KEYS[l.id]; if (k) { pts(c, k.corners); c.strokeStyle = pal[l.c]; c.lineWidth = 0.5; c.fill(); c.stroke(); } }
-        else for (const [x, y] of P.keyCells[l.id] || []) c.fillRect(x, y, 1, 1);
+        for (const [x, y] of P.keyCells[l.id] || []) c.fillRect(x, y, 1, 1);
       });
-      const drawTicks = (c) => {
-        if (smooth) {
-          c.strokeStyle = pal.main; c.lineWidth = 1; c.lineCap = "round"; c.beginPath();
-          st.ticks.forEach((tk) => TICK_LINES[tk.big ? "big" : "small"].forEach(([x1, y1, x2, y2]) => { c.moveTo(tk.x + x1 + 0.5, tk.y + y1 + 0.5); c.lineTo(tk.x + x2 + 0.5, tk.y + y2 + 0.5); }));
-          c.stroke();
-        } else drawRuns(c, st.ticks.flatMap((tk) => spriteRuns(tk.big ? TICK_BIG : TICK, R(tk.x), R(tk.y), { "#": pal.main })));
-      };
+      const drawTicks = (c) => drawRuns(c, st.ticks.flatMap((tk) => spriteRuns(tk.big ? TICK_BIG : TICK, R(tk.x), R(tk.y), { "#": pal.main })));
       const rimA = Math.min(1, st.rimB + st.slam * 0.4) * L, logoA = st.logoOn * L;
 
       g.globalAlpha = L;
-      if (smooth) smoothLaptop.deck(g, pal); else g.drawImage(P.deck, 0, 0);
+      g.drawImage(P.deck, 0, 0);
       cached(built.glow.keys, L * Math.min(1, glow * 0.3));
       g.globalAlpha = L; drawKeys(g); drawLit(g);
       hand(g, st.hands.l); hand(g, st.hands.r);
       drawTicks(g);
-      if (smooth) smoothLaptop.lid(g, pal); else g.drawImage(P.lid, 0, 0);
+      g.drawImage(P.lid, 0, 0);
       cached(built.glow.rim, rimA * Math.min(1, glow * (0.8 + st.slam)));
       cached(built.glow.logo, logoA * Math.min(1, glow * (1 + st.slam * 0.8)));
       g.globalAlpha = rimA; drawRim(g);
@@ -775,7 +618,7 @@
     const W = cv.width, H = cv.height, k = (H / GH) * ZOOM;
     vg.setTransform(1, 0, 0, 1, 0, 0);
     vg.fillStyle = bg; vg.fillRect(0, 0, W, H);
-    vg.imageSmoothingEnabled = smooth;
+    vg.imageSmoothingEnabled = false;
     vg.translate(Math.round(W / 2 + (st.cam.shake / PX) * k * cam.s), Math.round(H * 0.45));
     vg.scale(cam.s * k, cam.s * k);
     vg.translate(-cam.fx, -cam.fy);
@@ -806,10 +649,10 @@
     app.classList.toggle("scene", !!run);
     if (!run) { cancelAnimationFrame(raf); raf = 0; last = 0; return; }
     if (!faceScreen.classList.contains("active") || document.hidden) return;  // keeps time, draws nothing
-    // the screen canvas is only as fine as the grid (CSS scales it up, crisp for the pixel look): drawing it
+    // the screen canvas is only as fine as the grid (CSS scales it up, crisp): drawing it
     // at the phone's full resolution kept a whole CPU core busy
-    const r = cv.getBoundingClientRect(), scale = app.classList.contains("pixel") ? 1 : 2;
-    const h = Math.round((GH / ZOOM) * scale), w = Math.round((h * r.width) / Math.max(1, r.height));
+    const r = cv.getBoundingClientRect();
+    const h = Math.round(GH / ZOOM), w = Math.round((h * r.width) / Math.max(1, r.height));
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
     const st = sceneState();
     const a = 1 - Math.exp(-dt * 5);
