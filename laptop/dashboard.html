@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chip Dashboard</title>
+<style>
+@font-face { font-family: "VT323"; src: url("/preview/fonts/vt323.woff2") format("woff2"); font-display: swap; }
+:root {
+  color-scheme: dark;
+  --bg: #04080b; --panel: #0a131a; --panel2: #0e1a23; --line: #16252f; --line2: #22394a;
+  --fg: #e9f7ff; --soft: #a9c2d1; --muted: #6f8796; --faint: #3f5666;
+  --eye: #4de8ff; --good: #5dffa8; --warn: #ffb347; --bad: #ff5d6c; --pink: #ff6fb1; --night: #8c8dff;
+  --pixel: "VT323", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0; min-height: 100vh; color: var(--fg); font: 15px/1.45 system-ui, "Ubuntu", "Cantarell", sans-serif;
+  background: radial-gradient(1200px 500px at 20% -10%, rgba(77, 232, 255, .08), transparent 60%),
+              radial-gradient(900px 500px at 100% 0%, rgba(255, 111, 177, .06), transparent 60%), var(--bg);
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+h1, h2, .pixel { font-family: var(--pixel); font-weight: 400; letter-spacing: .04em; }
+
+/* ---------- header */
+header {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; padding: 14px clamp(16px, 4vw, 40px); background: rgba(4, 8, 11, .82); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 14px; }
+.logo {
+  width: 54px; height: 38px; border-radius: 8px; background: #000; border: 1px solid var(--line2);
+  display: flex; align-items: center; justify-content: center; gap: 9px; box-shadow: 0 0 18px rgba(77, 232, 255, .15);
+}
+.logo i { width: 11px; height: 16px; background: var(--eye); box-shadow: 0 0 8px var(--eye); animation: blink 5s infinite; }
+@keyframes blink { 0%, 46%, 50%, 100% { transform: scaleY(1); } 48% { transform: scaleY(.1); } }
+.brand h1 { margin: 0; font-size: 34px; line-height: .9; color: var(--eye); text-shadow: 0 0 14px rgba(77, 232, 255, .45); }
+.brand p { margin: 0; color: var(--muted); font-size: 13px; }
+.status {
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 12px; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); min-width: 0;
+}
+.status .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
+.status.on .dot { background: var(--good); box-shadow: 0 0 10px var(--good); animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+.status b { display: block; font-weight: 600; font-size: 14px; }
+.status span { display: block; color: var(--soft); font-size: 12.5px; }
+.status .sync { color: var(--muted); }
+.status .sync.ok { color: var(--good); }
+.status .sync.wait { color: var(--warn); }
+
+/* ---------- layout */
+main { padding: 24px clamp(16px, 4vw, 40px) 40px; max-width: 1480px; margin: 0 auto; }
+.hero { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; margin-bottom: 20px; }
+@media (max-width: 1000px) { .hero { grid-template-columns: 1fr; } }
+.grid { columns: 3 340px; column-gap: 20px; }
+.grid .card { break-inside: avoid; margin-bottom: 20px; }
+.card { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 16px; padding: 18px 18px 8px; }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.card-head h2 { flex: 1; margin: 0; font-size: 25px; line-height: 1; color: var(--fg); text-transform: uppercase; }
+.card-head .ic { font-size: 19px; }
+.card > .note { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.card.dim > :not(.card-head):not(.needs) { opacity: .45; }
+.card .needs { display: none; margin: 4px 0 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08);
+  border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); font-size: 13px; }
+.card.dim .needs { display: block; }
+
+/* ---------- rows, switches, sliders */
+.row { display: flex; align-items: center; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.card-head + .row, .card > .note + .row, .needs + .row { border-top: 0; }
+.row .txt { flex: 1; min-width: 0; }
+.row .txt b { display: block; font-weight: 550; font-size: 14.5px; }
+.row .txt small { display: block; color: var(--muted); font-size: 12.5px; }
+.row.sub { padding-left: 18px; }
+.row.dim { opacity: .4; cursor: default; }
+.row.range { cursor: default; flex-wrap: wrap; }
+.row.range .txt { flex: 0 0 auto; }
+.row.range input { flex: 1; min-width: 90px; }
+.row.choice { cursor: default; flex-wrap: wrap; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 6px currentColor; }
+.pick { display: flex; gap: 4px; padding: 3px; border-radius: 11px; background: #0b161e; border: 1px solid var(--line2); }
+.pick .chip { border-color: transparent; background: transparent; padding: 7px 13px; white-space: nowrap; }
+.pick .chip:disabled { cursor: default; }
+.row.range output { min-width: 66px; text-align: right; font-family: var(--pixel); font-size: 21px; color: var(--eye); }
+.sw {
+  appearance: none; flex: none; margin: 0; width: 48px; height: 26px; border-radius: 7px; position: relative; cursor: pointer;
+  background: #13212b; border: 1px solid var(--line2); transition: background .2s, border-color .2s;
+}
+.sw::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 4px;
+  background: var(--muted); transition: transform .18s, background .18s, box-shadow .18s;
+}
+.sw:checked { background: #10382a; border-color: #1f7a55; }
+.sw:checked::after { transform: translateX(22px); background: var(--good); box-shadow: 0 0 10px rgba(93, 255, 168, .55); }
+.sw:disabled { cursor: default; }
+:focus-visible { outline: 2px solid var(--eye); outline-offset: 2px; }
+input[type=range] { accent-color: var(--eye); cursor: pointer; }
+input[type=range]:disabled { cursor: default; }
+
+/* ---------- preview */
+.preview .frame {
+  position: relative; aspect-ratio: 1520 / 720; margin: 10px 0 12px; padding: 10px; border-radius: 22px;
+  background: linear-gradient(145deg, #18242d, #0b1217); border: 1px solid var(--line2);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+.preview iframe { display: block; width: 100%; height: 100%; border: 0; border-radius: 12px; background: #000; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button, .chip {
+  padding: 7px 12px; border-radius: 9px; background: #101d26; border: 1px solid var(--line2); color: var(--soft); font-size: 13.5px;
+}
+.seg button.on, .chip[aria-pressed=true] { background: #12303e; border-color: #2d6a85; color: var(--fg); }
+.seg button:disabled { opacity: .35; cursor: default; }
+.preview .hint { margin: 10px 0 10px; color: var(--muted); font-size: 12.5px; }
+
+/* ---------- sleep */
+.sleep .big { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 2px; }
+.sleep .big b { font-family: var(--pixel); font-weight: 400; font-size: 44px; line-height: 1; color: var(--night); text-shadow: 0 0 16px rgba(140, 141, 255, .35); }
+.sleep .big span { color: var(--soft); font-size: 13.5px; }
+.timeline { position: relative; height: 30px; margin: 30px 0 30px; border-radius: 8px; background: linear-gradient(90deg, #12202a, #1a2f3b 50%, #12202a); border: 1px solid var(--line2); }
+.timeline .span { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgba(140, 141, 255, .5) 0 6px, rgba(140, 141, 255, .32) 6px 12px); }
+.timeline .now { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.timeline .now::after { content: "now"; position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--warn); }
+.timeline .ticks { position: absolute; left: 0; right: 0; top: 100%; display: flex; justify-content: space-between; margin-top: 3px; font-size: 11px; color: var(--muted); }
+.times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.times label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12.5px; }
+.times input {
+  padding: 9px 12px; border-radius: 10px; background: #0b161e; border: 1px solid var(--line2); font-size: 20px;
+  font-family: var(--pixel); letter-spacing: .04em;
+}
+.times input:disabled, .chips button:disabled { opacity: .45; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 6px; }
+.sleep .group.dim { opacity: .45; }
+
+/* ---------- dock */
+.dockmock { display: flex; flex-wrap: wrap; gap: 10px 12px; margin: 8px 0 14px; }
+.dockmock.dim { opacity: .4; }
+.pod { display: flex; flex-direction: column; gap: 5px; }
+.pod > small { color: var(--muted); font-size: 11.5px; padding-left: 4px; }
+.pod > div { display: flex; gap: 4px; padding: 4px; border-radius: 22px; background: rgba(14, 26, 34, .9); border: 1px solid rgba(80, 130, 160, .25); }
+.pod .chip { border-radius: 18px; padding: 6px 11px; font-size: 13px; background: transparent; border-color: transparent; color: var(--faint); text-decoration: line-through; }
+.pod .chip[aria-pressed=true] { background: #12303e; border-color: #2d6a85; color: var(--fg); text-decoration: none; }
+
+/* ---------- attention */
+.sec { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-family: var(--pixel);
+  font-size: 18px; letter-spacing: .06em; color: var(--eye); text-transform: uppercase; }
+.sec + .row { border-top: 0; }
+.applist { display: flex; flex-direction: column; max-height: 430px; overflow: auto; margin: 6px -4px 12px; padding: 0 4px; }
+.app { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.app:first-child { border-top: 0; }
+.app .nm { flex: 1; min-width: 0; }
+.app .nm b { font-weight: 550; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.app .nm small { color: var(--muted); font-size: 12px; }
+.app .ai { font-size: 10.5px; padding: 1px 6px; border-radius: 6px; background: #12303e; color: var(--eye); margin-left: 6px; vertical-align: 1px; }
+.app select { flex: none; padding: 6px 8px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--fg); font: inherit; font-size: 13px; }
+.app select.set { border-color: #2d6a85; background: #12303e; }
+.attn { padding: 12px 0 10px; border-top: 1px solid var(--line); }
+.attn .chip { font-size: 14px; }
+.attn ul { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.attn li { display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--soft); min-width: 0; }
+.attn li time { flex: none; width: 62px; color: var(--muted); font-size: 12px; }
+.attn li b { flex: none; font-weight: 600; color: var(--fg); }
+.attn li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attn li.none { color: var(--muted); }
+.attn .kind { flex: none; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: #13212b; color: var(--muted); }
+
+/* ---------- footer + toast */
+footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 4px clamp(16px, 4vw, 40px) 40px;
+  max-width: 1480px; margin: 0 auto; color: var(--muted); font-size: 13px; }
+footer code { color: var(--soft); }
+#reset { padding: 8px 14px; border-radius: 10px; background: transparent; border: 1px solid var(--line2); color: var(--soft); }
+#reset.armed { border-color: var(--bad); color: var(--bad); }
+#toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: .25s;
+  padding: 10px 16px; border-radius: 10px; background: #102331; border: 1px solid #2d6a85; font-size: 14px; z-index: 9;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+#toast.bad { background: #2a1015; border-color: var(--bad); }
+@media (max-width: 560px) {
+  .times { grid-template-columns: 1fr; }
+  .status { width: 100%; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo" aria-hidden="true"><i></i><i></i></div>
+    <div><h1>CHIP</h1><p>Desk buddy dashboard</p></div>
+  </div>
+  <div class="status" id="status" role="status">
+    <i class="dot"></i>
+    <div><b id="st-main">Looking for Chip…</b><span id="st-sub"></span><span class="sync" id="st-sync"></span></div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="card preview">
+      <div class="card-head"><span class="ic">📺</span><h2>Live preview</h2></div>
+      <div class="frame"><iframe id="frame" src="/preview/index.html" title="Chip preview"></iframe></div>
+      <div class="seg" id="seg">
+        <button data-screen="0">🙂 Face</button><button data-screen="1">🕐 Clock</button><button data-screen="2">💻 Laptop</button>
+        <button data-screen="3">⏳ Timer</button><button data-screen="4">🎵 Visualizer</button>
+      </div>
+      <p class="hint">The preview runs here on the laptop with your settings and live data. Drag to swipe, click to tap.
+        Chip on your desk picks up each change within a few seconds.</p>
+    </div>
+
+    <div class="card sleep">
+      <div class="card-head"><span class="ic">😴</span><h2>Sleep</h2><input type="checkbox" class="sw" data-k="sleep" aria-label="Sleep at night"></div>
+      <p class="note">Asleep, Chip closes its eyes, dims the screen and stays quiet. A tap wakes it for 20 seconds.</p>
+      <div class="group" data-needs="sleep">
+        <div class="big"><b id="sl-range">11:00 PM → 6:30 AM</b><span id="sl-len"></span></div>
+        <div class="timeline" id="timeline" aria-hidden="true">
+          <i class="now" id="tl-now"></i>
+          <div class="ticks"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span></div>
+        </div>
+        <div class="times">
+          <label>Goes to sleep<input type="time" data-k="sleepAt" required></label>
+          <label>Wakes up<input type="time" data-k="wakeAt" required></label>
+        </div>
+        <div class="chips" id="presets"></div>
+        <div class="row range"><span class="txt"><b>Screen while asleep</b></span>
+          <input type="range" data-k="brightnessNight" min="0" max="100" step="1"><output></output></div>
+      </div>
+      <label class="row"><span class="txt"><b>Get drowsy when you're away</b><small>Heavy eyelids and yawns when nobody has touched it and the laptop is idle or locked</small></span>
+        <input type="checkbox" class="sw" data-k="drowsy"></label>
+      <div class="row range sub" data-needs="drowsy"><span class="txt"><b>After</b></span>
+        <input type="range" data-k="drowsyMin" min="5" max="240" step="5"><output></output></div>
+    </div>
+  </section>
+
+  <section class="grid" id="grid"></section>
+</main>
+
+<footer>
+  <span>Saved on this laptop in <code>~/.config/deskbuddy/settings.json</code>. The drawer toggles on the phone stay in sync with this page.</span>
+  <button id="reset">Reset everything to defaults</button>
+</footer>
+<div id="toast" role="status"></div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // ---------------------------------------------------------------- cards
+  const sw = (k, label, help = "", needs = "") => ({ k, label, help, needs });
+  const range = (k, label, min, max, step, unit, needs = "") => ({ k, label, min, max, step, unit, needs, range: true });
+  const choice = (k, label, help, options, needs = "") => ({ k, label, help, options, needs });  // a row of buttons, one per value
+  const section = (label) => ({ section: label });
+  const CARDS = [
+    { icon: "🔔", title: "Attention alerts", master: "torch", attention: true,
+      note: "When an AI agent or an app needs you, Chip blinks the phone's torch and/or plays a sound, and says who.", rows: [
+      section("What counts"),
+      sw("torchAsk", "AI agent asks for permission or input", "Claude Code, Gemini CLI or opencode waiting on a question", "torch"),
+      sw("torchDone", "AI agent finished and waiting for you", "An agent's turn has ended", "torch"),
+      sw("torchApps", "AI app notifications", "Claude, ChatGPT, Antigravity, and AI sites open in the browser", "torch"),
+      sw("notifyAllApps", "All other apps' notifications", "Every desktop notification on this PC. Fine-tune each app in the Apps card", "torch"),
+      section("How"),
+      sw("alertTorch", "🔦 Blink the torch", "", "torch"),
+      range("torchSeconds", "For", 1, 60, 1, "sec", "torch alertTorch"),
+      sw("alertSound", "🔔 Play a sound", "From the phone's speaker", "torch"),
+      choice("soundStyle", "Sound", "", [["chime", "Chime"], ["beep", "Beep"], ["alarm", "Alarm"], ["ping", "Ping"]], "torch alertSound"),
+      range("soundSeconds", "For", 1, 60, 1, "sec", "torch alertSound"),
+      range("soundVolume", "Volume", 5, 100, 5, "vol", "torch alertSound"),
+      section("When"),
+      sw("torchAway", "Only when you're away from the laptop", "Idle for a minute, or locked", "torch"),
+      sw("torchRepeat", "Keep reminding until you're back", "Stops when you use the laptop or tap Chip", "torch"),
+      range("remindEvery", "Every", 10, 300, 5, "sec", "torch torchRepeat"),
+      range("remindMinutes", "For up to", 1, 30, 1, "min", "torch torchRepeat"),
+      sw("torchNight", "Also while Chip sleeps", "", "torch"),
+    ] },
+    { icon: "📱", title: "Apps", appList: true,
+      note: "Pick how each app gets your attention. Default follows the Attention alerts card; choosing torch or sound " +
+        "for an app turns it on even when \"All other apps\" is off. Apps appear here once they've sent a notification." },
+    { icon: "🗂️", title: "Screens", note: "The tabs you can swipe to. The face is always there.", rows: [
+      sw("tabClock", "Clock & weather", "Big clock, forecast and air quality"),
+      sw("tabLaptop", "Laptop", "CPU, RAM, GPU and battery rings, music controls"),
+      sw("tabTimer", "Timer", "Focus, break and countdown"),
+      sw("tabViz", "Audio visualizer", "Opens from the Laptop tab or the swipe-up drawer"),
+    ] },
+    { icon: "🙂", title: "Face screen", rows: [
+      sw("timerPill", "Timer pill", "Time left, in the corner while a timer runs"),
+      sw("focusBar", "Timer progress bar", "Thin line across the top while a timer runs"),
+      sw("dots", "Page dots", "Shows which tab you're on"),
+      sw("musicMode", "Music mode", "Headphones, bobbing and notes while music plays"),
+      sw("mask", "Pollution mask", "Puts one on when the AQI is 200 or worse"),
+      sw("typingScene", "Chip types along with you", "While you type on the laptop, it types on one of its own: thinks when you pause, speeds up with you, a big Enter when you stop"),
+      range("typingAfter", "Once you've typed for", 3, 60, 1, "sec", "typingScene"),
+    ] },
+    { icon: "📍", title: "Floating dock", master: "dock", dock: true,
+      note: "The bar along the bottom of the face. Tap an item to show or hide it." },
+    { icon: "⏳", title: "Timer & Pomodoro", needs: "tabTimer",
+      note: "Also changeable beside the timer's ring. While a timer runs the ring fills the screen; pause it to get the controls back.", rows: [
+      range("pomoFocus", "Focus", 1, 180, 1, "min"),
+      range("pomoShort", "Short break", 1, 60, 1, "min"),
+      range("pomoLong", "Long break", 1, 90, 1, "min"),
+      range("pomoLongEvery", "Long break after", 2, 8, 1, "n"),
+      sw("pomoAutoBreak", "Start breaks automatically", "When a focus session ends"),
+      sw("pomoAutoFocus", "Start the next focus automatically", "When a break ends"),
+      range("pomoGoal", "Daily goal", 1, 24, 1, "n"),
+      sw("workScene", "Focus mode on the face screen", "During a focus session the room dims, a moon comes up and Chip types away; notifications pop up muted"),
+    ] },
+    { icon: "🕐", title: "Clock tab", needs: "tabClock", rows: [
+      sw("clockNow", "Weather now", "Temperature, feels like, today's high and low"),
+      sw("clockHours", "Next 6 hours", "Hourly forecast with the chance of rain"),
+      sw("clockAir", "Air & sun", "AQI meter, sunrise and sunset"),
+    ] },
+    { icon: "💻", title: "Laptop tab", needs: "tabLaptop", rows: [
+      sw("ringCpu", "CPU ring"), sw("ringRam", "RAM ring"), sw("ringGpu", "GPU ring"), sw("ringBattery", "Battery ring"),
+      sw("mediaCard", "Music card", "Now playing, play/pause, volume and the visualizer button"),
+    ] },
+    { icon: "✨", title: "Behaviour", rows: [
+      sw("sounds", "Sounds", "Chirps when you tap or pet it"),
+      sw("talk", "Talking", "Reads reminders aloud (never at night)"),
+      sw("idle", "Idle animations", "Looks around, whistles and sneezes when left alone"),
+      sw("greetings", "Greetings", "Hello on start, good morning and good night"),
+      sw("hourly", "Hourly chime", "A hop and the time on the hour, 8 AM to 10 PM"),
+      sw("trackToasts", "Song pop-ups", "Shows the title when a new song starts"),
+      sw("laptopAlerts", "Laptop alerts", "Low battery, running hot, welcome back"),
+      sw("phoneAlerts", "Phone battery alert", "Says it's hungry at 15%"),
+      sw("shake", "Shake reaction", "Gets dizzy when you shake the phone"),
+      sw("behaviourTorch", "Torch", "Blinks when a timer ends, at stretch time and for laptop battery or heat warnings"),
+      sw("stretch", "Stretch reminders", "Nudges you after a long time at the laptop"),
+      range("stretchMin", "Every", 10, 180, 5, "min", "stretch"),
+    ] },
+    { icon: "🎙️", title: "Voice dictation", rows: [
+      sw("dictation", "Hold with two fingers to dictate", "Your speech is turned into text offline and typed on the laptop"),
+      choice("dictateOnLaptop", "Speech model runs on",
+        "Phone: ~6 s for a short sentence and the laptop's CPU stays free. Laptop: ~2 s with a bigger model " +
+        "that's better at Hinglish; if the laptop can't, the phone takes over.",
+        [[false, "📱 Phone"], [true, "💻 Laptop"]], "dictation"),
+      sw("fastDictation", "Fast mode", "A smaller model: phone ~3 s, laptop under 1 s, but weaker with Hinglish", "dictation"),
+    ] },
+    { icon: "🎨", title: "Look", rows: [
+      sw("pixel", "Pixel look", "Retro pixel face and font. Off = smooth look"),
+      choice("accent", "Accent colour", "Eyes, glow and scenes",
+        [["cyan", '<i class="swatch" style="background:#2ee6f2"></i>Cyan'], ["terracotta", '<i class="swatch" style="background:#ee9358"></i>Terracotta'],
+         ["sage", '<i class="swatch" style="background:#b4d38c"></i>Sage']]),
+      range("brightnessDay", "Daytime brightness", 5, 255, 5, "pct"),
+    ] },
+  ];
+  const DOCK = [
+    ["Time & outside", [["dockTime", "🕐 Time"], ["dockWeather", "⛅ Weather"], ["dockAqi", "AQI"]]],
+    ["Laptop", [["dockCpu", "💻 CPU"], ["dockLaptopTemp", "🌡 Temp"], ["dockLaptopBattery", "🔋 Battery"]]],
+    ["Phone", [["dockPhoneBattery", "📱 Battery"], ["dockPhoneTemp", "🌡 Temp"]]],
+  ];
+  const TAB_NAMES = { tabClock: "Clock", tabLaptop: "Laptop", tabTimer: "Timer" };
+
+  function rowHTML(r) {
+    if (r.section) return `<div class="sec">${esc(r.section)}</div>`;
+    const needs = r.needs ? ` data-needs="${r.needs}"` : "";
+    if (r.options) {
+      return `<div class="row choice${r.needs && !r.help ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
+        (r.help ? `<small>${esc(r.help)}</small>` : "") + `</span><div class="pick">` +
+        r.options.map(([v, label]) => `<button class="chip" data-k="${r.k}" data-v="${v}" aria-pressed="false">${label}</button>`).join("") +
+        `</div></div>`;
+    }
+    if (r.range) {
+      return `<div class="row range${r.needs ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b></span>` +
+        `<input type="range" data-k="${r.k}" data-unit="${r.unit}" min="${r.min}" max="${r.max}" step="${r.step}"><output></output></div>`;
+    }
+    return `<label class="row${r.needs ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
+      (r.help ? `<small>${esc(r.help)}</small>` : "") + `</span><input type="checkbox" class="sw" data-k="${r.k}"></label>`;
+  }
+  $("#grid").innerHTML = CARDS.map((c) => {
+    let body = c.note ? `<p class="note">${esc(c.note)}</p>` : "";
+    if (c.needs) body += `<div class="needs">The ${TAB_NAMES[c.needs]} tab is hidden. Turn it on under Screens to see these.</div>`;
+    if (c.dock) {
+      body += `<div class="dockmock" data-needs="dock">` + DOCK.map(([name, items]) =>
+        `<div class="pod"><small>${name}</small><div>` +
+        items.map(([k, label]) => `<button class="chip" data-k="${k}" aria-pressed="true">${label}</button>`).join("") +
+        `</div></div>`).join("") + `</div>`;
+    }
+    body += (c.rows || []).map(rowHTML).join("");
+    if (c.attention) {
+      body += `<div class="attn" data-needs="torch"><button class="chip" id="torch-test">🔔 Test the alert</button>` +
+        `<ul id="attn-log"><li class="none">No alerts yet</li></ul></div>`;
+    }
+    if (c.appList) body += `<div class="applist" id="applist"></div>`;
+    const master = c.master ? `<input type="checkbox" class="sw" data-k="${c.master}" aria-label="${esc(c.title)}">` : "";
+    return `<div class="card"${c.needs ? ` data-card-needs="${c.needs}"` : ""}><div class="card-head"><span class="ic">${c.icon}</span>` +
+      `<h2>${esc(c.title)}</h2>${master}</div>${body}</div>`;
+  }).join("");
+
+  const PRESETS = [["22:00", "06:00"], ["23:00", "06:30"], ["00:00", "07:00"], ["01:00", "08:00"]];
+  $("#presets").innerHTML = PRESETS.map(([a, b]) =>
+    `<button class="chip" data-sleep="${a}" data-wake="${b}">${t12(a, true)} – ${t12(b, true)}</button>`).join("");
+
+  // ---------------------------------------------------------------- helpers
+  function t12(hhmm, short) {
+    const [h, m] = hhmm.split(":").map(Number);
+    return `${h % 12 || 12}${short && m === 0 ? "" : ":" + String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+  }
+  const mins = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+  const fmtMin = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " m" : ""}`);
+  const fmtSec = (v) => (v < 60 ? `${v} s` : `${Math.floor(v / 60)} min${v % 60 ? " " + (v % 60) + " s" : ""}`);
+  const fmtUnit = (v, unit) => ({ pct: `${Math.round(v / 2.55)}%`, vol: `${v}%`, sec: fmtSec(v), n: `${v} sessions` }[unit] || fmtMin(v));
+  function ago(s) { return s < 90 ? `${Math.round(s)} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; }
+  let toastTimer = 0;
+  function toast(text, bad = false) {
+    const t = $("#toast");
+    t.textContent = text; t.classList.toggle("bad", bad); t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  // ---------------------------------------------------------------- state
+  let S = null, saving = 0, phoneInfo = null, linkInfo = null;
+  const frame = $("#frame");
+  const toPreview = (msg) => { try { frame.contentWindow.postMessage(msg, location.origin); } catch (e) { /* still loading */ } };
+
+  function render() {
+    if (!S) return;
+    for (const el of $$("[data-k]")) {
+      const k = el.dataset.k;
+      if (el.type === "checkbox") el.checked = !!S[k];
+      else if (el.type === "range") { if (document.activeElement !== el) el.value = S[k]; outputFor(el); }
+      else if (el.type === "time") { if (document.activeElement !== el) el.value = S[k]; }
+      else if (el.tagName === "BUTTON") el.setAttribute("aria-pressed", String(el.dataset.v ? String(S[k]) === el.dataset.v : !!S[k]));
+    }
+    for (const el of $$("[data-needs]")) {
+      const on = el.dataset.needs.split(" ").every((k) => S[k]);
+      el.classList.toggle("dim", !on);
+      $$("input, button", el).forEach((i) => { i.disabled = !on; });
+    }
+    for (const el of $$("[data-card-needs]")) el.classList.toggle("dim", !S[el.dataset.cardNeeds]);
+    $$("#seg button").forEach((b) => { b.disabled = !tabOn(Number(b.dataset.screen)); });
+    renderApps();
+    document.documentElement.style.setProperty("--eye", ACCENTS[S.accent] || ACCENTS.cyan);  // the page follows Chip's accent
+    renderSleep();
+    renderStatus();
+  }
+  const ACCENTS = { cyan: "#2ee6f2", terracotta: "#ee9358", sage: "#b4d38c" };
+  const tabOn = (i) => [true, S.tabClock, S.tabLaptop, S.tabTimer, S.tabViz][i];
+  function outputFor(el) { el.nextElementSibling.textContent = fmtUnit(Number(el.value), el.dataset.unit || "min"); }
+  $("[data-k=brightnessNight]").dataset.unit = "pct";
+
+  function renderSleep() {
+    const s = mins(S.sleepAt), e = mins(S.wakeAt), len = (e - s + 1440) % 1440;
+    $("#sl-range").textContent = `${t12(S.sleepAt)} → ${t12(S.wakeAt)}`;
+    const d = new Date(), t = d.getHours() * 60 + d.getMinutes();
+    const asleep = S.sleep && len > 0 && (s < e ? t >= s && t < e : t >= s || t < e);
+    $("#sl-len").textContent = !S.sleep ? "Sleep is off: Chip stays awake all night" :
+      len === 0 ? "Same time twice, so Chip never sleeps" : `${fmtMin(len)} of sleep · ${asleep ? "asleep right now 💤" : "awake right now"}`;
+    const tl = $("#timeline");
+    $$(".span", tl).forEach((x) => x.remove());
+    const spans = len === 0 ? [] : s < e ? [[s, e]] : [[s, 1440], [0, e]];
+    for (const [a, b] of spans) {
+      const el = document.createElement("i");
+      el.className = "span"; el.style.left = (a / 14.4) + "%"; el.style.width = ((b - a) / 14.4) + "%";
+      el.style.borderRadius = `${a === 0 ? 8 : 0}px ${b === 1440 ? 8 : 0}px ${b === 1440 ? 8 : 0}px ${a === 0 ? 8 : 0}px`;
+      tl.prepend(el);
+    }
+    $("#tl-now").style.left = `calc(${t / 14.4}% - 1px)`;
+    $$("#presets .chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sleep === S.sleepAt && b.dataset.wake === S.wakeAt)));
+  }
+
+  const MOOD = { neutral: "🙂", happy: "😊", joy: "😄", drowsy: "🥱", sleepy: "😪", asleep: "😴", angry: "😠", focus: "🎯",
+    strain: "😣", sad: "😢", worried: "😟", surprised: "😮", suspicious: "🤨", curious: "🧐", wink: "😉", love: "😍",
+    dizzy: "😵", yawn: "🥱", whistle: "😗", bored: "😑", smirk: "😏", star: "🤩", listen: "👂", think: "🤔" };
+  const SCREENS = ["Face", "Clock", "Laptop", "Timer", "Visualizer"];
+  function renderStatus() {
+    const p = phoneInfo, online = !!(p && p.seen && p.age < 15), sync = $("#st-sync");
+    $("#status").classList.toggle("on", online);
+    if (online) {
+      $("#st-main").textContent = "Chip is online";
+      $("#st-sub").textContent = [`${MOOD[p.mood] || "🙂"} ${p.mood || "neutral"}`, `${SCREENS[p.screen] || "Face"} tab`,
+        p.battery != null ? `📱 ${Math.round(p.battery)}%${p.charging ? " ⚡" : ""}` : ""].filter(Boolean).join(" · ");
+    } else {
+      $("#st-main").textContent = p && p.seen ? "Chip is offline" : "Waiting for Chip";
+      const L = linkInfo, seen = p && p.seen ? `Last seen ${ago(p.age)}. ` : "";
+      $("#st-sub").textContent = seen + (!L ? "" : !L.pinned ? "The bridge hasn't pinned the phone's ssh key yet."
+        : !L.tunnel ? `Looking for the phone on Wi-Fi (last at ${L.ip || "unknown"}). Is Termux running and the phone on the same network?`
+        : "Tunnel is up, so open the Chip app (kiFOSSk) on the phone.");
+    }
+    if (!S) return;
+    const applied = online && p.rev === S.rev;
+    sync.className = "sync " + (applied ? "ok" : online ? "wait" : "");
+    sync.textContent = applied ? "✓ Using these settings" : online ? "⏳ Sending changes to Chip…" : "Changes are saved and reach Chip when it's back";
+  }
+
+  // ---------------------------------------------------------------- talking to the bridge
+  async function save(patch) {
+    Object.assign(S, patch); render();
+    toPreview({ prefs: S });
+    saving++;
+    const r = await fetch("/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) })
+      .then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    saving--;
+    if (!r) return toast("Couldn't save. Is the desk buddy bridge running?", true);
+    if (!saving) { S = r; render(); toPreview({ prefs: S }); }
+    toast("Saved ✓");
+  }
+  async function loadSettings() {
+    if (saving) return;
+    const r = await fetch("/settings", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!r || saving) return;
+    const changed = !S || r.rev !== S.rev;
+    S = r;
+    if (changed) { render(); toPreview({ prefs: S }); }  // e.g. a drawer toggle on the phone
+  }
+  const KIND = { ask: "asks", done: "done", app: "app", notify: "app", test: "test" };
+  const RULES = [["both", "🔦 + 🔔"], ["torch", "🔦 Torch"], ["sound", "🔔 Sound"], ["off", "Off"]];
+  let appRows = [];
+  function renderApps() {
+    const list = $("#applist");
+    if (!S || !list || list.contains(document.activeElement)) return;  // don't close a dropdown that's open
+    const how = S.alertTorch && S.alertSound ? "🔦 + 🔔" : S.alertTorch ? "🔦" : S.alertSound ? "🔔" : "nothing";
+    list.innerHTML = appRows.map((a) => {
+      const rule = S.apps[a.name] || "default", def = a.ai || S.notifyAllApps ? how : "off";
+      const seen = a.age == null ? "no notifications yet" : `${a.count} time${a.count === 1 ? "" : "s"} · last ${ago(a.age)}`;
+      return `<div class="app"><span class="nm"><b>${esc(a.name)}${a.ai ? '<span class="ai">AI</span>' : ""}</b><small>${seen}</small></span>` +
+        `<select data-app="${esc(a.name)}" class="${rule === "default" ? "" : "set"}" aria-label="${esc(a.name)}">` +
+        `<option value="default">Default (${def})</option>` +
+        RULES.map(([v, l]) => `<option value="${v}"${rule === v ? " selected" : ""}>${l}</option>`).join("") + `</select></div>`;
+    }).join("");
+  }
+  async function loadAttention() {
+    const r = await fetch("/attention", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!r) return;
+    appRows = r.apps || [];
+    renderApps();
+    $("#attn-log").innerHTML = r.events.length ? r.events.slice(0, 5).map((e) =>
+      `<li><time>${ago(e.age)}</time><span class="kind">${KIND[e.kind] || e.kind}</span><b>${esc(e.source)}</b>` +
+      `<span>${esc(e.project ? `${e.project}: ${e.text}` : e.text)}</span></li>`).join("") : '<li class="none">No alerts yet</li>';
+  }
+  async function loadPhone() {
+    phoneInfo = await fetch("/phone", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    linkInfo = await fetch("/link", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    renderStatus();
+  }
+
+  // ---------------------------------------------------------------- input
+  document.addEventListener("change", (e) => {
+    const el = e.target, k = el.dataset && el.dataset.k;
+    if (el.dataset && el.dataset.app && S) {  // an app's choice in the Apps card
+      const apps = Object.assign({}, S.apps);
+      if (el.value === "default") delete apps[el.dataset.app]; else apps[el.dataset.app] = el.value;
+      el.blur();
+      return save({ apps });
+    }
+    if (!k || !S) return;
+    if (el.type === "checkbox") save({ [k]: el.checked });
+    else if (el.type === "range") save({ [k]: Number(el.value) });
+    else if (el.type === "time" && /^\d\d:\d\d$/.test(el.value)) save({ [k]: el.value });
+  });
+  document.addEventListener("input", (e) => { if (e.target.type === "range") outputFor(e.target); });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || !S) return;
+    const v = b.dataset.v;
+    if (b.dataset.k) save({ [b.dataset.k]: v === "true" ? true : v === "false" ? false : v || !S[b.dataset.k] });
+    if (b.dataset.sleep) save({ sleepAt: b.dataset.sleep, wakeAt: b.dataset.wake });
+    if (b.dataset.screen) toPreview({ screen: Number(b.dataset.screen) });
+  });
+  window.addEventListener("message", (e) => {  // the preview says which tab it's on
+    if (e.origin !== location.origin || e.source !== frame.contentWindow || !e.data || typeof e.data.screen !== "number") return;
+    $$("#seg button").forEach((b) => b.classList.toggle("on", Number(b.dataset.screen) === e.data.screen));
+  });
+  frame.addEventListener("load", () => { if (S) toPreview({ prefs: S }); });
+
+  let resetArmed = 0;
+  $("#reset").addEventListener("click", async () => {
+    const b = $("#reset");
+    if (Date.now() - resetArmed > 4000) {
+      resetArmed = Date.now(); b.classList.add("armed"); b.textContent = "Click again to reset all settings";
+      return setTimeout(() => { b.classList.remove("armed"); b.textContent = "Reset everything to defaults"; }, 4000);
+    }
+    resetArmed = 0; b.classList.remove("armed"); b.textContent = "Reset everything to defaults";
+    const r = await fetch("/settings/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!r) return toast("Couldn't reset. Is the desk buddy bridge running?", true);
+    S = r; render(); toPreview({ prefs: S }); toast("Back to defaults ✓");
+  });
+
+  $("#torch-test").addEventListener("click", async () => {
+    const ok = await fetch("/attention", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "Dashboard", kind: "test", text: "alert test" }) }).then((x) => x.ok).catch(() => false);
+    toast(ok ? "Sent. The phone blinks and plays within a few seconds 🔔" : "Couldn't reach the bridge", !ok);
+    loadAttention();
+  });
+
+  loadSettings(); loadPhone(); loadAttention();
+  setInterval(loadAttention, 4000);
+  setInterval(loadSettings, 4000);
+  setInterval(loadPhone, 2000);
+  setInterval(() => { if (S) renderSleep(); }, 30000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Desk Buddy</title>
+<link rel="stylesheet" href="buddy.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 0: face -->
+  <section class="screen active" id="s-face">
+    <div id="sky"></div>
+    <div id="scene" aria-hidden="true"><canvas></canvas></div>
+    <div id="head">
+      <canvas id="pix" width="62" height="42" aria-hidden="true"></canvas>
+      <svg id="phones" viewBox="0 0 200 120" aria-hidden="true">
+        <path class="band" d="M14 84 C14 -6 186 -6 186 84"/>
+        <rect class="cup" x="3" y="68" width="26" height="44" rx="11"/>
+        <rect class="cup" x="171" y="68" width="26" height="44" rx="11"/>
+      </svg>
+      <div id="face">
+        <div class="ew l">
+          <div class="eye"><i class="shine"></i><i class="shine s2"></i><i class="lid t"></i><i class="lid b"></i></div>
+          <svg class="sym star" viewBox="0 0 100 100"><path d="M50 6l12 30 32 2-25 20 9 32-28-18-28 18 9-32L6 38l32-2z"/></svg>
+          <svg class="sym heart" viewBox="0 0 100 100"><path d="M50 88 12 50a22 22 0 0 1 38-30 22 22 0 0 1 38 30z"/></svg>
+          <svg class="sym spiral" viewBox="0 0 100 100"><path d="M50 50m0-4a4 4 0 1 1-4 4 10 10 0 0 1 10-10 16 16 0 0 1 16 16 22 22 0 0 1-22 22 28 28 0 0 1-28-28 34 34 0 0 1 34-34 40 40 0 0 1 40 40"/></svg>
+        </div>
+        <div class="ew r">
+          <div class="eye"><i class="shine"></i><i class="shine s2"></i><i class="lid t"></i><i class="lid b"></i></div>
+          <svg class="sym star" viewBox="0 0 100 100"><path d="M50 6l12 30 32 2-25 20 9 32-28-18-28 18 9-32L6 38l32-2z"/></svg>
+          <svg class="sym heart" viewBox="0 0 100 100"><path d="M50 88 12 50a22 22 0 0 1 38-30 22 22 0 0 1 38 30z"/></svg>
+          <svg class="sym spiral" viewBox="0 0 100 100"><path d="M50 50m0-4a4 4 0 1 1-4 4 10 10 0 0 1 10-10 16 16 0 0 1 16 16 22 22 0 0 1-22 22 28 28 0 0 1-28-28 34 34 0 0 1 34-34 40 40 0 0 1 40 40"/></svg>
+          <i class="sweat"></i>
+        </div>
+        <i class="cheek l"></i><i class="cheek r"></i>
+        <svg id="mouth" viewBox="0 0 100 40" aria-hidden="true"><path/></svg>
+        <svg id="mask" viewBox="0 0 200 80" aria-hidden="true">
+          <path class="strap" d="M30 30 L-10 10 M30 50 L-10 60 M170 30 L210 10 M170 50 L210 60"/>
+          <path class="cloth" d="M30 18 Q100 6 170 18 L166 58 Q100 78 34 58 Z"/>
+          <path class="pleat" d="M40 32 Q100 24 160 32 M42 44 Q100 38 158 44"/>
+        </svg>
+      </div>
+    </div>
+    <div id="focusbar"><i></i></div>
+    <button id="tpill" aria-label="Open timer">
+      <svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" cx="18" cy="18" r="15"/></svg>
+      <span id="tp-icon">⏳</span><b id="tp-time">0:00</b>
+    </button>
+    <div id="strip"></div>
+  </section>
+
+  <!-- 1: clock + weather -->
+  <section class="screen" id="s-clock">
+    <div id="c-time" class="c-time"></div>
+    <div id="c-date" class="c-date"></div>
+    <div id="c-panel" class="c-panel">
+      <div class="cp now" id="cp-now"></div>
+      <div class="cp hours" id="cp-hours"></div>
+      <div class="cp air" id="cp-air"></div>
+    </div>
+  </section>
+
+  <!-- 2: laptop -->
+  <section class="screen" id="s-laptop">
+    <div class="rings">
+      <div class="ring" data-k="cpu"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" cx="50" cy="50" r="42"/></svg><div class="rv"><b>–</b><span>CPU</span></div></div>
+      <div class="ring" data-k="ram"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" cx="50" cy="50" r="42"/></svg><div class="rv"><b>–</b><span>RAM</span></div></div>
+      <div class="ring" data-k="gpu"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" cx="50" cy="50" r="42"/></svg><div class="rv"><b>–</b><span>GPU</span></div></div>
+      <div class="ring" data-k="battery"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" cx="50" cy="50" r="42"/></svg><div class="rv"><b>–</b><span>BATTERY</span></div></div>
+    </div>
+    <div class="media">
+      <div class="np"><b id="np-title">Nothing playing</b><span id="np-artist"></span></div>
+      <div class="ctl">
+        <button data-media="previous" aria-label="Previous">⏮</button>
+        <button data-media="playpause" aria-label="Play or pause">⏯</button>
+        <button data-media="next" aria-label="Next">⏭</button>
+      </div>
+      <div class="ctl vol">
+        <button data-vol="down" aria-label="Volume down">−</button>
+        <span id="vol">–</span>
+        <button data-vol="up" aria-label="Volume up">+</button>
+        <button data-vol="mute" aria-label="Mute">🔇</button>
+      </div>
+      <button id="open-viz" class="viz-btn" aria-label="Open audio visualizer">🎵 Visualizer</button>
+    </div>
+    <div id="lap-off" class="lap-off">💤 Laptop not connected<small>Start the desk buddy bridge on the laptop (same Wi-Fi as this phone)</small></div>
+  </section>
+
+  <!-- 3: timer: pomodoro (focus, short and long breaks), countdown, stopwatch -->
+  <section class="screen" id="s-focus">
+    <button id="f-ring" class="f-ring" aria-label="Start or pause">
+      <svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="44"/><circle class="fg" cx="50" cy="50" r="44"/></svg>
+      <span class="fv">
+        <span id="f-label">🎯 Focus</span>
+        <b id="f-time">25:00</b>
+        <span id="f-dots" class="f-dots"></span>
+        <span id="f-mode">tap to start</span>
+      </span>
+    </button>
+    <div class="f-side">
+      <div class="t-tabs">
+        <button data-mode="pomodoro"><i>🍅</i>Pomodoro</button>
+        <button data-mode="countdown"><i>⏳</i>Countdown</button>
+        <button data-mode="stopwatch"><i>⏱️</i>Stopwatch</button>
+      </div>
+      <div class="f-body">  <!-- the mode's controls, centred below the tabs -->
+        <div class="f-set">
+          <!-- pomodoro: the three phases with their lengths; tap a name to switch to it -->
+          <div class="phases" id="f-phases">
+            <div class="ph" data-phase="focus"><button class="ph-name" data-phase="focus">🎯 Focus</button>
+              <div class="step"><button data-step="focus" data-d="-5" aria-label="Shorter focus">−</button><b id="ph-focus"></b><button data-step="focus" data-d="5" aria-label="Longer focus">+</button></div></div>
+            <div class="ph" data-phase="short"><button class="ph-name" data-phase="short">☕ Short</button>
+              <div class="step"><button data-step="short" data-d="-1" aria-label="Shorter short break">−</button><b id="ph-short"></b><button data-step="short" data-d="1" aria-label="Longer short break">+</button></div></div>
+            <div class="ph" data-phase="long"><button class="ph-name" data-phase="long">🛋️ Long</button>
+              <div class="step"><button data-step="long" data-d="-5" aria-label="Shorter long break">−</button><b id="ph-long"></b><button data-step="long" data-d="5" aria-label="Longer long break">+</button></div></div>
+          </div>
+          <!-- countdown: presets and fine adjustment -->
+          <div class="chips" id="f-presets"></div>
+          <div class="chips adj" id="f-adj">
+            <button data-adj="-5">−5</button><button data-adj="-1">−1</button>
+            <button data-adj="1">+1</button><button data-adj="5">+5</button>
+          </div>
+        </div>
+        <div class="chips act">
+          <button id="f-start" class="primary">▶ Start</button>
+          <button id="f-reset">↺ Reset</button>
+          <button id="f-skip">⏭ Skip</button>
+        </div>
+        <div class="pomo" id="f-pomo">
+          <button id="f-cycle" class="cycle" aria-label="Restart the pomodoro cycle"></button>
+          <div class="goal"><span id="f-today"></span><i><i id="f-goal"></i></i></div>
+        </div>
+        <div class="chips opts" id="f-opts">
+          <button data-opt="pomoAutoBreak"></button>
+          <button data-opt="pomoAutoFocus"></button>
+          <button data-opt="pomoLongEvery"></button>
+        </div>
+        <div class="f-stats" id="f-stats"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4: audio visualizer (opened from the laptop page, not part of the swipe order) -->
+  <section class="screen" id="s-viz">
+    <canvas id="viz"></canvas>
+    <div class="viz-info"><span id="viz-hint">tap: change style · swipe: back</span></div>
+    <div class="viz-wait" id="viz-wait">♪ waiting for sound from the laptop…</div>
+  </section>
+
+  <nav id="dots"><i class="on"></i><i></i><i></i><i></i></nav>
+
+  <!-- swipe up: apps + toggles -->
+  <div id="drawer">
+    <div class="tiles" id="tiles"></div>
+    <div class="toggles">
+      <button data-toggle="sounds"></button>
+      <button data-toggle="talk"></button>
+      <button data-toggle="pixel"></button>
+      <button data-toggle="fastDictation"></button>
+      <button data-toggle="dictateOnLaptop"></button>
+      <button data-toggle="flashlight"></button>
+      <button data-toggle="viz">🎵 Visualizer</button>
+      <button data-toggle="reload">↻ Reload</button>
+    </div>
+    <div class="hint">swipe down to close</div>
+  </div>
+
+  <div id="bubble"></div>
+  <div id="fx"></div>
+  <div id="dim"></div>
+</div>
+<script src="config.js"></script>
+<script src="robot.js"></script>
+<script src="buddy.js"></script>
+<script src="pixel.js"></script>
+</body>
+</html>
