@@ -146,6 +146,8 @@
   }
   // Preview without waiting: ?mood=love&music=1&aqi=250&timer=10&screen=3
   const preview = new URLSearchParams(location.search);
+  // busy at its computer (a scene is playing or a focus session runs): no tricks, no bobbing to the music
+  const isWorking = () => app.classList.contains("scene") || (focus.running && focus.mode === "focus");
   function refreshMood() {
     if (tempMood && now() >= tempUntil) tempMood = null;
     mood = preview.get("mood") || tempMood || baseMood();
@@ -156,7 +158,7 @@
     if (preview.has("music")) state.music = true;
     if (preview.has("aqi")) state.aqi = { v: Number(preview.get("aqi")) };
     for (const m of MOODS) face.classList.toggle("m-" + m, m === mood);
-    head.classList.toggle("bob", state.music && prefs.musicMode && !state.night && !tempMood && !working);
+    head.classList.toggle("bob", state.music && prefs.musicMode && !state.night && !tempMood && !isWorking());
     app.classList.toggle("music", state.music && prefs.musicMode && !state.night);
     app.classList.toggle("masked", prefs.mask && !!(state.aqi && state.aqi.v >= (C.maskAqi || 200)) && !state.night && !maskOffUntil());
     app.style.setProperty("--sky", MOOD_SKY[mood] || timeSky(new Date().getHours()));
@@ -232,9 +234,7 @@
     setTimeout(lookLoop, rand(1800, 6000));
   }
   function idleLoop() {
-    const working = app.classList.contains("scene") ||
-      (focus.running && focus.mode === "focus");  // busy at its computer: no tricks
-    if (prefs.idle && !working && !state.night && !tempMood && screenIdx === 0 && !gesture && now() - bootAt > 20000) idleAction();
+    if (prefs.idle && !isWorking() && !state.night && !tempMood && screenIdx === 0 && !gesture && now() - bootAt > 20000) idleAction();
     setTimeout(idleLoop, rand(15000, 45000));
   }
 
