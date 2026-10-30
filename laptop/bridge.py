@@ -112,13 +112,13 @@ DEFAULTS = dict.fromkeys(TOGGLES, True) | {
     "sleepAt": "23:00", "wakeAt": "06:30", "brightnessNight": 3, "drowsyMin": 45,
     "torchSeconds": 3, "soundSeconds": 2, "soundVolume": 80, "soundStyle": "chime", "remindEvery": 20, "remindMinutes": 3,
     "pomoFocus": 25, "pomoShort": 5, "pomoLong": 15, "pomoLongEvery": 4, "pomoGoal": 8, "typingAfter": 10,
-    "accent": "cyan", "accentColor": "#2ee6f2", "idleRate": "normal", "idleOff": [],
+    "accent": "cyan", "accentColor": "#2ee6f2", "chipGlow": 100, "idleRate": "normal", "idleOff": [],
     "apps": {},  # app name -> APP_RULES choice; apps not listed follow the switches above
 }
 RANGES = {"stretchMin": (10, 180), "brightnessDay": (5, 255), "brightnessNight": (0, 100), "drowsyMin": (5, 240),
           "torchSeconds": (1, 60), "soundSeconds": (1, 60), "soundVolume": (5, 100), "remindEvery": (10, 300),
           "remindMinutes": (1, 30), "pomoFocus": (1, 180), "pomoShort": (1, 60), "pomoLong": (1, 90),
-          "pomoLongEvery": (2, 8), "pomoGoal": (1, 24), "typingAfter": (3, 120)}
+          "pomoLongEvery": (2, 8), "pomoGoal": (1, 24), "typingAfter": (3, 120), "chipGlow": (0, 200)}
 CHOICES = {"soundStyle": ("chime", "beep", "alarm", "ping"),  # the sounds in phone/alert.py
            "accent": ("cyan", "terracotta", "sage", "violet", "rose", "amber", "sky", "custom"),  # accent names chip.js knows
            "idleRate": ("rare", "normal", "often")}
@@ -889,7 +889,8 @@ class Gaze:
     """Works out where Chip should look: the direction from the phone to the mouse pointer, -1..1 on both axes.
     Runs only while a phone is connected to /gaze, gazeFollow is on and the screen isn't locked."""
     STEP = 0.34       # at most 3 updates a second: every one costs the phone a redraw
-    IDLE_AFTER = 8    # seconds without the pointer moving
+    GAZE_RANGE = (6, 4)  # the rig's gaze steps per axis (chip.js setGaze x * 6, y * 4)
+    IDLE_AFTER = 20   # seconds without the pointer moving
 
     def __init__(self):
         self.lock = threading.Condition()
@@ -938,7 +939,8 @@ class Gaze:
             self.monitors = monitors
         spot = self.phone_spot(monitors)
         return {"ok": cursor is not None or bool(monitors), "monitors": monitors,
-                "phone": [round(v) for v in spot] if spot else None, "cursor": list(cursor) if cursor else None}
+                "phone": [round(v) for v in spot] if spot else None, "cursor": list(cursor) if cursor else None,
+                "gaze": [1 / self.GAZE_RANGE[0], 1 / self.GAZE_RANGE[1]]}
 
     def set_phone(self, x, y):
         """Remember the phone's spot for the current monitor setup, kept within one monitor height of the screens."""
@@ -964,16 +966,14 @@ class Gaze:
         if not cursor or not monitors or time.monotonic() - self.moved_at > self.IDLE_AFTER:
             return "idle"
         px, py = self.phone_spot(monitors)
-        dx, dy = cursor[0] - px, cursor[1] - py
-        dist = math.hypot(dx, dy)
-        if dist == 0:
-            return "0.00,0.00"
         x0, y0, x1, y1 = self.bounds(monitors)
-        k = 0.35 * math.hypot(x1 - x0, y1 - y0)
-        scale = min(1, dist / k) / dist
-        # the rig's gaze is only +-4 x +-3 px, so finer steps would only cost redraws
-        gx = max(-1, min(1, round(dx * scale * 4) / 4)) + 0.0
-        gy = max(-1, min(1, round(dy * scale * 3) / 3)) + 0.0
+        def axis(d, e, steps):  # distance to the screens' edge on that side maps to full deflection
+            g = max(-1, min(1, d / e)) if e > 0 else 0
+            g = math.copysign(abs(g) ** 0.6, g)
+            return round(g * steps) / steps + 0.0
+        dx, dy = cursor[0] - px, cursor[1] - py
+        gx = axis(dx, x1 - px if dx > 0 else px - x0, self.GAZE_RANGE[0])
+        gy = axis(dy, y1 - py if dy > 0 else py - y0, self.GAZE_RANGE[1])
         return f"{gx:.2f},{gy:.2f}"
 
     def publish(self, frame):

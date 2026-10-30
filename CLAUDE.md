@@ -27,7 +27,7 @@ bridge. README.md has the full feature list: read only the section you need.
   `python3 -m py_compile laptop/bridge.py`
 - Preview without the phone: headless Chrome at 1480x720 on
   `http://127.0.0.1:8765/preview/index.html?screen=0&typing` (also `mood=focus`, `&sceneT=`, `&wpm=`, `&idle=`,
-  `&accent=sage`, `&music`).
+  `&accent=sage`, `&music`, `&gaze=x,y` pins the eyes' look, -1..1).
 - Phone: ssh port 8022 (Termux), `curl 127.0.0.1:8765/phone` = its state, `/link` = the tunnel. No adb anywhere
   in the project (removed on purpose): everything goes over the Wi-Fi ssh tunnel; don't add adb back.
   CPU budget: ~80% during scenes, ~7% per extra frame/s.

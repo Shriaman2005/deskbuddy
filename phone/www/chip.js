@@ -23,16 +23,13 @@
     const SCENES = new Set(["boot", "type", "stuck", "idea", "done", "switch", "deep", "flow", "release"]);
 
     // ---------------------------------------------------------------- accent
-    let accent = "";
     function applyAccent() {
       const hex = app.dataset.accentHex || window.CHIP_PALETTES.cyan.main;
-      if (hex === accent) return;
-      accent = hex;
-      ChipPack.setAccent(hex);
-      player.refresh();
+      const glow = app.dataset.chipGlow === undefined ? 1 : Number(app.dataset.chipGlow) / 100;
+      if (ChipPack.setAccent(hex, glow)) player.refresh();
     }
     applyAccent();
-    new MutationObserver(applyAccent).observe(app, { attributes: true, attributeFilter: ["data-accent-hex"] });
+    new MutationObserver(applyAccent).observe(app, { attributes: true, attributeFilter: ["data-accent-hex", "data-chip-glow"] });
 
     // ---------------------------------------------------------------- signals
     const sig = () => ({
@@ -79,7 +76,7 @@
       player.setMood(inFace ? moodNow() : "neutral");
       if (inFace) {
         const x = parseFloat(face.style.getPropertyValue("--lx")) / 7 || 0, y = parseFloat(face.style.getPropertyValue("--ly")) / 5 || 0;
-        player.setGaze(x * 4, y * 3);
+        player.setGaze(x * 6, y * 4);
         if (!s.night && q >= nextIdle) {
           const ip = idlePrefs(), list = (s.away ? P.idleAway : P.idle).filter((i) => !ip.off.includes(i.clip));
           if (ip.on && list.length && player.mood === "neutral" && !player.busy()) player.play(pickWeighted(list));

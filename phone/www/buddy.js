@@ -43,7 +43,7 @@
     torchAway: false, torchRepeat: true, torchNight: false, behaviourTorch: true, torchSeconds: 3, soundSeconds: 2,
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoLongEvery: 4, pomoAutoBreak: true, pomoAutoFocus: false, pomoGoal: 8,
-    workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", idleRate: "normal", idleOff: [],
+    workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", chipGlow: 100, idleRate: "normal", idleOff: [],
     brightnessDay: C.brightness.day,
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
   };
@@ -1009,6 +1009,11 @@
     following = false;
     look(0, 0);
   }
+  if (preview.has("gaze")) {  // ?gaze=x,y pins the cursor's gaze for screenshots
+    cursorGaze = preview.get("gaze").split(",").map(Number);
+    following = true;
+    setTimeout(() => gazeLook(...cursorGaze), 1500);
+  }
 
   function vizStart() {
     if (preview.has("vizdemo")) {  // fake music for previews: ?screen=4&vizdemo&viz=neon
@@ -1262,7 +1267,7 @@
     for (const k in DEFAULT_PREFS) if (typeof p[k] === typeof DEFAULT_PREFS[k]) prefs[k] = p[k];
     if (preview.get("accent")) prefs.accent = preview.get("accent");
     store.set("prefs", prefs);
-    if (prefs.gazeFollow) gazeOpen();
+    if (prefs.gazeFollow && !preview.has("gaze")) gazeOpen();
     else if (gazeSrc) gazeClose();
     // the accent colour (Chip's eyes, glow and scenes), from the design's palettes in robot.js
     const pal = prefs.accent === "custom" && /^#[0-9a-f]{6}$/i.test(prefs.accentColor) ? window.chipCustomPalette(prefs.accentColor)
@@ -1272,6 +1277,7 @@
       document.documentElement.style.setProperty(k, v);
     }
     app.dataset.accent = prefs.accent;
+    app.dataset.chipGlow = prefs.chipGlow;
     app.dataset.accentHex = pal.main;  // chip.js bakes the pack in this colour
     if (isPomo() && !timerActive() && !alarmUntil && focus.total !== prefs[POMO[focus.mode]] * 60000) {
       focus.total = focus.left = prefs[POMO[focus.mode]] * 60000; saveFocus();

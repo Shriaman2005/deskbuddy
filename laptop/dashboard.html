@@ -379,6 +379,7 @@ footer code { color: var(--soft); }
          ["rose", '<i class="swatch" style="background:#f472b6"></i>Rose'], ["amber", '<i class="swatch" style="background:#f5c04a"></i>Amber'],
          ["sky", '<i class="swatch" style="background:#6cb8ff"></i>Sky'], ["custom", "🎨 Custom"]]),
       { color: true, k: "accentColor", label: "Custom colour", help: "Pick any colour; Chip's palette follows it (very dark colours are lightened)" },
+      range("chipGlow", "Chip's glow", 0, 200, 10, "vol"),
       range("brightnessDay", "Daytime brightness", 5, 255, 5, "pct"),
     ] },
   ];

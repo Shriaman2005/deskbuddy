@@ -108,7 +108,7 @@
   }
 
   // one frame -> canvas of (w + 2*PAD) x (h + 2*PAD); glow is a blurred, tinted halo drawn under the pixels
-  function bakeFrame(sp, rows, size, pal) {
+  function bakeFrame(sp, rows, size, pal, glowScale) {
     const W = size[0] + 2 * PAD, H = size[1] + 2 * PAD;
     const px = new Uint8ClampedArray(W * H * 4), alpha = new Float32Array(W * H);
     const rgb = {};
@@ -124,7 +124,7 @@
         alpha[i] = 1; tr += c[0]; tg += c[1]; tb += c[2]; tn++;
       }
     }
-    const glow = sp.glow || 0;
+    const glow = (sp.glow || 0) * glowScale;
     if (glow > 0 && tn) {
       const g = boxBlur(boxBlur(alpha, W, H, GLOW_R), W, H, GLOW_R);   // two passes ~ soft falloff
       const c = [tr / tn, tg / tn, tb / tn];
@@ -140,13 +140,13 @@
   }
 
   // ---------------------------------------------------------------- player-facing cache
-  const state = { pack: null, accent: null, palette: null, baked: null };
+  const state = { pack: null, accent: null, glow: 1, palette: null, baked: null };
 
-  function bakeAll(pack, pal) {
+  function bakeAll(pack, pal, glowScale) {
     const baked = {};
     for (const [name, sp] of Object.entries(pack.sprites)) {
       const size = spriteSize(sp), frames = {};
-      for (const [fname, rows] of Object.entries(sp.frames)) frames[fname] = bakeFrame(sp, rows, size, pal);
+      for (const [fname, rows] of Object.entries(sp.frames)) frames[fname] = bakeFrame(sp, rows, size, pal, glowScale);
       // anchor in canvas pixels: blit at (x - anchorX, y - anchorY)
       baked[name] = { frames, w: size[0] + 2 * PAD, h: size[1] + 2 * PAD, ax: sp.anchor[0] + PAD, ay: sp.anchor[1] + PAD };
     }
@@ -163,13 +163,14 @@
       return state.pack;
     },
     use(pack) { state.pack = pack; },
-    // re-derive and re-bake only when the accent really changed
-    setAccent(hex) {
+    // re-derive and re-bake only when the accent or the glow level (1 = the pack's own) really changed
+    setAccent(hex, glow = 1) {
       hex = hex.toLowerCase();
-      if (state.accent === hex && state.baked) return false;
+      if (state.accent === hex && state.glow === glow && state.baked) return false;
       state.palette = derivePalette(state.pack, hex);
-      state.baked = bakeAll(state.pack, state.palette);
+      state.baked = bakeAll(state.pack, state.palette, glow);
       state.accent = hex;
+      state.glow = glow;
       return true;
     },
     get pack() { return state.pack; },
