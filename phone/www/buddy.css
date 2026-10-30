@@ -56,7 +56,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--tilt, 0deg));
   transition: transform .26s cubic-bezier(.25, .8, .3, 1);
 }
-/* moods that recolour the face (the pixel face reads --eye and --glow from #face; the rest of the face is drawn by pixel.js) */
+/* moods that recolour the face (the pixel face reads --eye and --glow from #face; the face itself is drawn by chip.js from pack.json) */
 #face.m-angry { --eye: var(--warn); --glow: rgba(255, 179, 71, .45); }
 #face.m-sad { --eye: #7aa8ff; --glow: rgba(122, 168, 255, .4); }
 
@@ -293,14 +293,14 @@ circle.fg { fill: none; stroke: var(--good); stroke-width: 7; stroke-linecap: ro
 .goal > i > i { display: block; height: 100%; width: 0; background: var(--good); }
 .f-stats { color: var(--muted); font-size: 4vmin; min-height: 4vmin; }
 
-/* Chip's focus and typing scenes (robot.js, from the Claude Design "Robot Focus" / "Robot Typing") */
+/* Chip's focus and typing scenes (chip.js + pack.json, from the Claude Design "Robot Focus" / "Robot Typing") */
 #scene { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .35s, visibility 0s .35s; }
-#app.scene #scene { opacity: 1; visibility: visible; transition: opacity .35s; }
+#app.chip #scene, #app.scene #scene { opacity: 1; visibility: visible; transition: opacity .35s; }
 #head { transition: opacity .35s; }
-#app.scene #head { opacity: 0; }
+#app.chip #head { opacity: 0; visibility: hidden; }
 #scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #app.pixel #scene canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
-#app.pixel.scene::after { display: none; }  /* no scanlines over a scene: they'd be redrawn with every frame */
+#app.pixel.scene::after, #app.chip::after, #app.chip #fx { display: none; }  /* no scanlines over a scene: they'd be redrawn with every frame */
 
 /* timer pill on the face */
 #tpill {

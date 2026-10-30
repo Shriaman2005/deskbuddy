@@ -43,7 +43,7 @@
     torchAway: false, torchRepeat: true, torchNight: false, behaviourTorch: true, torchSeconds: 3, soundSeconds: 2,
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoLongEvery: 4, pomoAutoBreak: true, pomoAutoFocus: false, pomoGoal: 8,
-    workScene: true, typingScene: true, typingAfter: 10, accent: "cyan",
+    workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", idleRate: "normal", idleOff: [],
     brightnessDay: C.brightness.day,
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
   };
@@ -115,7 +115,10 @@
     yawn: () => chirp(420, 180, 0.7, "sine", 0.06),
     listen: () => { chirp(500, 900, 0.09, "sine", 0.1); chirp(900, 1200, 0.07, "sine", 0.08, 0.1); },
     heard: () => chirp(1000, 600, 0.12, "sine", 0.1),
+    sneeze: () => chirp(900, 300, 0.25, "sawtooth", 0.04),
+    whistle: () => chirp(880, 1175, 0.3, "sine", 0.05),
   };
+  const react = (n) => document.dispatchEvent(new CustomEvent("chip:react", { detail: n }));  // chip.js plays the pack's clip
 
   // ---------------------------------------------------------------- face
   const MOODS = ["happy", "joy", "drowsy", "sleepy", "asleep", "angry", "focus", "strain", "sad", "worried",
@@ -151,7 +154,7 @@
   function refreshMood() {
     if (tempMood && now() >= tempUntil) tempMood = null;
     mood = preview.get("mood") || tempMood || baseMood();
-    // robot.js plays Chip's scenes: focus mode during a focus session (or ?mood=focus), typing along while you
+    // chip.js plays Chip's scenes: focus mode during a focus session (or ?mood=focus), typing along while you
     // type (or ?typing)
     app.dataset.focus = (prefs.workScene && focus.running && focus.mode === "focus" && !state.night) || preview.get("mood") === "focus" ? "1" : "0";
     app.dataset.typing = (typingNow() && !state.night) || preview.has("typing") ? "1" : "0";
@@ -286,7 +289,7 @@
     if (state.night && t > state.wakeUntil) return wakeAtNight();
     taps = taps.filter((x) => t - x < 2500); taps.push(t);
     if (taps.length >= 6) {
-      taps = []; express("angry", 2200); anim("shake", 450); sfx.alert();
+      taps = []; express("angry", 2200); anim("shake", 450); sfx.alert(); react("poke");
       return say(pick(["Hey! That tickles 😤", "Okay okay, I'm awake!", "Poke me one more time…"]), 3000);
     }
     if (app.classList.contains("masked")) {
@@ -295,16 +298,16 @@
       return say(`Quick breath! AQI is ${state.aqi.v} out there 😷`, 3500);
     }
     if (taps.length >= 2 && t - taps[taps.length - 2] < 320) {
-      express("love", 2600); particles(["❤", "💖", "💕"], 6, "var(--pink)"); return sfx.giggle();
+      express("love", 2600); particles(["❤", "💖", "💕"], 6, "var(--pink)"); react("doubleTap"); return sfx.giggle();
     }
-    express("happy", 1400); anim("hop", 500); sfx.boop();
+    express("happy", 1400); anim("hop", 500); sfx.boop(); react("tap");
     if (prefs.greetings && store.get("greeted", "") !== new Date().toDateString()) {
       store.set("greeted", new Date().toDateString());
       setTimeout(() => say(greeting(), 6000, true), 600);
     }
   }
   function onPet() {
-    audio(); express("joy", 2600); anim("wiggle", 900); particles(["❤", "✨"], 4, "var(--pink)"); sfx.purr();
+    audio(); react("pet"); express("joy", 2600); anim("wiggle", 900); particles(["❤", "✨"], 4, "var(--pink)"); sfx.purr();
     if (Math.random() < 0.35) say(pick(["Hehe, that's nice 😊", "Purrrr…", "More pets please!"]), 2500);
   }
   function wakeAtNight() {
@@ -325,7 +328,7 @@
     const t = now();
     shakes = shakes.filter((x) => t - x < 700); shakes.push(t);
     if (shakes.length >= 3 && mood !== "dizzy") {
-      shakes = []; express("dizzy", 3200); sfx.dizzy();
+      shakes = []; express("dizzy", 3200); sfx.dizzy(); react("shake");
       say(pick(["Whoa, earthquake?! 😵", "Stop shaking me! 🌀", "Wheee— I'm dizzy"]), 3000);
     }
   });
@@ -631,6 +634,9 @@
     attn.burstAt = now(); attn.burstUntil = now() + Math.max(torchSecs, soundSecs) * 1000 + 1500;
     post(`/api/alert?torch=${torchSecs}&sound=${soundSecs}&style=${prefs.soundStyle}&volume=${prefs.soundVolume}`);
   }
+  // what chip.js needs from here: the sounds and torch blink the pack's clips ask for, and whether you are away
+  window.ChipHooks = { sfx: (n) => sfx[n] && sfx[n](), torch: () => prefs.behaviourTorch && alertNow(1, 0), away: () => awayFromLaptop(),
+    idle: () => ({ on: prefs.idle, rate: { rare: 2, normal: 1, often: 0.5 }[prefs.idleRate] || 1, off: prefs.idleOff }) };
   const alertFor = (torch, sound) => alertNow(torch ? prefs.torchSeconds : 0, sound ? prefs.soundSeconds : 0);
   const flash = (secs) => { if (prefs.behaviourTorch && !state.night) alertNow(secs, 0); };  // Chip's own moments
   const stopAlerts = () => { attn.burstUntil = 0; post("/api/alert/stop"); };
@@ -639,7 +645,7 @@
     const fresh = list.filter((a) => a.id > attn.lastId && a.age < 30);  // older ones are from before this page loaded
     attn.lastId = Math.max(attn.lastId, ...list.map((a) => a.id)); store.set("attnId", attn.lastId);
     if (!fresh.length) return;
-    document.dispatchEvent(new Event("chip:notify"));  // in focus mode, a muted bubble (robot.js)
+    document.dispatchEvent(new CustomEvent("chip:notify", { detail: { app: fresh[0].source } }));  // chip.js: the bubble names the app
     const a = fresh[0], test = fresh.some((e) => e.kind === "test");
     const torch = fresh.some((e) => e.torch), sound = fresh.some((e) => e.sound);
     if (!test && (!prefs.torch || (state.night && !prefs.torchNight) || (prefs.torchAway && !awayFromLaptop()))) return;
@@ -905,7 +911,7 @@
     app.classList.toggle("ringing", alarmUntil > 0);
     app.classList.toggle("ending", focus.running && !sw && left < 10000);
     $("#s-focus").classList.toggle("live", focus.running);  // the ring takes the middle while a timer runs
-    app.dataset.wpm = preview.get("wpm") || (state.laptop ? state.laptop.wpm || 0 : 0);  // robot.js: Flow / Burst when you type fast
+    app.dataset.wpm = preview.get("wpm") || (state.laptop ? state.laptop.wpm || 0 : 0);  // chip.js: Flow / Burst when you type fast
     app.dataset.idle = preview.get("idle") || (state.laptop ? state.laptop.idle || 0 : 0);  // and Stuck when you pause
     if (!on) return;
     $("#tp-icon").textContent = alarmUntil ? "⏰" : focus.running ? icon : "⏸";
@@ -1229,12 +1235,14 @@
     if (preview.get("accent")) prefs.accent = preview.get("accent");
     store.set("prefs", prefs);
     // the accent colour (Chip's eyes, glow and scenes), from the design's palettes in robot.js
-    const pal = window.CHIP_PALETTES[prefs.accent] || window.CHIP_PALETTES.cyan, rgb = (hex, a) =>
+    const pal = prefs.accent === "custom" && /^#[0-9a-f]{6}$/i.test(prefs.accentColor) ? window.chipCustomPalette(prefs.accentColor)
+      : window.CHIP_PALETTES[prefs.accent] || window.CHIP_PALETTES.cyan, rgb = (hex, a) =>
       `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${a})`;
     for (const [k, v] of [["--eye", pal.main], ["--glow", rgb(pal.main, 0.5)], ["--eye-night", pal.dark], ["--glow-night", rgb(pal.dark, 0.3)]]) {
       document.documentElement.style.setProperty(k, v);
     }
     app.dataset.accent = prefs.accent;
+    app.dataset.accentHex = pal.main;  // chip.js bakes the pack in this colour
     if (isPomo() && !timerActive() && !alarmUntil && focus.total !== prefs[POMO[focus.mode]] * 60000) {
       focus.total = focus.left = prefs[POMO[focus.mode]] * 60000; saveFocus();
     }

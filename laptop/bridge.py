@@ -108,7 +108,7 @@ DEFAULTS = dict.fromkeys(TOGGLES, True) | {
     "sleepAt": "23:00", "wakeAt": "06:30", "brightnessNight": 3, "drowsyMin": 45,
     "torchSeconds": 3, "soundSeconds": 2, "soundVolume": 80, "soundStyle": "chime", "remindEvery": 20, "remindMinutes": 3,
     "pomoFocus": 25, "pomoShort": 5, "pomoLong": 15, "pomoLongEvery": 4, "pomoGoal": 8, "typingAfter": 10,
-    "accent": "cyan",
+    "accent": "cyan", "accentColor": "#2ee6f2", "idleRate": "normal", "idleOff": [],
     "apps": {},  # app name -> APP_RULES choice; apps not listed follow the switches above
 }
 RANGES = {"stretchMin": (10, 180), "brightnessDay": (5, 255), "brightnessNight": (0, 100), "drowsyMin": (5, 240),
@@ -116,7 +116,11 @@ RANGES = {"stretchMin": (10, 180), "brightnessDay": (5, 255), "brightnessNight":
           "remindMinutes": (1, 30), "pomoFocus": (1, 180), "pomoShort": (1, 60), "pomoLong": (1, 90),
           "pomoLongEvery": (2, 8), "pomoGoal": (1, 24), "typingAfter": (3, 120)}
 CHOICES = {"soundStyle": ("chime", "beep", "alarm", "ping"),  # the sounds in phone/alert.py
-           "accent": ("cyan", "terracotta", "sage")}             # the palettes in phone/www/robot.js
+           "accent": ("cyan", "terracotta", "sage", "violet", "rose", "amber", "sky", "custom"),  # accent names chip.js knows
+           "idleRate": ("rare", "normal", "often")}
+# the idle clips in pack.json personality (idle + idleAway); idleOff lists the ones switched off
+IDLE_CLIPS = ("curious", "happyBlip", "suspicious", "look", "wink", "whistle", "sneeze", "peek", "spin", "wiggle",
+              "smirkBlip", "yawn", "bored", "nod")
 APP_RULES = ("both", "torch", "sound", "off")
 
 
@@ -147,6 +151,12 @@ class Settings:
             return max(lo, min(hi, round(value)))
         if key in CHOICES:
             return value if value in CHOICES[key] else None
+        if isinstance(default, list):  # idle clips switched off
+            if not isinstance(value, list):
+                return None
+            return [c for c in IDLE_CLIPS if c in value]
+        if key == "accentColor":
+            return value.lower() if isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value) else None
         if isinstance(default, dict):  # per-app choices
             if not isinstance(value, dict):
                 return None
@@ -356,7 +366,7 @@ class Typing:
     keyboard's transfer count (/sys/bus/usb/devices/*/urbnum goes up by one per key press and per release;
     devices that are also a mouse are left out) and the built-in keyboard's interrupt in /proc/interrupts.
     Nothing about which keys. A pause longer than GAP seconds ends a stretch of typing."""
-    GAP = 8  # long enough for Chip to look stuck when you pause, before it decides you're done
+    GAP = 3  # short, so Chip leaves its laptop right when you stop (a longer pause starts a new stretch)
 
     def __init__(self):
         self.lock = threading.Lock()
@@ -845,7 +855,8 @@ class Visualizer:
 # ---------------------------------------------------------------- http
 
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
-         ".txt": "text/plain; charset=utf-8", ".woff2": "font/woff2"}
+         ".txt": "text/plain; charset=utf-8", ".woff2": "font/woff2",
+         ".json": "application/json"}
 
 
 class Handler(BaseHTTPRequestHandler):

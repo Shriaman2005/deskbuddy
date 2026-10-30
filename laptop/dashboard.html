@@ -80,6 +80,9 @@ main { padding: 24px clamp(16px, 4vw, 40px) 40px; max-width: 1480px; margin: 0 a
 .row.range .txt { flex: 0 0 auto; }
 .row.range input { flex: 1; min-width: 90px; }
 .row.choice { cursor: default; flex-wrap: wrap; }
+.picker { width: 40px; height: 28px; padding: 0; border: 1px solid var(--line2); border-radius: 8px; background: none; cursor: pointer; }
+.row.multi { flex-direction: column; align-items: stretch; gap: 6px; cursor: default; }
+.row.multi .pick { flex-wrap: wrap; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 6px currentColor; }
 .pick { display: flex; gap: 4px; padding: 3px; border-radius: 11px; background: #0b161e; border: 1px solid var(--line2); }
 .pick .chip { border-color: transparent; background: transparent; padding: 7px 13px; white-space: nowrap; }
@@ -254,6 +257,9 @@ footer code { color: var(--soft); }
   const range = (k, label, min, max, step, unit, needs = "") => ({ k, label, min, max, step, unit, needs, range: true });
   const choice = (k, label, help, options, needs = "") => ({ k, label, help, options, needs });  // a row of buttons, one per value
   const section = (label) => ({ section: label });
+  const IDLE = [["curious", "🧐 Curious"], ["happyBlip", "😊 Happy"], ["suspicious", "🤨 Suspicious"], ["look", "👀 Look around"],
+    ["wink", "😉 Wink"], ["whistle", "😗 Whistle"], ["sneeze", "🤧 Sneeze"], ["peek", "🫣 Peek"], ["spin", "🌀 Spin"],
+    ["wiggle", "💃 Wiggle"], ["smirkBlip", "😏 Smirk"], ["yawn", "🥱 Yawn (away)"], ["bored", "😑 Bored (away)"], ["nod", "😴 Nod off (away)"]];
   const CARDS = [
     { icon: "🔔", title: "Attention alerts", master: "torch", attention: true,
       note: "When an AI agent or an app needs you, Chip blinks the phone's torch and/or plays a sound, and says who.", rows: [
@@ -316,10 +322,14 @@ footer code { color: var(--soft); }
       sw("ringCpu", "CPU ring"), sw("ringRam", "RAM ring"), sw("ringGpu", "GPU ring"), sw("ringBattery", "Battery ring"),
       sw("mediaCard", "Music card", "Now playing, play/pause, volume and the visualizer button"),
     ] },
+    { icon: "🤖", title: "Chip's character", rows: [
+      sw("idle", "Idle animations", "Looks around, whistles and sneezes when left alone"),
+      choice("idleRate", "How often", "", [["rare", "Rarely"], ["normal", "Normal"], ["often", "Often"]], "idle"),
+      { multi: true, k: "idleOff", label: "Which ones", needs: "idle", options: IDLE },
+    ] },
     { icon: "✨", title: "Behaviour", rows: [
       sw("sounds", "Sounds", "Chirps when you tap or pet it"),
       sw("talk", "Talking", "Reads reminders aloud (never at night)"),
-      sw("idle", "Idle animations", "Looks around, whistles and sneezes when left alone"),
       sw("greetings", "Greetings", "Hello on start, good morning and good night"),
       sw("hourly", "Hourly chime", "A hop and the time on the hour, 8 AM to 10 PM"),
       sw("trackToasts", "Song pop-ups", "Shows the title when a new song starts"),
@@ -339,9 +349,12 @@ footer code { color: var(--soft); }
       sw("fastDictation", "Fast mode", "A smaller model: phone ~3 s, laptop under 1 s, but weaker with Hinglish", "dictation"),
     ] },
     { icon: "🎨", title: "Look", rows: [
-      choice("accent", "Accent colour", "Eyes, glow and scenes",
+      choice("accent", "Accent colour", "Eyes, glow and every colour in the pack's art, derived from this one",
         [["cyan", '<i class="swatch" style="background:#2ee6f2"></i>Cyan'], ["terracotta", '<i class="swatch" style="background:#ee9358"></i>Terracotta'],
-         ["sage", '<i class="swatch" style="background:#b4d38c"></i>Sage']]),
+         ["sage", '<i class="swatch" style="background:#b4d38c"></i>Sage'], ["violet", '<i class="swatch" style="background:#a78bfa"></i>Violet'],
+         ["rose", '<i class="swatch" style="background:#f472b6"></i>Rose'], ["amber", '<i class="swatch" style="background:#f5c04a"></i>Amber'],
+         ["sky", '<i class="swatch" style="background:#6cb8ff"></i>Sky'], ["custom", "🎨 Custom"]]),
+      { color: true, k: "accentColor", label: "Custom colour", help: "Pick any colour; Chip's palette follows it (very dark colours are lightened)" },
       range("brightnessDay", "Daytime brightness", 5, 255, 5, "pct"),
     ] },
   ];
@@ -355,11 +368,21 @@ footer code { color: var(--soft); }
   function rowHTML(r) {
     if (r.section) return `<div class="sec">${esc(r.section)}</div>`;
     const needs = r.needs ? ` data-needs="${r.needs}"` : "";
+    if (r.multi) {  // a chip per option, lit when it is on (S[k] lists the ones that are off)
+      return `<div class="row multi sub" data-needs="${r.needs}"><span class="txt"><b>${esc(r.label)}</b>` +
+        `<small>Tap to switch one off. The last three only play when you're away</small></span><div class="pick">` +
+        r.options.map(([v, label]) => `<button class="chip" data-multi="${r.k}" data-v="${v}" aria-pressed="true">${label}</button>`).join("") +
+        `</div></div>`;
+    }
     if (r.options) {
       return `<div class="row choice${r.needs && !r.help ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
         (r.help ? `<small>${esc(r.help)}</small>` : "") + `</span><div class="pick">` +
         r.options.map(([v, label]) => `<button class="chip" data-k="${r.k}" data-v="${v}" aria-pressed="false">${label}</button>`).join("") +
         `</div></div>`;
+    }
+    if (r.color) {
+      return `<div class="row"><span class="txt"><b>${esc(r.label)}</b><small>${esc(r.help)}</small></span>` +
+        `<input type="color" class="picker" data-k="${r.k}"></div>`;
     }
     if (r.range) {
       return `<div class="row range${r.needs ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b></span>` +
@@ -420,9 +443,10 @@ footer code { color: var(--soft); }
       const k = el.dataset.k;
       if (el.type === "checkbox") el.checked = !!S[k];
       else if (el.type === "range") { if (document.activeElement !== el) el.value = S[k]; outputFor(el); }
-      else if (el.type === "time") { if (document.activeElement !== el) el.value = S[k]; }
+      else if (el.type === "time" || el.type === "color") { if (document.activeElement !== el) el.value = S[k]; }
       else if (el.tagName === "BUTTON") el.setAttribute("aria-pressed", String(el.dataset.v ? String(S[k]) === el.dataset.v : !!S[k]));
     }
+    for (const b of $$("[data-multi]")) b.setAttribute("aria-pressed", String(!S[b.dataset.multi].includes(b.dataset.v)));
     for (const el of $$("[data-needs]")) {
       const on = el.dataset.needs.split(" ").every((k) => S[k]);
       el.classList.toggle("dim", !on);
@@ -431,11 +455,11 @@ footer code { color: var(--soft); }
     for (const el of $$("[data-card-needs]")) el.classList.toggle("dim", !S[el.dataset.cardNeeds]);
     $$("#seg button").forEach((b) => { b.disabled = !tabOn(Number(b.dataset.screen)); });
     renderApps();
-    document.documentElement.style.setProperty("--eye", ACCENTS[S.accent] || ACCENTS.cyan);  // the page follows Chip's accent
+    document.documentElement.style.setProperty("--eye", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);  // the page follows Chip's accent
     renderSleep();
     renderStatus();
   }
-  const ACCENTS = { cyan: "#2ee6f2", terracotta: "#ee9358", sage: "#b4d38c" };
+  const ACCENTS = { cyan: "#2ee6f2", terracotta: "#ee9358", sage: "#b4d38c", violet: "#a78bfa", rose: "#f472b6", amber: "#f5c04a", sky: "#6cb8ff" };
   const tabOn = (i) => [true, S.tabClock, S.tabLaptop, S.tabTimer, S.tabViz][i];
   function outputFor(el) { el.nextElementSibling.textContent = fmtUnit(Number(el.value), el.dataset.unit || "min"); }
   $("[data-k=brightnessNight]").dataset.unit = "pct";
@@ -547,6 +571,7 @@ footer code { color: var(--soft); }
     if (!k || !S) return;
     if (el.type === "checkbox") save({ [k]: el.checked });
     else if (el.type === "range") save({ [k]: Number(el.value) });
+    else if (el.type === "color") save({ [k]: el.value, accent: "custom" });
     else if (el.type === "time" && /^\d\d:\d\d$/.test(el.value)) save({ [k]: el.value });
   });
   document.addEventListener("input", (e) => { if (e.target.type === "range") outputFor(e.target); });
@@ -554,6 +579,10 @@ footer code { color: var(--soft); }
     const b = e.target.closest("button");
     if (!b || !S) return;
     const v = b.dataset.v;
+    if (b.dataset.multi) {
+      const k = b.dataset.multi, off = S[k].includes(v) ? S[k].filter((x) => x !== v) : [...S[k], v];
+      return save({ [k]: off });
+    }
     if (b.dataset.k) save({ [b.dataset.k]: v === "true" ? true : v === "false" ? false : v || !S[b.dataset.k] });
     if (b.dataset.sleep) save({ sleepAt: b.dataset.sleep, wakeAt: b.dataset.wake });
     if (b.dataset.screen) toPreview({ screen: Number(b.dataset.screen) });

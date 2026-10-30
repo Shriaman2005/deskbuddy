@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Chip pack player (dev)</title>
+<style>html,body{margin:0;height:100%;background:#000;display:grid;place-items:center}</style>
+<canvas id="c"></canvas>
+<script src="pack.js"></script>
+<script src="player.js"></script>
+<script>
+  // ?mood=happy&accent=%23ee9358&music&badAir&gaze=3,-2&t=1.5&clip=wink  (t freezes time; budget = no loop)
+  const q = new URLSearchParams(location.search);
+  ChipPack.load("pack.json").then((pack) => {
+    ChipPack.setAccent(q.get("accent") || "#2ee6f2");
+    const p = ChipPlayer(pack, document.getElementById("c"));
+    p.setMood(q.get("mood") || "neutral");
+    p.setSignals({ music: q.has("music"), badAir: q.has("badAir"), night: q.has("night") });
+    if (q.get("gaze")) p.setGaze(...q.get("gaze").split(",").map(Number));
+    if (q.get("clip")) p.play(q.get("clip"));
+    if (q.has("t")) p.freeze(+q.get("t"));
+    if (!q.has("budget")) p.start();   // ?budget: laptop/check_budget.js steps the player itself
+    window.chip = p;
+  });
+</script>

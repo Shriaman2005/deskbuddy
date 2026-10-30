@@ -4,7 +4,7 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
 
 ## On the phone
 - **Face** (home screen, via kiFOSSk): blinks, looks around, reacts.
-  - Pixel look (the only look): `phone/www/pixel.js` draws the face on a 62×42 canvas scaled up with crisp pixels,
+  - Pixel look (the only look): `phone/www/chip.js` plays `pack.json` (all art and motion) on a 320×180 canvas scaled up with whole-number crisp pixels,
     plus the VT323 pixel font, notched pixel borders and CRT scanlines.
   - tap: happy · double-tap: hearts · rub back and forth: pets · poke 6×: grumpy · shake: dizzy
   - drag a finger: the eyes follow it · tap while it wears its mask: takes it off for 15 s
@@ -24,8 +24,8 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
     (tap the ring) or let it finish to get them back. The pomodoro settings are also on the dashboard (Timer &
     Pomodoro). A running or paused timer shows as a pill on the face; tap it to open the timer. A finished
     countdown rings for up to 30 s — tap to stop it.
-  - Chip's two scenes are from the Claude Design project "Robot Focus" / "Robot Typing", ported to a canvas in
-    `robot.js` (pixel art, in the accent colour):
+  - Chip's two scenes are from the Claude Design project "Robot Focus" / "Robot Typing", now carried by
+    `pack.json` (pixel art, in the accent colour):
     - Focus mode, while a focus session runs (dashboard > Timer & Pomodoro > "Focus mode on the face screen"):
       the room dims, a moon comes up and Chip types away on a laptop; it gets into flow (closer camera) while you
       type fast, and notifications that arrive meanwhile pop up as muted bubbles. It lets go when the session ends.
@@ -38,8 +38,11 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
       `&accent=sage`.
     - Cost on the phone: ~80% of a core for kiFOSSk during a scene (8 fps while a section loops, 12 for the
       moves; the canvas is drawn at the design's grid size and scaled up by CSS).
-  - Accent colour (dashboard > Look): cyan, terracotta or sage, the design's palettes. It colours Chip's eyes and
-    glow, the scenes and the dashboard itself.
+  - Accent colour (dashboard > Look): cyan, terracotta, sage, violet, rose, amber, sky, or any colour from the
+    picker (the pack derives its whole palette from one accent). It colours Chip's eyes and glow, the scenes and
+    the dashboard itself.
+  - Chip's character (dashboard): idle animations on/off, how often (rarely/normal/often) and which of the pack's
+    14 idle clips may play (the last three only while you're away).
   - Rotates with the phone (kiFOSSk orientation: Auto-rotate); every screen has a portrait layout.
   - swipe up: apps (Brave, Termux, Files, Settings, All apps) and toggles (sounds, talking,
     dictation speed, visualizer, reload)
