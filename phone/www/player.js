@@ -220,16 +220,19 @@
     }
 
     // ---------------------------------------------------------------- integer fit: each grid pixel is k screen pixels
+    let nudge = [0, 0];   // burn-in guard offset in CSS px, applied in whole device pixels
     function fit() {
-      const k = Math.max(1, Math.floor(Math.min(innerWidth / GW, innerHeight / GH)));
+      const d = devicePixelRatio || 1;   // k counts device pixels, so every grid pixel is a whole number of them
+      const k = Math.max(1, Math.floor(Math.min(innerWidth * d / GW, innerHeight * d / GH)));
       const w = GW * k, h = GH * k;
-      canvas.style.cssText += `;position:absolute;inset:auto;width:${w}px;height:${h}px;` +
-        `left:${Math.round((innerWidth - w) / 2)}px;top:${Math.round((innerHeight - h) / 2)}px;image-rendering:pixelated`;
+      canvas.style.cssText += `;position:absolute;inset:auto;width:${w / d}px;height:${h / d}px;` +
+        `left:${(Math.round((innerWidth * d - w) / 2) + Math.round(nudge[0] * d)) / d}px;top:${(Math.round((innerHeight * d - h) / 2) + Math.round(nudge[1] * d)) / d}px;image-rendering:pixelated`;
     }
 
+    const onNudge = (e) => { nudge = [e.detail.x, e.detail.y]; fit(); };
     return {
-      start() { S.t0 = performance.now(); fit(); addEventListener("resize", fit); S.raf = requestAnimationFrame(frame); },
-      stop() { cancelAnimationFrame(S.raf); removeEventListener("resize", fit); },
+      start() { S.t0 = performance.now(); fit(); addEventListener("resize", fit); addEventListener("chip:nudge", onNudge); S.raf = requestAnimationFrame(frame); },
+      stop() { cancelAnimationFrame(S.raf); removeEventListener("resize", fit); removeEventListener("chip:nudge", onNudge); },
       setMood, setScene, setLoops(names) {
         const l = names.filter((n) => pack.clips[n]);
         if (l.join() !== S.loops.join()) { S.loops = l; S.loopT0 = S.step * STEP; S.dirty = true; }

@@ -1,0 +1,6 @@
+{
+  "uuid": "chip-gaze@deskbuddy",
+  "name": "Chip gaze",
+  "description": "Tells the desk buddy bridge where the mouse pointer is (session bus org.deskbuddy.Gaze), so Chip's eyes can follow it. No UI, no network, positions are never logged.",
+  "shell-version": ["46"]
+}

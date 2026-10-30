@@ -89,6 +89,19 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
   what to do about any that are down.
 - Edit `phone/www/*` (location and fallback defaults in `phone/www/config.js`), then `./deploy.sh`; the face reloads itself.
 
+## Eyes follow the cursor
+Chip's eyes can follow the laptop's mouse pointer across all monitors. Off by default.
+- Turn it on in the dashboard's **Eyes follow the cursor** card. The card also shows your monitors and where the
+  phone sits; drag Chip's phone to where the phone really is. The spot is saved per monitor setup, so each
+  arrangement (say, with and without the HDMI screen) remembers its own spot.
+- Wayland doesn't let apps read the pointer, so a small GNOME Shell extension
+  (`laptop/gnome-extension/chip-gaze@deskbuddy`) provides it. `laptop/install.sh` links it; GNOME loads it at
+  login, so **log out and back in once** after the first install. `python3 -I laptop/doctor.py` says if it's
+  missing, disabled or waiting for that login.
+- Privacy: the extension reads only the pointer position, and only while the bridge is asking (a phone is
+  connected, the setting is on and the screen is unlocked). Nothing is logged or sent anywhere except to the
+  bridge on this laptop, and the only thing stored is the phone's spot in `~/.config/deskbuddy/gaze.json`.
+
 ## Pieces
 | Where | What |
 |---|---|

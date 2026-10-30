@@ -42,6 +42,16 @@ check(run("systemctl", "--user", "is-enabled", "deskbuddy-bridge") == "enabled",
       "bash ~/deskbuddy/laptop/install.sh")
 check("Linger=yes" in run("loginctl", "show-user", os.environ.get("USER", "")), "runs before you log in (linger)",
       "bash ~/deskbuddy/laptop/install.sh")
+gaze = run("gdbus", "call", "--session", "--dest", "org.deskbuddy.Gaze", "--object-path", "/org/deskbuddy/Gaze",
+           "--method", "org.deskbuddy.Gaze.Monitors")
+info = run("gnome-extensions", "info", "chip-gaze@deskbuddy")
+if "Name:" not in info:
+    gaze_fix = "bash ~/deskbuddy/laptop/install.sh, then log out and back in"  # the extension isn't linked
+elif "Enabled: No" in info:
+    gaze_fix = "gnome-extensions enable chip-gaze@deskbuddy, then log out and back in"
+else:
+    gaze_fix = "enabled but not loaded yet: log out and back in (GNOME loads it at login)"
+check(bool(gaze), "eyes-follow extension answers on the session bus (only for the cursor)", gaze_fix)
 
 print("Wi-Fi link")
 link = get("/link")

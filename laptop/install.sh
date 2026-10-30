@@ -17,6 +17,14 @@ RestartSec=5
 [Install]
 WantedBy=default.target
 EOF
+# Eyes follow the cursor: the GNOME Shell extension that reports the pointer position (see bridge.py Gaze)
+ext="$here/gnome-extension/chip-gaze@deskbuddy"
+mkdir -p "$HOME/.local/share/gnome-shell/extensions"
+ln -sfn "$ext" "$HOME/.local/share/gnome-shell/extensions/chip-gaze@deskbuddy"
+gnome-extensions enable chip-gaze@deskbuddy || true
+echo "Eyes follow the cursor: the chip-gaze extension is linked. On Wayland GNOME loads a new extension only at login,"
+echo "so log out and back in once (and run this script again after that if it says it isn't enabled yet)."
+
 systemctl --user daemon-reload
 systemctl --user enable --now deskbuddy-bridge
 systemctl --user restart deskbuddy-bridge

@@ -38,7 +38,7 @@
     clockNow: true, clockHours: true, clockAir: true, ringCpu: true, ringRam: true, ringGpu: true, ringBattery: true, mediaCard: true,
     sounds: C.sounds, talk: C.talk, idle: true, greetings: true, hourly: true, trackToasts: true, laptopAlerts: true, phoneAlerts: true,
     shake: true, stretch: true, stretchMin: C.stretchEveryMin, dictation: true, fastDictation: C.fastDictation ?? false,
-    dictateOnLaptop: false,
+    dictateOnLaptop: false, burnGuard: false, gazeFollow: false,
     torch: true, torchAsk: true, torchDone: true, torchApps: true, notifyAllApps: false, alertTorch: true, alertSound: true,
     torchAway: false, torchRepeat: true, torchNight: false, behaviourTorch: true, torchSeconds: 3, soundSeconds: 2,
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
@@ -232,6 +232,7 @@
   function lookLoop() {
     if (gesture) { /* eyes are following a finger */ }
     else if (mood === "asleep") look(0, 0);
+    else if (following) { /* eyes are following the mouse */ }
     else if (Math.random() < 0.4) look(0, 0);
     else look(rand(-1, 1), rand(-0.6, 0.6));
     setTimeout(lookLoop, rand(1800, 6000));
@@ -409,7 +410,7 @@
     }
     const dx = e.clientX - g.x, dy = e.clientY - g.y, dt = now() - g.t;
     gesture = null; state.lastTouch = now();
-    setTimeout(() => { if (!gesture) look(0, 0); }, 700);
+    setTimeout(() => { if (!gesture) { if (following) gazeLook(...cursorGaze); else look(0, 0); } }, 700);
     const horiz = Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.3;
     const vert = Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx);
     if (g.onButton && !horiz && !vert) return; // a plain tap on a button: its click handler runs
@@ -982,6 +983,33 @@
   let vizTarget = [], vizBars = [], vizFall = [], vizPeaks = [];
   const canvas = $("#viz"), vctx = canvas.getContext("2d");
   if (preview.has("viz")) vizStyle = preview.get("viz");
+  // Chip's eyes follow the laptop's mouse pointer (bridge /gaze, see laptop/bridge.py Gaze)
+  let gazeSrc = null, following = false, cursorGaze = [0, 0];
+  function gazeLook(x, y) {  // the cursor's gaze only shows on the face screen, awake, and not under a finger
+    if (screenIdx === 0 && mood !== "asleep" && !state.night && !gesture) look(x, y);
+  }
+  function gazeOpen() {
+    if (gazeSrc) return;
+    gazeSrc = new EventSource(C.laptop + "/gaze");
+    gazeSrc.onmessage = (e) => {
+      if (e.data === "idle") {
+        following = false;
+        if (!gesture) look(0, 0);
+        return;
+      }
+      const [gx, gy] = e.data.split(",").map(Number);
+      cursorGaze = [gx, gy];
+      following = true;
+      gazeLook(gx, gy);
+    };
+  }
+  function gazeClose() {
+    if (gazeSrc) gazeSrc.close();
+    gazeSrc = null;
+    following = false;
+    look(0, 0);
+  }
+
   function vizStart() {
     if (preview.has("vizdemo")) {  // fake music for previews: ?screen=4&vizdemo&viz=neon
       setInterval(() => {
@@ -1234,6 +1262,8 @@
     for (const k in DEFAULT_PREFS) if (typeof p[k] === typeof DEFAULT_PREFS[k]) prefs[k] = p[k];
     if (preview.get("accent")) prefs.accent = preview.get("accent");
     store.set("prefs", prefs);
+    if (prefs.gazeFollow) gazeOpen();
+    else if (gazeSrc) gazeClose();
     // the accent colour (Chip's eyes, glow and scenes), from the design's palettes in robot.js
     const pal = prefs.accent === "custom" && /^#[0-9a-f]{6}$/i.test(prefs.accentColor) ? window.chipCustomPalette(prefs.accentColor)
       : window.CHIP_PALETTES[prefs.accent] || window.CHIP_PALETTES.cyan, rgb = (hex, a) =>
@@ -1253,7 +1283,22 @@
     $("#dots").classList.toggle("off", !prefs.dots || [1, 2, 3].every((k) => !tabOn(k)));
     if (!tabOn(screenIdx)) go(screenIdx);  // go() moves off a tab that was just hidden
     if (brightnessNow() !== was) phone.brightness(brightnessNow());
+    burnGuard(prefs.burnGuard);
     refreshMood(); render(); renderToggles();
+  }
+  // OLED burn-in guard: every 3 minutes the face screen steps through a 3x3 orbit of 0..2 px offsets (nothing per frame)
+  const BURN_ORBIT = [[0, 0], [1, 0], [2, 0], [2, 1], [1, 1], [0, 1], [0, 2], [1, 2], [2, 2]];
+  let burnTimer = 0, burnStep = 0;
+  function burnNudge(x, y) {
+    const st = document.documentElement.style;
+    st.setProperty("--bx", x + "px"); st.setProperty("--by", y + "px");
+    window.dispatchEvent(new CustomEvent("chip:nudge", { detail: { x, y } }));  // player.js fit() moves the canvas
+  }
+  function burnGuard(on) {
+    if (on === !!burnTimer) return;
+    clearInterval(burnTimer); burnTimer = 0; burnStep = 0;
+    if (on) burnTimer = setInterval(() => { burnStep = (burnStep + 1) % BURN_ORBIT.length; burnNudge(...BURN_ORBIT[burnStep]); }, 180000);
+    burnNudge(0, 0);
   }
   async function syncPrefs() {
     if (prefsBusy) return;

@@ -11,6 +11,8 @@
   and desktop notifications are watched on the session bus); the phone blinks its torch and plays a sound,
   as chosen per app on the dashboard.
 - Streams a cava-style audio spectrum of what the laptop is playing at /viz (server-sent events).
+- Streams where Chip should look to follow the mouse pointer at /gaze (server-sent events). The pointer position
+  comes from the chip-gaze GNOME Shell extension (laptop/gnome-extension), which Wayland apps cannot do themselves.
 - Keeps the ssh tunnel to the phone up over the home Wi-Fi, and finds the phone again by itself if its
   address changes (PhoneLink). Nothing needs a cable or adb.
 - Serves the dashboard at http://127.0.0.1:8765/ for showing/hiding the buddy's features and setting
@@ -22,6 +24,7 @@ import glob
 import io
 import ipaddress
 import json
+import math
 import os
 import re
 import socket
@@ -44,6 +47,7 @@ HOST_ALIAS = "chip-phone"  # the phone's ssh host key is pinned under this name,
 KNOWN_HOSTS = os.path.expanduser("~/.config/deskbuddy/known_hosts")
 STATE_FILE = os.path.expanduser("~/.config/deskbuddy/state.json")
 SETTINGS_FILE = os.path.expanduser("~/.config/deskbuddy/settings.json")
+GAZE_FILE = os.path.expanduser("~/.config/deskbuddy/gaze.json")  # where the phone sits, per monitor layout
 DASHBOARD = os.path.join(HERE, "dashboard.html")
 PREVIEW = os.path.realpath(os.path.join(HERE, "..", "phone", "www"))  # the buddy page itself, for the dashboard's preview
 # Who may use the bridge: the dashboard (served from here) and the buddy page on the phone (through the tunnel).
@@ -103,7 +107,7 @@ TOGGLES = (
     "typingScene",                                                                  # Chip types along with you
 )
 DEFAULTS = dict.fromkeys(TOGGLES, True) | {
-    "fastDictation": False, "dictateOnLaptop": False, "torchAway": False, "torchNight": False, "notifyAllApps": False, "pomoAutoFocus": False,
+    "fastDictation": False, "dictateOnLaptop": False, "torchAway": False, "torchNight": False, "notifyAllApps": False, "pomoAutoFocus": False, "burnGuard": False, "gazeFollow": False,
     "stretchMin": 50, "brightnessDay": 90,
     "sleepAt": "23:00", "wakeAt": "06:30", "brightnessNight": 3, "drowsyMin": 45,
     "torchSeconds": 3, "soundSeconds": 2, "soundVolume": 80, "soundStyle": "chime", "remindEvery": 20, "remindMinutes": 3,
@@ -852,6 +856,215 @@ class Visualizer:
                 self.clients -= 1
 
 
+# ---------------------------------------------------------------- gaze (Chip's eyes follow the mouse)
+
+GAZE_BUS = ("org.deskbuddy.Gaze", "/org/deskbuddy/Gaze", "org.deskbuddy.Gaze")  # the chip-gaze Shell extension
+
+
+def gaze_call(method):
+    """The values the extension answers with, or None while it isn't loaded (it needs a new login after install)."""
+    try:
+        return json.loads(run("busctl", "--user", "--json=short", "call", *GAZE_BUS, method))["data"]
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def gaze_pointer():
+    data = gaze_call("Pointer")
+    if isinstance(data, list) and len(data) == 2 and all(type(v) is int for v in data):
+        return tuple(data)
+    return None
+
+
+def gaze_monitors():
+    data = gaze_call("Monitors")
+    try:
+        monitors = json.loads(data[0])
+        return [{k: m[k] for k in ("x", "y", "w", "h", "primary")} for m in monitors]
+    except (ValueError, KeyError, IndexError, TypeError):
+        return []
+
+
+class Gaze:
+    """Works out where Chip should look: the direction from the phone to the mouse pointer, -1..1 on both axes.
+    Runs only while a phone is connected to /gaze, gazeFollow is on and the screen isn't locked."""
+    STEP = 0.34       # at most 3 updates a second: every one costs the phone a redraw
+    IDLE_AFTER = 8    # seconds without the pointer moving
+
+    def __init__(self):
+        self.lock = threading.Condition()
+        self.frame, self.seq, self.clients = "idle", 0, 0
+        self.proc, self.proc_at, self.active = None, 0, False
+        self.cursor, self.moved_at, self.sync_at = None, 0, 0
+        self.monitors = []
+        self.locked, self.locked_at = False, 0
+        try:
+            with open(GAZE_FILE) as f:
+                saved = json.load(f)
+        except (OSError, ValueError):
+            saved = {}
+        self.spots = {k: [float(v[0]), float(v[1])] for k, v in saved.items() if isinstance(saved, dict) and isinstance(k, str)
+                      and isinstance(v, list) and len(v) == 2 and all(type(n) in (int, float) and math.isfinite(n) for n in v)}
+
+    # -- layout and the phone's spot
+
+    @staticmethod
+    def layout_key(monitors):
+        return "|".join(sorted(f"{m['w']}x{m['h']}+{m['x']}+{m['y']}" for m in monitors))
+
+    @staticmethod
+    def bounds(monitors):
+        return (min(m["x"] for m in monitors), min(m["y"] for m in monitors),
+                max(m["x"] + m["w"] for m in monitors), max(m["y"] + m["h"] for m in monitors))
+
+    @staticmethod
+    def primary(monitors):
+        return next((m for m in monitors if m["primary"]), monitors[0])
+
+    def phone_spot(self, monitors):
+        """Saved for this monitor setup, else centered under the primary monitor, 10% of its height below its bottom edge."""
+        if not monitors:
+            return None
+        spot = self.spots.get(self.layout_key(monitors))
+        if spot:
+            return spot
+        m = self.primary(monitors)
+        return [m["x"] + m["w"] / 2, m["y"] + m["h"] * 1.1]
+
+    def layout(self):
+        """For the dashboard: what the extension sees, fresh each time."""
+        cursor, monitors = gaze_pointer(), gaze_monitors()
+        if monitors:
+            self.monitors = monitors
+        spot = self.phone_spot(monitors)
+        return {"ok": cursor is not None or bool(monitors), "monitors": monitors,
+                "phone": [round(v) for v in spot] if spot else None, "cursor": list(cursor) if cursor else None}
+
+    def set_phone(self, x, y):
+        """Remember the phone's spot for the current monitor setup, kept within one monitor height of the screens."""
+        monitors = gaze_monitors()
+        if not monitors:
+            return None
+        self.monitors = monitors
+        x0, y0, x1, y1 = self.bounds(monitors)
+        pad = self.primary(monitors)["h"]
+        with self.lock:
+            self.spots[self.layout_key(monitors)] = [max(x0 - pad, min(x1 + pad, x)), max(y0 - pad, min(y1 + pad, y))]
+            os.makedirs(os.path.dirname(GAZE_FILE), exist_ok=True)
+            with open(GAZE_FILE + ".tmp", "w") as f:
+                json.dump(self.spots, f, indent=1)
+            os.replace(GAZE_FILE + ".tmp", GAZE_FILE)
+        return self.layout()
+
+    # -- where to look
+
+    def look(self):
+        """"gx,gy" for the phone, or "idle". The phone only applies it."""
+        cursor, monitors = self.cursor, self.monitors
+        if not cursor or not monitors or time.monotonic() - self.moved_at > self.IDLE_AFTER:
+            return "idle"
+        px, py = self.phone_spot(monitors)
+        dx, dy = cursor[0] - px, cursor[1] - py
+        dist = math.hypot(dx, dy)
+        if dist == 0:
+            return "0.00,0.00"
+        x0, y0, x1, y1 = self.bounds(monitors)
+        k = 0.35 * math.hypot(x1 - x0, y1 - y0)
+        scale = min(1, dist / k) / dist
+        # the rig's gaze is only +-4 x +-3 px, so finer steps would only cost redraws
+        gx = max(-1, min(1, round(dx * scale * 4) / 4)) + 0.0
+        gy = max(-1, min(1, round(dy * scale * 3) / 3)) + 0.0
+        return f"{gx:.2f},{gy:.2f}"
+
+    def publish(self, frame):
+        with self.lock:
+            if frame != self.frame:
+                self.frame, self.seq = frame, self.seq + 1
+                self.lock.notify_all()
+
+    # -- the loop
+
+    def screen_locked(self):
+        if time.monotonic() - self.locked_at >= 5:
+            self.locked, self.locked_at = gnome_locked(), time.monotonic()
+        return self.locked
+
+    def read_moves(self, proc):
+        for line in proc.stdout:
+            try:
+                x, y = json.loads(line)["payload"]["data"]
+            except (ValueError, KeyError, TypeError):
+                continue
+            if type(x) is int and type(y) is int:
+                self.cursor, self.moved_at = (x, y), time.monotonic()
+
+    def start_watching(self):
+        cmd = ["busctl", "--user", "monitor", "--json=short", "--match",
+               f"type='signal',interface='{GAZE_BUS[2]}',member='Moved'"]
+        self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        self.proc_at = time.monotonic()
+        threading.Thread(target=self.read_moves, args=(self.proc,), daemon=True).start()
+
+    def stop_watching(self):
+        if self.proc:
+            self.proc.kill()
+            self.proc.wait()
+            self.proc = None
+
+    def deactivate(self):
+        self.stop_watching()
+        self.active = False
+        self.publish("idle")
+
+    def tick(self):
+        now = time.monotonic()
+        if not self.active:
+            self.active, self.cursor, self.moved_at, self.sync_at = True, None, now, 0
+        if (self.proc is None or self.proc.poll() is not None) and now - self.proc_at >= 5:
+            self.start_watching()
+        if now - self.sync_at >= 10:  # the extension's timer stops 15 s after the last Start()
+            self.sync_at = now
+            gaze_call("Start")
+            monitors = gaze_monitors()
+            if monitors:
+                self.monitors = monitors
+            if self.cursor is None:
+                self.cursor = gaze_pointer()
+        self.publish(self.look())
+
+    def run(self):
+        while True:
+            if self.clients == 0:
+                self.deactivate()
+            with self.lock:
+                while self.clients == 0:
+                    self.lock.wait()
+            if settings.get()["gazeFollow"] and not self.screen_locked():
+                self.tick()
+                time.sleep(self.STEP)
+            else:
+                self.deactivate()
+                time.sleep(1)
+
+    def stream(self, wfile):
+        with self.lock:
+            self.clients += 1
+            self.lock.notify_all()
+        seq = -1
+        try:
+            while True:
+                with self.lock:
+                    changed = self.lock.wait_for(lambda: self.seq != seq, timeout=15)
+                    frame, seq = self.frame, self.seq
+                wfile.write(f"data: {frame}\n\n".encode() if changed else b": ping\n\n")
+                wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            with self.lock:
+                self.clients -= 1
+
+
 # ---------------------------------------------------------------- http
 
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -933,6 +1146,15 @@ class Handler(BaseHTTPRequestHandler):
             self.cors()
             self.end_headers()
             return visualizer.stream(self.wfile)
+        if url.path == "/gaze":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.cors()
+            self.end_headers()
+            return gaze.stream(self.wfile)
+        if url.path == "/gaze/layout":  # for the dashboard, which polls it while open
+            return self.send_json(gaze.layout())
         if url.path == "/settings":
             return self.send_json(settings.get())
         if url.path == "/attention":
@@ -967,6 +1189,13 @@ class Handler(BaseHTTPRequestHandler):
             event = attention.add(a.get("source") or "An AI agent", a.get("kind"), a.get("text") or "needs you",
                                   a.get("project") or "")
             return self.send_json({"ok": True, "id": event, "alert": event is not None})
+        if url.path == "/gaze/phone":  # where the phone sits, set from the dashboard
+            g = self.read_json()
+            nums = [g.get(k) for k in ("x", "y")] if g is not None else []
+            if len(nums) != 2 or not all(type(n) in (int, float) and math.isfinite(n) for n in nums):
+                return self.send_json({"error": "expected numbers x and y"}, 400)
+            layout = gaze.set_phone(*nums)
+            return self.send_json(layout or {"error": "the chip-gaze extension is not running"}, 200 if layout else 503)
         if url.path == "/transcribe":  # a dictated clip from the phone (16 kHz WAV, at most 60 s)
             length = int(self.headers.get("Content-Length") or 0)
             if not 0 < length <= 4_000_000:
@@ -1011,6 +1240,7 @@ class Handler(BaseHTTPRequestHandler):
 stats = Stats()
 phone_link = PhoneLink()
 visualizer = Visualizer()
+gaze = Gaze()
 settings = Settings()
 phone = {}  # what the buddy said about itself on its last /stats poll
 apps = Apps()
@@ -1018,7 +1248,7 @@ attention = Attention()
 typing = Typing()
 
 if __name__ == "__main__":
-    for target in (stats.fast_loop, stats.slow_loop, phone_link.loop, visualizer.run,
+    for target in (stats.fast_loop, stats.slow_loop, phone_link.loop, visualizer.run, gaze.run,
                    attention.watch_notifications, typing.loop):
         threading.Thread(target=target, daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

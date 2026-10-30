@@ -39,6 +39,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .screen.left { transform: translateX(-5%); }
 .screen.active { opacity: 1; visibility: visible; transform: none; transition: opacity .25s, transform .25s; }
 
+#dots, #strip, #tpill { transform: translate(var(--bx, 0px), var(--by, 0px)); }   /* burn-in guard orbit */
 #dots { position: absolute; right: 3vmin; bottom: 3.4vmin; display: flex; gap: 1.4vmin; }
 #dots i { width: 1.6vmin; height: 1.6vmin; border-radius: 50%; background: #23323c; transition: background .3s; }
 #dots i.on { background: var(--soft); }
@@ -51,16 +52,14 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 }
 #app.night #sky { opacity: .25; }
 #head { position: absolute; left: 50%; top: 43%; width: calc(var(--ew) * 2 + var(--gap)); transform: translate(-50%, -50%); }
-#face {
+#face {  /* an empty marker: chip.js reads --lx/--ly/--sl/--sr/--gx/--gy from it, the rig draws on #scene */
   position: relative; width: calc(var(--ew) * 2 + var(--gap)); height: var(--eh);
-  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--tilt, 0deg));
-  transition: transform .26s cubic-bezier(.25, .8, .3, 1);
 }
 /* moods that recolour the face (the pixel face reads --eye and --glow from #face; the face itself is drawn by chip.js from pack.json) */
 #face.m-angry { --eye: var(--warn); --glow: rgba(255, 179, 71, .45); }
 #face.m-sad { --eye: #7aa8ff; --glow: rgba(122, 168, 255, .4); }
 
-#head, #face { will-change: transform; }
+#head { will-change: transform; }
 #head.bob { animation: bob 1.1s ease-in-out infinite; }
 #head.hop { animation: hop .55s ease-out; }
 #head.shake { animation: shake .45s; }
@@ -298,6 +297,7 @@ circle.fg { fill: none; stroke: var(--good); stroke-width: 7; stroke-linecap: ro
 #app.chip #scene, #app.scene #scene { opacity: 1; visibility: visible; transition: opacity .35s; }
 #head { transition: opacity .35s; }
 #app.chip #head { opacity: 0; visibility: hidden; }
+#app.chip #sky, #app.scene #sky { display: none; }   /* the scene is pure black; the glow would show in the letterbox bars */
 #scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #app.pixel #scene canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 #app.pixel.scene::after, #app.chip::after, #app.chip #fx { display: none; }  /* no scanlines over a scene: they'd be redrawn with every frame */
@@ -393,6 +393,10 @@ circle.fg { fill: none; stroke: var(--good); stroke-width: 7; stroke-linecap: ro
 #app.pixel circle.fg { stroke-linecap: butt; }
 /* VT323 is narrow, so bump the text sizes */
 #app.pixel #strip .pod { font-size: 5vmin; gap: 2.4vmin; padding: 1vmin 3vmin; }
+/* squarer than 16:10 the dock outgrows the width (sizes follow the height): wrap it, like portrait */
+@media (orientation: landscape) and (max-aspect-ratio: 16/10) {
+  #strip { flex-wrap: wrap; row-gap: 1.8vmin; padding: 0 4vmin; }
+}
 #app.pixel #bubble { font-size: 6.6vmin; }
 #app.pixel #tpill { font-size: 5.6vmin; }
 #app.pixel .c-time { font-size: 50vmin; font-weight: 400; letter-spacing: 0; }

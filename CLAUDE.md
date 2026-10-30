@@ -15,6 +15,7 @@ bridge. README.md has the full feature list: read only the section you need.
 - `laptop/bridge.py` — systemd user service `deskbuddy-bridge`, 127.0.0.1:8765, ssh -R tunnel to the phone.
   Settings schema = DEFAULTS/RANGES/CHOICES/APP_RULES; stored in ~/.config/deskbuddy/settings.json
 - `laptop/dashboard.html` — served at http://127.0.0.1:8765/ (cards built with sw/range/choice/section)
+- `laptop/gnome-extension/chip-gaze@deskbuddy/` — GNOME Shell extension, session bus org.deskbuddy.Gaze: the pointer position for Chip's eyes (install.sh links it; needs a login)
 - New setting = DEFAULTS (+RANGES/CHOICES) in bridge.py, DEFAULT_PREFS + applyPrefs in buddy.js, a row in
   dashboard.html.
 

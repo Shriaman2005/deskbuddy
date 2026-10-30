@@ -12,7 +12,7 @@
     "dark": {"from": "main", "dl": -0.174, "c": 0.97, "dh": 2},
     "hi": {"from": "main", "l": 0.979, "c": 0.21, "dh": 10},
     "rim": {"from": "main", "dl": 0.031, "c": 0.88, "dh": 5},
-    "bg": {"from": "main", "l": 0.117, "c": 0.09, "dh": 16},
+    "bg": {"fixed": "#000000"},
     "floor": {"from": "main", "dl": -0.208, "c": 0.88, "dh": 5},
     "keyFace": {"from": "main", "dl": -0.092, "c": 1.02, "dh": 4},
     "keyLip": {"from": "main", "dl": -0.373, "c": 0.72, "dh": 8},

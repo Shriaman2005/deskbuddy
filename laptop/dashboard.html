@@ -169,6 +169,26 @@ input[type=range]:disabled { cursor: default; }
 .attn li.none { color: var(--muted); }
 .attn .kind { flex: none; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: #13212b; color: var(--muted); }
 
+/* ---------- gaze map */
+.gaze { padding: 12px 0 10px; border-top: 1px solid var(--line); }
+.gaze svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+.gaze.off svg { filter: grayscale(1); opacity: .35; pointer-events: none; }
+.gaze .miss { display: none; margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08);
+  border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); font-size: 13px; }
+.gaze.off .miss { display: block; }
+.gaze .hint { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; }
+.gaze .mon { fill: #0b161e; stroke: var(--line2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.gaze .mon.pri { stroke: #2d6a85; }
+.gaze .lbl { fill: var(--soft); text-anchor: middle; font-family: var(--pixel); }
+.gaze .lbl.sub { fill: var(--muted); }
+.gaze .body { fill: #101d26; stroke: #2d6a85; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.gaze .scr { fill: #000; }
+.gaze .eye { fill: var(--eye); }
+.gaze .cur { fill: var(--pink); }
+.gaze .grab { cursor: grab; touch-action: none; }
+.gaze .grab.on { cursor: grabbing; }
+.gaze .grab .hit { fill: transparent; }
+
 /* ---------- footer + toast */
 footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 4px clamp(16px, 4vw, 40px) 40px;
   max-width: 1480px; margin: 0 auto; color: var(--muted); font-size: 13px; }
@@ -299,6 +319,10 @@ footer code { color: var(--soft); }
       sw("mask", "Pollution mask", "Puts one on when the AQI is 200 or worse"),
       sw("typingScene", "Chip types along with you", "While you type on the laptop, it types on one of its own: thinks when you pause, speeds up with you, a big Enter when you stop"),
       range("typingAfter", "Once you've typed for", 3, 60, 1, "sec", "typingScene"),
+      sw("burnGuard", "OLED burn-in guard", "Every 3 minutes the face screen shifts by up to 2 px, in a small loop, so nothing sits on the same pixels"),
+    ] },
+    { icon: "👀", title: "Eyes follow the cursor", gaze: true, rows: [
+      sw("gazeFollow", "Eyes follow the mouse", "Chip looks at your cursor on any monitor"),
     ] },
     { icon: "📍", title: "Floating dock", master: "dock", dock: true,
       note: "The bar along the bottom of the face. Tap an item to show or hide it." },
@@ -406,6 +430,11 @@ footer code { color: var(--soft); }
         `<ul id="attn-log"><li class="none">No alerts yet</li></ul></div>`;
     }
     if (c.appList) body += `<div class="applist" id="applist"></div>`;
+    if (c.gaze) {
+      body += `<div class="gaze off" id="gaze"><p class="miss">Install the extension: run laptop/install.sh, then log out and back in.</p>` +
+        `<svg id="gaze-map" role="img" aria-label="Your screens and where the phone sits"></svg>` +
+        `<p class="hint">Arrange your screens in Settings → Displays the way they sit on your desk, then drag Chip to where the phone really is.</p></div>`;
+    }
     const master = c.master ? `<input type="checkbox" class="sw" data-k="${c.master}" aria-label="${esc(c.title)}">` : "";
     return `<div class="card"${c.needs ? ` data-card-needs="${c.needs}"` : ""}><div class="card-head"><span class="ic">${c.icon}</span>` +
       `<h2>${esc(c.title)}</h2>${master}</div>${body}</div>`;
@@ -613,6 +642,97 @@ footer code { color: var(--soft); }
     toast(ok ? "Sent. The phone blinks and plays within a few seconds 🔔" : "Couldn't reach the bridge", !ok);
     loadAttention();
   });
+
+  // ---------------------------------------------------------------- gaze map
+  // Layout coordinates are the Shell's logical pixels (what /gaze/layout and POST /gaze/phone use); the SVG viewBox is
+  // the screens plus one monitor height all round, so the phone can sit below, above or beside them.
+  const gazeBox = $("#gaze"), gazeSvg = $("#gaze-map");
+  const GHOST = { ok: false, monitors: [{ x: 0, y: 0, w: 1920, h: 1080, primary: true }], phone: [960, 1188], cursor: null };
+  let gazeNow = GHOST, gazeKey = "", gazeDrag = null, gazeTimer = 0, gazeSeq = 0, gazeOnScreen = false;
+  const gazeU = () => gazeSvg.viewBox.baseVal.width / 100;
+
+  function drawGaze(L) {
+    const mons = L.monitors, tall = (mons.find((m) => m.primary) || mons[0]).h;
+    const x0 = Math.min(...mons.map((m) => m.x)) - tall, y0 = Math.min(...mons.map((m) => m.y)) - tall;
+    const w = Math.max(...mons.map((m) => m.x + m.w)) + tall - x0, h = Math.max(...mons.map((m) => m.y + m.h)) + tall - y0;
+    const u = w / 100, edge = 6 * u;  // a little extra so the phone isn't cut off at the very edge
+    gazeSvg.setAttribute("viewBox", `${x0 - edge} ${y0 - edge} ${w + 2 * edge} ${h + 2 * edge}`);
+    const [px, py] = L.phone;
+    gazeSvg.innerHTML = mons.map((m) =>
+      `<rect class="mon${m.primary ? " pri" : ""}" x="${m.x}" y="${m.y}" width="${m.w}" height="${m.h}" rx="${u * 1.2}"/>` +
+      `<text class="lbl" x="${m.x + m.w / 2}" y="${m.y + m.h / 2}" font-size="${u * 5}">${m.w}×${m.h}</text>` +
+      (m.primary ? `<text class="lbl sub" x="${m.x + m.w / 2}" y="${m.y + m.h / 2 + u * 5}" font-size="${u * 3.8}">primary</text>` : "")).join("") +
+      `<g class="grab" id="gaze-phone" transform="translate(${px} ${py})">` +
+      `<rect class="hit" x="${-u * 7}" y="${-u * 5}" width="${u * 14}" height="${u * 10}"/>` +
+      `<rect class="body" x="${-u * 5}" y="${-u * 2.6}" width="${u * 10}" height="${u * 5.2}" rx="${u * 0.9}"/>` +
+      `<rect class="scr" x="${-u * 4.4}" y="${-u * 2}" width="${u * 8.8}" height="${u * 4}" rx="${u * 0.5}"/>` +
+      `<rect class="eye" x="${-u * 2.1}" y="${-u * 0.9}" width="${u * 1}" height="${u * 1.8}" rx="${u * 0.2}"/>` +
+      `<rect class="eye" x="${u * 1.1}" y="${-u * 0.9}" width="${u * 1}" height="${u * 1.8}" rx="${u * 0.2}"/></g>` +
+      `<circle class="cur" id="gaze-cur" r="${u * 1.1}" cx="0" cy="0" display="none"/>`;
+  }
+  function placeCursor(L) {
+    const dot = $("#gaze-cur");
+    if (!dot) return;
+    if (L.cursor) { dot.setAttribute("cx", L.cursor[0]); dot.setAttribute("cy", L.cursor[1]); dot.removeAttribute("display"); }
+    else dot.setAttribute("display", "none");
+  }
+  function showGaze(r) {
+    gazeNow = r && r.ok && r.monitors.length && r.phone ? r : GHOST;
+    gazeBox.classList.toggle("off", gazeNow === GHOST);
+    const key = JSON.stringify([gazeNow.monitors, gazeNow.phone]);
+    if (key !== gazeKey) { gazeKey = key; drawGaze(gazeNow); }
+    placeCursor(gazeNow);
+  }
+  async function loadGaze() {
+    const seq = gazeSeq;
+    const r = await fetch("/gaze/layout").then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (seq === gazeSeq && !gazeDrag) showGaze(r);  // an answer that was in flight during a drop is stale
+  }
+  function pollGaze() {  // only while the card is on screen and the tab is visible
+    const want = gazeOnScreen && !document.hidden;
+    if (want && !gazeTimer) { loadGaze(); gazeTimer = setInterval(loadGaze, 500); }
+    else if (!want && gazeTimer) { clearInterval(gazeTimer); gazeTimer = 0; }
+  }
+  new IntersectionObserver((entries) => { gazeOnScreen = entries[entries.length - 1].isIntersecting; pollGaze(); }).observe(gazeBox);
+  document.addEventListener("visibilitychange", pollGaze);
+
+  const gazePoint = (e) => {
+    const pt = gazeSvg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    return pt.matrixTransform(gazeSvg.getScreenCTM().inverse());
+  };
+  gazeSvg.addEventListener("pointerdown", (e) => {
+    const g = e.target.closest("#gaze-phone");
+    if (!g || e.button > 0) return;
+    const p = gazePoint(e), [px, py] = gazeNow.phone;
+    gazeDrag = { id: e.pointerId, dx: px - p.x, dy: py - p.y, x: px, y: py };
+    g.setPointerCapture(e.pointerId);
+    g.classList.add("on");
+    e.preventDefault();
+  });
+  gazeSvg.addEventListener("pointermove", (e) => {
+    if (!gazeDrag || e.pointerId !== gazeDrag.id) return;
+    const p = gazePoint(e), vb = gazeSvg.viewBox.baseVal, u = gazeU();
+    gazeDrag.x = Math.max(vb.x + 6 * u, Math.min(vb.x + vb.width - 6 * u, p.x + gazeDrag.dx));
+    gazeDrag.y = Math.max(vb.y + 6 * u, Math.min(vb.y + vb.height - 6 * u, p.y + gazeDrag.dy));
+    $("#gaze-phone").setAttribute("transform", `translate(${gazeDrag.x} ${gazeDrag.y})`);
+  });
+  gazeSvg.addEventListener("pointerup", async (e) => {
+    if (!gazeDrag || e.pointerId !== gazeDrag.id) return;
+    const { x, y } = gazeDrag;
+    gazeDrag = null; gazeSeq++;
+    $("#gaze-phone")?.classList.remove("on");
+    const r = await fetch("/gaze/phone", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ x: Math.round(x), y: Math.round(y) }) }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    gazeSeq++;
+    if (r) { showGaze(r); toast("Chip's spot saved ✓"); }
+    else { toast("Couldn't save the phone's spot", true); loadGaze(); }
+  });
+  gazeSvg.addEventListener("pointercancel", (e) => {
+    if (!gazeDrag || e.pointerId !== gazeDrag.id) return;
+    gazeDrag = null; gazeKey = ""; loadGaze();
+  });
+  showGaze(null);
 
   loadSettings(); loadPhone(); loadAttention();
   setInterval(loadAttention, 4000);
