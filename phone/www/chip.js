@@ -39,6 +39,8 @@
     function applyEyes() {
       const sk = ChipPack.skin;
       player.setEyes(sk ? "skin:" + sk.id : app.dataset.eyes, app.dataset.pupil, app.dataset.pupils !== "0");
+      player.setEyeGap(+app.dataset.eyeGap || 0);
+      player.setPhonesGap(+app.dataset.phonesGap || 0);
     }
     function applyAccent() {
       const hex = app.dataset.accentHex || window.CHIP_PALETTES.cyan.main;
@@ -60,7 +62,7 @@
       }
     }
     applyLook();
-    new MutationObserver(applyLook).observe(app, { attributes: true, attributeFilter: ["data-skin", "data-eyes", "data-pupil", "data-pupils", "data-accent-hex", "data-chip-glow"] });
+    new MutationObserver(applyLook).observe(app, { attributes: true, attributeFilter: ["data-skin", "data-eyes", "data-pupil", "data-pupils", "data-eye-gap", "data-phones-gap", "data-accent-hex", "data-chip-glow"] });
 
     // ---------------------------------------------------------------- signals
     const sig = () => ({

@@ -41,7 +41,7 @@
       stats: { moving: 0, tilted: 0, peakMoving: 0, peakTilted: 0 }, pos: {}, camPos: "",
       // eyes: style, pupil size, sprite per layer id, resolved frames; gaze target, gaze shown, the saccade's landing
       style: null, pupil: "M", noPupil: false, skinRev: -1, spr: {}, env: null, looks: {}, eyeNow: {},
-      gazeT: [0, 0, false], gazeAt: 0, gz: [0, 0], conv: false, land: null, hold: 0,
+      gap: 0, gapWant: 0, gapFloor: -Infinity, hpGap: 0, gazeT: [0, 0, false], gazeAt: 0, gz: [0, 0], conv: false, land: null, hold: 0,
     };
 
     // ---------------------------------------------------------------- eyes
@@ -57,11 +57,62 @@
       ChipPack.setStyle(id);
       // a layer the style leaves out is null (drawn as nothing), not the rig's default sprite
       S.style = st; S.pupil = size; S.noPupil = noPupil; S.looks = {};
+      S.gapFloor = touchFloor(st); applyGap();   // a new style may have wider eyes: the gap stops where they touch
       S.spr = Object.fromEntries(["eyeL", "eyeR", "pupilL", "pupilR", "frontL", "frontR"].map((l) => [l, st.sprites[l] || null]));
-      const skinLayers = ChipPack.skinLayers;   // the skin's own mouth, faceBase, faceTop
-      for (const l of ["mouth", "faceBase", "faceTop"]) if (skinLayers[l]) S.spr[l] = skinLayers[l];
+      const skinLayers = ChipPack.skinLayers;   // the skin's own mouth, faceBase, faceTop, headphones
+      for (const l of ["mouth", "faceBase", "faceTop", "headphones"]) if (skinLayers[l]) S.spr[l] = skinLayers[l];
       S.env = { style: st, names: S.spr, fb: pack.fallbacks && pack.fallbacks.eye, spr: ChipPack.source };
       S.dirty = true;
+    }
+
+    // eye gap: px each eye sits further from (or, negative, closer to) the centre; its pupil and front follow
+    // the gap can close until the eyes touch: the closest ink of the two eyes at gap 0 (over every row and frame)
+    // is the room they have; each px of gap moves each eye 1 px, so the floor is -floor(room / 2)
+    function touchFloor(st) {
+      const L = ChipPack.source(st.sprites.eyeL), R = ChipPack.source(st.sprites.eyeR);
+      const rows = (sp) => {
+        const m = {};
+        for (const rs of Object.values(sp.frames)) rs.forEach((r, y) => {
+          for (let x = 0; x < r.length; x++) if (r[x] !== "." && r[x] !== " ") {
+            const k = y - sp.anchor[1], dx = x - sp.anchor[0], v = m[k] || (m[k] = [Infinity, -Infinity]);
+            v[0] = Math.min(v[0], dx); v[1] = Math.max(v[1], dx);
+          }
+        });
+        return m;
+      };
+      const lr = rows(L), rr = rows(R);
+      let room = Infinity;
+      for (const k in lr) if (rr[k]) room = Math.min(room, (byId.eyeR.at[0] + rr[k][0]) - (byId.eyeL.at[0] + lr[k][1]));
+      return Number.isFinite(room) ? -Math.floor(room / 2) : -Infinity;
+    }
+    function applyGap() {
+      const v = Math.min(24, Math.max(S.gapWant, S.gapFloor));
+      if (v !== S.gap) { S.gap = v; S.dirty = true; }
+    }
+    function setEyeGap(px) {
+      S.gapWant = Math.round(+px || 0);
+      applyGap();
+    }
+
+    // ear-cup gap: px each headphone cup sits further from (or, negative, closer to) the centre. The sprite is split
+    // at its anchor column, which must hold only the headband: that column is repeated (wider) or the columns next
+    // to it are cut (narrower), so any skin's headphones follow without a re-bake.
+    function setPhonesGap(px) {
+      px = Math.max(-16, Math.min(24, Math.round(+px || 0)));
+      if (px !== S.hpGap) { S.hpGap = px; S.dirty = true; }
+    }
+    function drawSplit(cv, b, g) {
+      const ax = b.ax, w = cv.width, h = cv.height, y = -b.ay;
+      if (g > 0) {
+        ctx.drawImage(cv, 0, 0, ax, h, -ax - g, y, ax, h);
+        ctx.drawImage(cv, ax, 0, 1, h, -g, y, 2 * g + 1, h);
+        ctx.drawImage(cv, ax + 1, 0, w - ax - 1, h, 1 + g, y, w - ax - 1, h);
+      } else {
+        const k = Math.min(-g, ax - 1, w - ax - 2);
+        ctx.drawImage(cv, 0, 0, ax - k, h, k - ax, y, ax - k, h);
+        ctx.drawImage(cv, ax, 0, 1, h, 0, y, 1, h);
+        ctx.drawImage(cv, ax + 1 + k, 0, w - ax - 1 - k, h, 1, y, w - ax - 1 - k, h);
+      }
     }
 
     // what eye frame f of eyeL/eyeR draws (ChipPack.eyeLook, cached): {back, front, pupil (frame or null), box, shift, anchor}
@@ -228,7 +279,7 @@
         if (!frame) return;
       }
       const gz = l.id === "gaze" ? eyeShift(ov) : eye && l.id[0] === "p" ? pupilAt(eye.look, l.id.slice(-1)) : null;
-      const x = l.at[0] + (o && o.x || 0) + (gz ? gz[0] : 0), y = l.at[1] + (o && o.y || 0) + (gz ? gz[1] : 0);
+      const x = l.at[0] + (l.id === "eyeL" ? -S.gap : l.id === "eyeR" ? S.gap : 0) + (o && o.x || 0) + (gz ? gz[0] : 0), y = l.at[1] + (o && o.y || 0) + (gz ? gz[1] : 0);
       ctx.save();
       ctx.translate(x, y);
       if (o && o.rot) { ctx.rotate(o.rot * Math.PI / 180); tilted = true; }
@@ -244,7 +295,10 @@
           f = look.back;
         } else if (l.id === "mouth" && b && !b.frames[f]) f = ChipPack.chain(pack.fallbacks && pack.fallbacks.mouth, f).find((n) => b.frames[n]);
         const cv = b && (b.frames[f] || b.frames[frameOf(l)]);
-        if (cv) { ctx.globalAlpha = alpha; ctx.drawImage(cv, -b.ax, -b.ay); ctx.globalAlpha = 1; if (moved) S.stats.moving++; if (tilted) S.stats.tilted++; }
+        if (cv) {
+          ctx.globalAlpha = alpha;
+          if (l.id === "headphones" && S.hpGap) drawSplit(cv, b, S.hpGap); else ctx.drawImage(cv, -b.ax, -b.ay);
+          ctx.globalAlpha = 1; if (moved) S.stats.moving++; if (tilted) S.stats.tilted++; }
       } else if (l.text && S.text[l.id]) {
         ctx.globalAlpha = alpha; ctx.drawImage(S.text[l.id], 0, 0); ctx.globalAlpha = 1;
         if (moved) S.stats.moving++; if (tilted) S.stats.tilted++;
@@ -328,7 +382,7 @@
       },
       play, playing, busy, setText,
       setSignals(s) { Object.assign(S.signals, s); S.dirty = true; },
-      setGaze, setEyes,
+      setGaze, setEyes, setEyeGap, setPhonesGap,
       set onStep(fn) { S.onStep = fn; },
       set onEvent(fn) { S.onEvent = fn; },
       set shouldDraw(fn) { S.shouldDraw = fn; },

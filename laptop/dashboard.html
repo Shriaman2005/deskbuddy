@@ -176,6 +176,8 @@ input[type=range]:disabled { cursor: default; }
 .gaze .miss { display: none; margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08);
   border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); font-size: 13px; }
 .gaze.off .miss { display: block; }
+.gaze.dim { opacity: .4; pointer-events: none; }   /* pupils off: greyed and frozen */
+.gaze.dim svg { filter: grayscale(1); }
 .gaze .hint { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; }
 .gaze .mon { fill: #0b161e; stroke: var(--line2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .gaze .mon.pri { stroke: #2d6a85; }
@@ -190,6 +192,14 @@ input[type=range]:disabled { cursor: default; }
 .gaze .grab .hit { fill: transparent; }
 
 /* ---------- eye styles, preview strips, skins */
+.place { padding: 2px 0 8px; }
+.place .cur { margin: 0 0 8px; color: var(--soft); font-size: 13.5px; }
+.place .find { display: flex; gap: 8px; }
+.place .find input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--fg); }
+.place ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.place li button { width: 100%; text-align: left; }
+.place li small { color: var(--muted); margin-left: 6px; }
+.place .none { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
 .eyes { padding: 2px 0 8px; }
 .eyes .skinnote, .mk .note { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 .eyes .skinnote { padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08); border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); }
@@ -208,6 +218,7 @@ input[type=range]:disabled { cursor: default; }
 .mk textarea { display: block; width: 100%; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--soft);
   font: 12px/1.4 ui-monospace, "Ubuntu Mono", monospace; resize: vertical; }
 .mk .acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
+.mk ol.howto { margin: 0 0 10px; padding-left: 20px; color: var(--soft); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .mk .hint { margin: 8px 0 2px; color: var(--muted); font-size: 12.5px; }
 .mk input[type=file] { max-width: 100%; margin-bottom: 8px; color: var(--soft); font-size: 13px; }
 .mk input[type=file]::file-selector-button { padding: 6px 12px; margin-right: 10px; border-radius: 9px; background: #101d26; border: 1px solid var(--line2); color: var(--soft); font: inherit; cursor: pointer; }
@@ -230,6 +241,9 @@ input[type=range]:disabled { cursor: default; }
 .mk .skin-row small { display: block; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
 .mk .skin-row .tag { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #12303e; color: var(--good); }
 .mk .skin-row .ask { color: var(--bad); font-size: 13px; }
+.mk .name { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; font-size: 13px; color: var(--soft); }
+.mk .name input, .mk .skin-row input { padding: 7px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--fg); font: inherit; max-width: 320px; }
+.mk .skin-row input { flex: 1; min-width: 120px; }
 .mk .empty { color: var(--muted); font-size: 13px; margin: 0 0 4px; }
 
 /* ---------- footer + toast */
@@ -329,15 +343,24 @@ footer code { color: var(--soft); }
     `<div class="row choice" id="pupil-row" hidden><span class="txt"><b>Pupil size</b><small>The dark centre that follows your cursor</small></span>` +
     `<div class="pick" id="pupil-pick"></div></div><div class="look" id="eye-look"><iframe id="eye-frame" title="Eye style preview" tabindex="-1"></iframe></div></div>`;
   const SKINS_HTML = `<div class="mk" id="mk"><p class="note">Turn your pet, yourself, a character or your own art into Chip. An AI chat does the drawing; Chip checks the result before using it.</p>` +
-    `<div class="step"><h3><i>1</i>Get the prompt</h3><div class="pick wrap" id="mk-basis"></div>` +
-    `<textarea id="mk-prompt" readonly rows="6" placeholder="Pick one above and the prompt appears here." aria-label="Prompt for your AI chat"></textarea>` +
+    `<div class="step"><h3><i>1</i>Make your own face for any character</h3>` +
+    `<ol class="howto"><li>Click <b>Copy prompt</b> below.</li>` +
+    `<li>Paste it into any AI chat (ChatGPT, Gemini, Claude…).</li>` +
+    `<li>Under it, describe your character, pet or yourself, and attach any pictures or art. Name it if you like.</li>` +
+    `<li>Download the JSON file the AI makes (or copy its code block).</li>` +
+    `<li>Upload it in step 2, check it, then click <b>Use on Chip</b>.</li></ol>` +
+    `<textarea id="mk-prompt" readonly rows="6" aria-label="Master prompt for your AI chat">Loading the prompt…</textarea>` +
     `<div class="acts"><button class="chip" id="mk-copy" disabled>Copy prompt</button></div>` +
-    `<p class="hint">Paste it into any AI chat (ChatGPT, Gemini, Claude…) and attach your pictures there. Your photos go only to that chatbot; Chip only receives the finished JSON.</p></div>` +
+    `<p class="hint">Works for phones and tablets, landscape or portrait. Your photos go only to that chatbot; Chip only receives the finished JSON.</p></div>` +
     `<div class="step"><h3><i>2</i>Upload the result</h3><input type="file" id="mk-file" accept=".json,application/json,text/plain" aria-label="Skin JSON file">` +
     `<textarea id="mk-paste" rows="3" spellcheck="false" placeholder="…or paste the JSON your AI sent" aria-label="Paste the skin JSON"></textarea>` +
     `<div class="acts"><button class="chip" id="mk-check">Check it</button></div></div>` +
     `<div class="step" id="mk-result" hidden><h3><i>3</i>Result</h3><div id="mk-out"></div></div>` +
     `<div class="step"><h3>Your skins</h3><div id="mk-list"></div><div class="acts"><button class="chip" id="mk-own">Back to Chip's own look</button></div></div></div>`;
+  const PLACE_HTML = `<div class="place"><p class="cur" id="place-cur"></p><form class="find" id="place-form">` +
+    `<input type="search" id="place-q" placeholder="Search a city, e.g. Mumbai" autocomplete="off" aria-label="Search for a city"> ` +
+    `<button class="chip" id="place-go">Search</button></form><ul id="place-res"></ul><p class="none" id="place-none" hidden></p>` +
+    `<div class="acts"><button class="chip" id="place-reset">Use the default place</button></div></div>`;
   const CARDS = [
     { icon: "🔔", title: "Attention alerts", master: "torch", attention: true,
       note: "When an AI agent or an app needs you, Chip blinks the phone's torch and/or plays a sound, and says who.", rows: [
@@ -379,9 +402,12 @@ footer code { color: var(--soft); }
       range("typingAfter", "Once you've typed for", 3, 60, 1, "sec", "typingScene"),
       sw("burnGuard", "OLED burn-in guard", "Every 3 minutes the face screen shifts by up to 2 px, in a small loop, so nothing sits on the same pixels"),
     ] },
-    { icon: "👀", title: "Eyes follow the cursor", gaze: true, eyes: true, rows: [
-      sw("gazeFollow", "Eyes follow the mouse", "Chip looks at your cursor on any monitor"),
+    { icon: "👀", title: "Eyes follow the cursor", eyes: true, rows: [
+      range("eyeGap", "Gap between the eyes", -14, 24, 1, "px"),
+      range("phonesGap", "Gap between the ear cups", -16, 24, 1, "px"),
       sw("showPupils", "Pupils", "The dark centre of each eye. Off, the eyes are plain whites with no centre"),
+      sw("gazeFollow", "Eyes follow the mouse", "Chip looks at your cursor on any monitor", "showPupils"),
+      { gazeMap: true },   // the monitor setup: shown with the mouse-follow toggle on, frozen while pupils are off
     ] },
     { icon: "🎨", title: "Make your own Chip", skins: true },
     { icon: "📍", title: "Floating dock", master: "dock", dock: true,
@@ -397,6 +423,8 @@ footer code { color: var(--soft); }
       range("pomoGoal", "Daily goal", 1, 24, 1, "n"),
       sw("workScene", "Focus mode on the face screen", "During a focus session the room dims, a moon comes up and Chip types away; notifications pop up muted"),
     ] },
+    { icon: "📍", title: "Weather location", place: true,
+      note: "Pick the place Chip shows the weather and air quality for. The forecast is fetched by the phone for that place.", rows: [] },
     { icon: "🕐", title: "Clock tab", needs: "tabClock", rows: [
       sw("clockNow", "Weather now", "Temperature, feels like, today's high and low"),
       sw("clockHours", "Next 6 hours", "Hourly forecast with the chance of rain"),
@@ -450,6 +478,10 @@ footer code { color: var(--soft); }
   ];
   const TAB_NAMES = { tabClock: "Clock", tabLaptop: "Laptop", tabTimer: "Timer" };
 
+  // the monitor setup (filled in by the gaze map code): hidden with the mouse-follow toggle off, dimmed and frozen with pupils off
+  const GAZE_HTML = `<div class="gaze off" id="gaze" data-needs="showPupils"><p class="miss">Install the extension: run laptop/install.sh, then log out and back in.</p>` +
+    `<svg id="gaze-map" role="img" aria-label="Your screens and where the phone sits"></svg>` +
+    `<p class="hint">Arrange your screens in Settings → Displays the way they sit on your desk, then drag Chip to where the phone really is.</p></div>`;
   function rowHTML(r) {
     if (r.section) return `<div class="sec">${esc(r.section)}</div>`;
     const needs = r.needs ? ` data-needs="${r.needs}"` : "";
@@ -485,19 +517,15 @@ footer code { color: var(--soft); }
         items.map(([k, label]) => `<button class="chip" data-k="${k}" aria-pressed="true">${label}</button>`).join("") +
         `</div></div>`).join("") + `</div>`;
     }
+    if (c.place) body += PLACE_HTML;
     if (c.eyes) body += EYES_HTML;
     if (c.skins) body += SKINS_HTML;
-    body += (c.rows || []).map(rowHTML).join("");
+    body += (c.rows || []).map((r) => (r.gazeMap ? GAZE_HTML : rowHTML(r))).join("");
     if (c.attention) {
       body += `<div class="attn" data-needs="torch"><button class="chip" id="torch-test">🔔 Test the alert</button>` +
         `<ul id="attn-log"><li class="none">No alerts yet</li></ul></div>`;
     }
     if (c.appList) body += `<div class="applist" id="applist"></div>`;
-    if (c.gaze) {
-      body += `<div class="gaze off" id="gaze"><p class="miss">Install the extension: run laptop/install.sh, then log out and back in.</p>` +
-        `<svg id="gaze-map" role="img" aria-label="Your screens and where the phone sits"></svg>` +
-        `<p class="hint">Arrange your screens in Settings → Displays the way they sit on your desk, then drag Chip to where the phone really is.</p></div>`;
-    }
     const master = c.master ? `<input type="checkbox" class="sw" data-k="${c.master}" aria-label="${esc(c.title)}">` : "";
     return `<div class="card"${c.needs ? ` data-card-needs="${c.needs}"` : ""}><div class="card-head"><span class="ic">${c.icon}</span>` +
       `<h2>${esc(c.title)}</h2>${master}</div>${body}</div>`;
@@ -515,7 +543,7 @@ footer code { color: var(--soft); }
   const mins = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
   const fmtMin = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " m" : ""}`);
   const fmtSec = (v) => (v < 60 ? `${v} s` : `${Math.floor(v / 60)} min${v % 60 ? " " + (v % 60) + " s" : ""}`);
-  const fmtUnit = (v, unit) => ({ pct: `${Math.round(v / 2.55)}%`, vol: `${v}%`, sec: fmtSec(v), n: `${v} sessions` }[unit] || fmtMin(v));
+  const fmtUnit = (v, unit) => ({ pct: `${Math.round(v / 2.55)}%`, vol: `${v}%`, sec: fmtSec(v), n: `${v} sessions`, px: `${v > 0 ? "+" : ""}${v} px` }[unit] || fmtMin(v));
   function ago(s) { return s < 90 ? `${Math.round(s)} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; }
   let toastTimer = 0;
   function toast(text, bad = false) {
@@ -545,8 +573,11 @@ footer code { color: var(--soft); }
       $$("input, button", el).forEach((i) => { i.disabled = !on; });
     }
     for (const el of $$("[data-card-needs]")) el.classList.toggle("dim", !S[el.dataset.cardNeeds]);
+    const gazeEl = $("#gaze");
+    if (gazeEl) { gazeEl.hidden = !S.gazeFollow; pollGaze(); }   // no monitor setup, and no pointer polling, while the toggle is off
     $$("#seg button").forEach((b) => { b.disabled = !tabOn(Number(b.dataset.screen)); });
     renderApps();
+    renderPlace();
     document.documentElement.style.setProperty("--eye", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);  // the page follows Chip's accent
     renderSleep();
     renderStatus();
@@ -621,6 +652,34 @@ footer code { color: var(--soft); }
     S = r;
     if (changed) { render(); toPreview({ prefs: S }); }  // e.g. a drawer toggle on the phone
   }
+  // ---------------------------------------------------------------- weather location
+  function renderPlace() {
+    $("#place-cur").textContent = S.locName ? `Showing weather for ${S.locName}` : "Showing weather for the default place from config.js";
+    $("#place-reset").disabled = !S.locName;
+  }
+  $("#place-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = $("#place-q").value.trim(), list = $("#place-res"), none = $("#place-none");
+    if (q.length < 2) return;
+    list.textContent = ""; none.hidden = true;
+    const found = await fetch("/geocode?q=" + encodeURIComponent(q)).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!found || !found.length) { none.textContent = found ? "No place found. Try another spelling." : "Search failed. Is the laptop online?"; none.hidden = false; return; }
+    for (const f of found) {
+      const li = document.createElement("li"), b = document.createElement("button"), sm = document.createElement("small");
+      b.className = "chip"; b.type = "button";
+      b.append(f.name);
+      sm.textContent = [f.region, f.country].filter(Boolean).join(", ");
+      b.append(sm);
+      b.addEventListener("click", () => {
+        const label = [f.name, f.region || f.country].filter(Boolean).join(", ");
+        save({ locName: label, locLat: f.lat, locLon: f.lon });
+        list.textContent = ""; $("#place-q").value = "";
+      });
+      li.append(b); list.append(li);
+    }
+  });
+  $("#place-reset").addEventListener("click", () => save({ locName: "", locLat: 0, locLon: 0 }));
+
   const KIND = { ask: "asks", done: "done", app: "app", notify: "app", test: "test" };
   const RULES = [["both", "🔦 + 🔔"], ["torch", "🔦 Torch"], ["sound", "🔔 Sound"], ["off", "Off"]];
   let appRows = [];
@@ -752,8 +811,8 @@ footer code { color: var(--soft); }
     const r = await fetch("/gaze/layout").then((x) => (x.ok ? x.json() : null)).catch(() => null);
     if (seq === gazeSeq && !gazeDrag) showGaze(r);  // an answer that was in flight during a drop is stale
   }
-  function pollGaze() {  // only while the card is on screen and the tab is visible
-    const want = gazeOnScreen && !document.hidden;
+  function pollGaze() {  // only while the monitor setup is on screen, the mouse-follow toggle is on, pupils are on, and the tab is visible
+    const want = gazeOnScreen && !document.hidden && !!S && !!S.gazeFollow && !gazeBox.classList.contains("dim");
     if (want && !gazeTimer) { loadGaze(); gazeTimer = setInterval(loadGaze, 500); }
     else if (!want && gazeTimer) { clearInterval(gazeTimer); gazeTimer = 0; }
   }
@@ -866,20 +925,21 @@ footer code { color: var(--soft); }
   }
 
   // ---------------------------------------------------------------- make your own Chip
-  let skinList = [], skinConfirm = "", skinLook = null, lastReport = null;
-  const BASES = [["pet", "My pet"], ["me", "Me"], ["character", "A character or theme"], ["art", "My concept art"], ["idea", "Just an idea"]];
-  for (const [v, label] of BASES) { const b = mk("button", "chip", label); b.dataset.basis = v; b.setAttribute("aria-pressed", "false"); $("#mk-basis").append(b); }
-  $("#mk-basis").addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-basis]");
-    if (!b) return;
-    for (const x of $$("#mk-basis .chip")) x.setAttribute("aria-pressed", String(x === b));
+  let skinList = [], skinConfirm = "", skinRename = "", skinLook = null, lastReport = null;
+  // the name a skin goes by on the phone ("Hi! I'm …"): 1-40 characters, chosen at install and changeable later
+  const nameInput = (value, label) => {
+    const i = mk("input"); i.type = "text"; i.maxLength = 40; i.value = value || ""; i.spellcheck = false; i.setAttribute("aria-label", label);
+    return i;
+  };
+  const cleanName = (v) => v.replace(/\s+/g, " ").trim().slice(0, 40);
+  async function loadPrompt() {   // one master prompt for every subject and screen
     const box = $("#mk-prompt");
-    box.value = "Getting the prompt…"; $("#mk-copy").disabled = true;
-    const r = await fetch("/skins/prompt?basis=" + encodeURIComponent(b.dataset.basis), { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null);
-    if (r === null) { box.value = ""; return toast("Couldn't get the prompt. Is the desk buddy bridge running?", true); }
+    const r = await fetch("/skins/prompt", { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null);
+    if (r === null) { box.value = "Couldn't load the prompt. Is the desk buddy bridge running?"; return; }
     box.value = r; box.scrollTop = 0; $("#mk-copy").disabled = false;
-  });
+  }
   $("#mk-copy").addEventListener("click", () => copyText($("#mk-prompt").value, "Prompt"));
+  loadPrompt();
 
   async function checkSkin(text) {
     const out = $("#mk-out");
@@ -926,10 +986,15 @@ footer code { color: var(--soft); }
     if (skinLook) looks.splice(looks.indexOf(skinLook), 1);
     skinLook = addLook(wrap);
     skinLook.url = `/preview/index.html?screen=0&mood=neutral&skin=draft&gaze=0,0&_=${Date.now()}`;
+    const nameBox = mk("label", "name"), name = nameInput(sk.name, "Character name");
+    nameBox.append(mk("span", "", "Character name (shown when it says hi on the phone)"), name);
+    out.append(nameBox);
     const acts = mk("div", "acts"), use = mk("button", "chip go", "Use on Chip");
     use.addEventListener("click", async () => {
+      const n = cleanName(name.value);
+      if (!n) return toast("Give your character a name first", true);
       use.disabled = true;
-      const res = await fetch("/skins/install", { method: "POST" }).catch(() => null);
+      const res = await fetch("/skins/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: n }) }).catch(() => null);
       const body = res ? await res.json().catch(() => null) : null;
       if (!res || !res.ok || !Array.isArray(body)) {
         use.disabled = false;
@@ -938,7 +1003,8 @@ footer code { color: var(--soft); }
       }
       skinList = body; skinConfirm = "";
       await save({ skin: sk.id });
-      acts.replaceChildren(mk("span", "res-head good", "✓ Chip is using it now. The phone picks it up within a minute."));
+      nameBox.remove();
+      acts.replaceChildren(mk("span", "res-head good", `✓ ${n} is on now. The phone picks it up within a minute.`));
       renderSkins();
     });
     acts.append(use);
@@ -965,6 +1031,7 @@ footer code { color: var(--soft); }
   function renderSkins() {
     const box = $("#mk-list");
     if (!box) return;
+    if (skinRename && document.activeElement && document.activeElement.tagName === "INPUT" && box.contains(document.activeElement)) return;  // don't wipe a name being typed
     $("#mk-own").disabled = !(S && S.skin);
     if (!skinList.length) return box.replaceChildren(mk("p", "empty", "No skins yet. Make one above."));
     box.replaceChildren(...skinList.map((k) => {
@@ -982,11 +1049,27 @@ footer code { color: var(--soft); }
         });
         no.addEventListener("click", () => { skinConfirm = ""; renderSkins(); });
         row.append(mk("span", "ask", `Delete “${k.name || k.id}”?`), yes, no);
+      } else if (skinRename === k.id) {   // rename in the row
+        const inp = nameInput(k.name, "New name"), ok = mk("button", "chip go", "Save"), no = mk("button", "chip", "Cancel");
+        const send = async () => {
+          const n = cleanName(inp.value);
+          if (!n) return toast("The name can't be empty", true);
+          const res = await fetch(`/skins/${encodeURIComponent(k.id)}/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: n }) }).catch(() => null);
+          const body = res && res.ok ? await res.json().catch(() => null) : null;
+          if (!Array.isArray(body)) return toast("Couldn't rename it", true);
+          skinList = body; skinRename = ""; renderSkins(); toast("Renamed ✓");
+        };
+        ok.addEventListener("click", send);
+        inp.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); if (e.key === "Escape") { skinRename = ""; renderSkins(); } });
+        no.addEventListener("click", () => { skinRename = ""; renderSkins(); });
+        row.replaceChildren(inp, ok, no);
+        setTimeout(() => inp.focus(), 0);
       } else {
         if (!active) { const use = mk("button", "chip", "Use"); use.addEventListener("click", () => save({ skin: k.id })); row.append(use); }
-        const del = mk("button", "chip", "Delete");
-        del.addEventListener("click", () => { skinConfirm = k.id; renderSkins(); });
-        row.append(del);
+        const ren = mk("button", "chip", "Rename"), del = mk("button", "chip", "Delete");
+        ren.addEventListener("click", () => { skinRename = k.id; skinConfirm = ""; renderSkins(); });
+        del.addEventListener("click", () => { skinConfirm = k.id; skinRename = ""; renderSkins(); });
+        row.append(ren, del);
       }
       return row;
     }));

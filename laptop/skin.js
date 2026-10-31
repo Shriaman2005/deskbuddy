@@ -3,7 +3,7 @@
 // Reuses phone/www/pack.js (eye resolution, pupil fit, mirrors), so a skin that passes here draws the way the phone draws it.
 //   node laptop/skin.js check -|<file> [--clean]   JSON {ok, errors:[{path,problem,fix}], warnings, message, skin}
 //                                                  (--clean adds the skin as minified JSON; the bridge stores that)
-//   node laptop/skin.js prompt pet|me|character|art|idea
+//   node laptop/skin.js prompt                     the master prompt for the chatbot (one for every subject and screen)
 //   node laptop/skin.js example
 const fs = require("fs"), path = require("path");
 const www = path.join(__dirname, "..", "phone", "www");
@@ -14,8 +14,8 @@ const MAX_BYTES = 600 * 1024, MAX_ENTRIES = 25, MAX_SPRITES = 40, MAX_COLORS = 1
 const ID_RE = /^[a-z0-9-]{1,32}$/, NAME_RE = /^[A-Za-z][A-Za-z0-9@_-]{0,31}$/, FRAME_RE = /^[A-Za-z0-9_-]{1,32}$/, HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const FORBIDDEN = ["__proto__", "constructor", "prototype"];
 const LAYERS = ["eyeL", "eyeR", "pupilL", "pupilR", "frontL", "frontR"];
-const SLOT_OF = { eyeL: "eye", eyeR: "eye", pupilL: "pupil", pupilR: "pupil", frontL: "front", frontR: "front", mouth: "mouth", faceBase: "faceBase", faceTop: "faceTop" };
-const TOP = ["format", "id", "name", "author", "accent", "colors", "sprites", "eyes", "mouth", "faceBase", "faceTop"];
+const SLOT_OF = { eyeL: "eye", eyeR: "eye", pupilL: "pupil", pupilR: "pupil", frontL: "front", frontR: "front", mouth: "mouth", faceBase: "faceBase", faceTop: "faceTop", headphones: "headphones" };
+const TOP = ["format", "id", "name", "author", "accent", "colors", "sprites", "eyes", "mouth", "faceBase", "faceTop", "headphones"];
 const STYLE = ["label", "blurb", "sprites", "shift", "converge", "pupils", "pupilDefault", "frames"];
 const DEF = ["pupil", "box", "boxR", "back", "shift"];
 const SPRITE = ["keys", "anchor", "glow", "frames"];
@@ -245,6 +245,9 @@ function check(buf, opts = {}) {
     const pair = (v) => Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 12);
     if (!pair(eyes.shift)) bad([...stylePath, "shift"], `${JSON.stringify(eyes.shift)} isn't [x, y] with two numbers from 0 to 12`, `use "shift": [2, 1] (how far the whole eye moves, in pixels, when Chip looks to the edge)`);
     if (eyes.converge !== undefined && !(typeof eyes.converge === "number" && eyes.converge >= 0 && eyes.converge <= 3)) bad([...stylePath, "converge"], `${JSON.stringify(eyes.converge)} isn't a number from 0 to 3`, `use 1 (pupils move 1 px inward when the target is near) or 0`);
+    if (!hasPupil) W([...stylePath, "sprites"], `has no pupil sprite, so the dashboard's Small / Medium / Large pupil size does nothing`, `add a pupil sprite with frames "S", "M" and "L", name it in "pupilL" and "pupilR" and set "pupils": ["S", "M", "L"] (leave it out only if the character has no pupils, e.g. blank lenses)`);
+    else if (Array.isArray(eyes.pupils) && eyes.pupils.every((s) => SIZES.includes(s)) && eyes.pupils.length < SIZES.length)
+      W([...stylePath, "pupils"], `only ${quoted(eyes.pupils).join(", ")} ${eyes.pupils.length === 1 ? "is" : "are"} drawn, so picking ${quoted(SIZES.filter((s) => !eyes.pupils.includes(s))).join(" or ")} on the dashboard changes nothing`, `draw all three sizes: "pupils": ["S", "M", "L"], with an "S", "M" and "L" frame in the pupil sprite`);
     if (hasPupil) {
       if (!Array.isArray(eyes.pupils) || !eyes.pupils.length || !eyes.pupils.every((s) => SIZES.includes(s)) || new Set(eyes.pupils).size !== eyes.pupils.length) bad([...stylePath, "pupils"], `${JSON.stringify(eyes.pupils)} isn't a list of sizes from "S", "M", "L"`, `use "pupils": ["S", "M", "L"]; the pupil sprite needs one frame for each`);
       else if (!eyes.pupils.includes(eyes.pupilDefault)) bad([...stylePath, "pupilDefault"], `${JSON.stringify(eyes.pupilDefault)} isn't one of "pupils"`, `use one of ${quoted(eyes.pupils).join(", ")}, e.g. "pupilDefault": ${JSON.stringify(eyes.pupils.includes("M") ? "M" : eyes.pupils[0])}`);
@@ -268,9 +271,9 @@ function check(buf, opts = {}) {
     }
   }
 
-  // --- mouth, faceBase, faceTop
+  // --- mouth, faceBase, faceTop, headphones
   const extra = {};
-  for (const slot of ["mouth", "faceBase", "faceTop"]) {
+  for (const slot of ["mouth", "faceBase", "faceTop", "headphones"]) {
     if (skin[slot] === undefined) continue;
     const r = ref(slot, skin[slot], [slot], false);
     if (r) extra[slot] = r;
@@ -295,7 +298,7 @@ function check(buf, opts = {}) {
   // unused sprites and colours
   const used = new Set(Object.values(slotNames).map(owner));
   const unusedSprites = Object.keys(S).filter((n) => !used.has(n) && !Object.values(slotNames).includes(n) && !Object.values(S).some((r) => r.kind === "mirror" && r.data.mirror === n));
-  if (unusedSprites.length) W(["sprites"], `${quoted(unusedSprites).join(", ")} ${unusedSprites.length === 1 ? "is" : "are"} not used by the eye style, mouth, faceBase or faceTop`, "remove the sprite, or name it in eyes.sprites / mouth / faceBase / faceTop");
+  if (unusedSprites.length) W(["sprites"], `${quoted(unusedSprites).join(", ")} ${unusedSprites.length === 1 ? "is" : "are"} not used by the eye style, mouth, faceBase, faceTop or headphones`, "remove the sprite, or name it in eyes.sprites / mouth / faceBase / faceTop / headphones");
   const unusedColors = Object.keys(colors).filter((c) => !usedTokens.has(c));
   if (unusedColors.length) W(["colors"], `${quoted(unusedColors).join(", ")} ${unusedColors.length === 1 ? "is" : "are"} not used by any sprite`, "remove the colour or use it as a key");
 
@@ -341,7 +344,16 @@ function check(buf, opts = {}) {
         if (miss.length) W(["sprites", owner(extra.mouth), "frames"], `${miss.length} mouth ${miss.length === 1 ? "shape isn't" : "shapes aren't"} drawn. Chip shows the shape after each arrow instead: ${miss.join(", ")}`, "optional: add those frames for more expression");
       }
     }
-    for (const slot of ["faceBase", "faceTop"]) if (extra[slot]) {
+    if (extra.headphones) {   // the ear-cup gap setting splits the sprite at its anchor column
+      const sp = resolve(extra.headphones), [w] = P.spriteSize(sp), mid = (w - 1) / 2, o = owner(extra.headphones);
+      if (Math.abs(sp.anchor[0] - mid) > 1) W(["sprites", o, "anchor"], `the anchor's x is ${sp.anchor[0]}, but the headphones are ${w} px wide, so their middle is ${mid}`, `put the anchor on the middle column (x ${Math.floor(mid)}) and the head's centre height: the user's ear-cup gap setting widens and narrows the headphones there`);
+      else {
+        const rows = sp.frames[Object.keys(sp.frames)[0]], mask = (r) => r.padEnd(w, ".").replace(/[^.]/g, "#");
+        const lop = rows.filter((r) => mask(r) !== [...mask(r)].reverse().join("")).length;   // the outline, colours may differ
+        if (lop > rows.length / 4) W(["sprites", o, "frames"], `${lop} of the ${rows.length} rows aren't the same shape left and right`, "draw the headphones symmetric around the middle column (the ear-cup gap setting moves both cups by the same amount)");
+      }
+    }
+    for (const slot of ["faceBase", "faceTop", "headphones"]) if (extra[slot]) {
       const sp = resolve(extra[slot]), fs_ = Object.keys(sp.frames);
       if (fs_.length > 1) W(["sprites", owner(extra[slot]), "frames"], `${slot} shows only its first frame (${JSON.stringify(fs_[0])}); ${quoted(fs_.slice(1)).join(", ")} will never be drawn`, "remove the extra frames");
     }
@@ -417,15 +429,7 @@ function pretty(v) {
 }
 
 // ---------------------------------------------------------------- the chatbot prompt, built from the pack
-const BASIS = {
-  pet: "I'm attaching photos of my pet: make Chip a cute pixel-art version of them (colours, markings, ears, eye colour), readable from a metre away, not a photo.",
-  me: "I'm attaching a photo of myself: make a friendly pixel-art Chip inspired by me (hair, colours, glasses), simple and cute, not a portrait.",
-  character: "I'll name or attach a character, film or theme I love: make an original Chip inspired by its colours and mood, without copying logos or exact designs.",
-  art: "I'm attaching my concept art: turn it into a Chip skin, staying close to it.",
-  idea: "I'll describe my idea below.",
-};
-
-function prompt(basis) {
+function prompt() {
   const roles = ROLES.map((r) => {
     const t = pack.palette[r];
     return `${r}${t === "accent" ? " (the accent itself)" : t.fixed ? ` (fixed ${t.fixed})` : ""}`;
@@ -446,7 +450,17 @@ chip-skin/1 is one JSON object. Fields:
   - A key's colour is one of Chip's built-in colours or one of your "colors". Built-in colours: ${roles.join(", ")}. Most follow the accent, so a skin with an accent recolours itself.
   - "anchor" is the pixel of the sprite that sits on the spot where Chip places it; it must be inside the sprite.
 - "eyes": one eye style (below). Required.
-- "mouth", "faceBase", "faceTop": the name of one of your sprites. Optional; Chip keeps its own mouth and shows no faceBase/faceTop without them. faceBase and faceTop are drawn from their first frame.
+- "mouth", "faceBase", "faceTop", "headphones": the name of one of your sprites. Optional; Chip keeps its own mouth and headphones and shows no faceBase/faceTop without them. faceBase, faceTop and headphones are drawn from their first frame.
+- "name" is the character's name: the phone greets with "Hi! I'm <name>", so use the character's own name (the user can change it when installing).
+
+Where things go (all relative to the head's centre, in pixels; x grows to the right, y downwards):
+- faceBase and headphones are placed with their anchor on the head's centre; faceTop's anchor goes there too.
+- The eyes are placed with their anchors at (-33, -7) and (33, -7), the mouth's anchor (its top centre) at (0, 21). The user can move each eye up to 12 px inward or 24 px outward, so leave some face around them.
+- So draw faceBase with its anchor at the point between the eyes, 7 px below eye level, and leave the eye spots for the eye sprites (they draw on top of it).
+
+Headphones, "headphones" (optional, but make them: they're part of the character): Chip wears them while music plays. Draw a pair that belongs to this character: their colours, materials and style (armour plates for an armoured hero, a dark matte set for a dark caped one, fur muffs for an animal, a patterned band for a patterned costume, ...), not generic ones.
+- At most 128x72 px. The anchor is the head's centre, on the exact middle column of the sprite, at the height of the head's centre; the band arches over the top of faceBase/faceTop and the ear cups sit on the sides of the head at about eye height, just outside the face's edge.
+- Left-right symmetric in shape. The middle column holds only the headband: the user's "gap between the ear cups" setting repeats or removes that column to move both cups out or in.
 
 Maximum sprite sizes in pixels: ${slotLine}. No sprite may exceed 128x96. The file must stay under ${MAX_BYTES / 1024} KB.
 
@@ -459,22 +473,45 @@ The eye style, "eyes": {"label": 1-40 characters, "blurb": optional, "sprites": 
     "auto" shows the pupil in the size the user picked; null hides it (shut, happy, hearts, stars, spirals, and a blink band too thin for a pupil, such as half). "box" is where the pupil's anchor sits when Chip looks to the far left/top (x0, y0) and to the far right/bottom (x1, y1), in pixels of the eye sprite; looking straight ahead is the middle of the box. Smaller pupils are centred inside the box of the largest, so size L sets the limits.
   - "shift" is how far the whole eye moves (px) when Chip looks to the edge, for looks that have a pupil. A look without a pupil usually shifts more, e.g. [5, 3]. "converge": the pupils move this many px toward each other when the target is close or Chip is idle.
   - At all 9 gaze positions (left/centre/right x top/centre/bottom), with every pupil size and with converge applied, every pixel of the pupil must lie on the eye's drawn pixels or under the front layer's drawn pixels. Keep at least 8 px of eye around the pupil at rest.
+- PUPIL SIZES (required, the user picks Small, Medium or Large in the dashboard, so draw all three): give the eye a pupil sprite (pupilL/pupilR in "eyes.sprites"), set "pupils": ["S", "M", "L"] and "pupilDefault": "M", and draw exactly three frames in that pupil sprite, named "S", "M" and "L".
+  - All three are solid blobs of the same shape in the same colour, drawn on one shared grid and centred on the same anchor (the grid's centre), so switching size only grows or shrinks the pupil around the same point. Make them clearly different: with a grid of N px, use about N/3 for S, N*2/3 for M and the full N for L (for example 2, 4 and 6 px on a 6x6 grid). S must be visibly smaller than M, and M than L.
+  - "box" is sized for L: if L fits inside the eye at every gaze position, S and M do too. Never leave out a size or a pupil sprite, or the user's size choice does nothing. Only looks with "pupil": null ignore the size.
 - Mouth looks: ${mouthFrames.join(", ")}. Required: neutral. Others fall back: ${fb(pack.fallbacks.mouth)}.
 
 Where the art guide below and these rules differ (for example which eye looks you must draw), these rules win: the checker enforces them.`;
 
-  return `You're designing a custom look ("skin") for Chip, a small pixel-art buddy that lives on an old phone
-standing on my desk next to my monitors. ${BASIS[basis]} Chip keeps all its animations, moods and
-behaviour; you only make the art, in the exact JSON format below.
+  return `You are making a pixel-art skin for Chip, my desk buddy: a small animated face on an old phone that
+stands next to my monitors. It runs on phones and tablets, in landscape and portrait. Read my message and any
+pictures I attach, then make ONE chip-skin/1 JSON file that draws my subject, and reply with it. The full spec is below.
 
-How to work:
-1. First tell me in 3-5 short lines what you'll take from my pictures or idea. Ask at most 2
-   questions, only if something important is unclear.
-2. If you can run code, build the JSON with code (shrink pictures and reduce them to your colours,
-   draw shapes with code) and check every rule below before answering. If you can't, draw
-   carefully and count every row.
-3. Reply with the complete JSON in one \`\`\`json block (or a downloadable .json file), nothing after.
-4. When I paste validation errors, fix exactly those, keep the rest, send the whole JSON again.
+What to draw
+- My subject can be a character from a film, series, game, comic, anime or a superhero, a pet, a person (me),
+  my own concept art, or an idea I describe. Draw it as it really looks: its real head or mask shape, eyes, hair
+  or fur, colours, signature details and headphones. It must be recognisable at a glance.
+- Don't make the head round, don't put the face in a circle, and don't simplify it or make it cuter than the
+  subject, unless the subject itself is round.
+- "name": the subject's own name, unless I give one. Eyes: draw the subject's own eye shape.
+- Pupil sizes: Chip's Small, Medium and Large settings are part of the spec below. Draw all three.
+- Headphones: always draw a pair in the subject's style (armour plates, matte black, fur muffs, a patterned band...).
+
+Screens: phones and tablets, landscape and portrait
+- Chip's face is always a 320 x 180 pixel grid. It is scaled up to fit each screen with black bars around it, so
+  one file works on a small phone, a large phone and a tablet. Don't draw separate sizes.
+- Every pixel of art must be inside the 320 x 180 grid. Keep the face between about y 22 and y 150. The middle of
+  the head is at (167, 74). The speech bubble covers the top rows and the status bar the bottom ~30 rows.
+- A pixel is about 0.65 mm on a phone and larger on a tablet, so details under 2 px disappear. Use bold shapes,
+  flat colours and clean outlines, and check that it reads at arm's length and in peripheral vision.
+- On a portrait tablet the face is smaller with more black around it. Avoid thin edges and tiny decorations that
+  depend on the full width.
+
+How to work
+1. Reply with at most three short lines of notes (what you took from my text and pictures, and any choice you
+   made), then the complete JSON in one \`\`\`json code block, or as a downloadable file named <id>.json. Nothing else.
+2. Don't ask questions unless something essential is missing. Choose sensible defaults and say so in one line.
+3. If you can run code, build the JSON with code (shrink pictures and reduce them to the colours) and check every
+   rule below before you reply: row lengths, colour keys, sprite sizes, anchors, all three pupil sizes, symmetric
+   headphones, and file size.
+4. If I paste validation errors back, fix exactly those, keep everything else, and send the whole JSON again.
 
 Format, slots, frames, colours:
 ${generated}
@@ -482,7 +519,8 @@ ${generated}
 Art guide from Chip's designer:
 ${guide}
 
-Smallest valid example (make yours much richer):
+Smallest valid example. It only shows the format: its square eyes and missing face are not a style to copy;
+yours has the subject's own head, eyes and headphones:
 \`\`\`json
 ${pretty(example())}
 \`\`\`
@@ -493,11 +531,11 @@ ${pretty(example())}
 const [cmd, arg, ...rest] = process.argv.slice(2);
 if (cmd === "check" && arg) {
   process.stdout.write(JSON.stringify(check(arg === "-" ? fs.readFileSync(0) : fs.readFileSync(arg), { clean: rest.includes("--clean") })));
-} else if (cmd === "prompt" && own(BASIS, arg || "")) {
-  process.stdout.write(prompt(arg));
+} else if (cmd === "prompt") {
+  process.stdout.write(prompt());
 } else if (cmd === "example") {
   process.stdout.write(pretty(example()) + "\n");
 } else {
-  console.error("usage: node laptop/skin.js check -|<file> [--clean] | prompt " + Object.keys(BASIS).join("|") + " | example");
+  console.error("usage: node laptop/skin.js check -|<file> [--clean] | prompt | example");
   process.exit(2);
 }

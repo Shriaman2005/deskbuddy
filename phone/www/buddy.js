@@ -43,8 +43,8 @@
     torchAway: false, torchRepeat: true, torchNight: false, behaviourTorch: true, torchSeconds: 3, soundSeconds: 2,
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoLongEvery: 4, pomoAutoBreak: true, pomoAutoFocus: false, pomoGoal: 8,
-    workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", chipGlow: 100, idleRate: "normal", idleOff: [],
-    eyeStyle: "", pupilSize: "M", showPupils: true, skin: "",  // eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
+    workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", chipGlow: 100, eyeGap: 0, phonesGap: 0, idleRate: "normal", idleOff: [],
+    eyeStyle: "", pupilSize: "M", showPupils: true, skin: "", locName: "", locLat: 0, locLon: 0,  // weather place from the dashboard ("" = config.js); eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
     brightnessDay: C.brightness.day,
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
   };
@@ -548,14 +548,18 @@
     }
     return null;
   }
+  const placeNow = () => (prefs.locName ? { name: prefs.locName, lat: prefs.locLat, lon: prefs.locLon } : C.location);
+  const placeKey = () => { const L = placeNow(); return L.lat + "," + L.lon; };
   async function fetchWeather() {
-    const L = C.location;
+    const L = placeNow(), key = placeKey();
     const d = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${L.lat}&longitude=${L.lon}` +
       "&current=temperature_2m,apparent_temperature,weather_code,is_day" +
       "&hourly=temperature_2m,weather_code,precipitation_probability,is_day" +
       "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=auto&forecast_days=2", 15000);
+    if (key !== placeKey()) return;  // the place changed while this was loading; applyPrefs fetched the new one
     if (d && d.current) { state.weather = { at: now(), d }; store.set("weather", state.weather); render(); }
     const a = await getJSON(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${L.lat}&longitude=${L.lon}&current=us_aqi`, 15000);
+    if (key !== placeKey()) return;
     if (a && a.current && a.current.us_aqi != null) { state.aqi = { at: now(), v: Math.round(a.current.us_aqi) }; store.set("aqi", state.aqi); render(); }
   }
   function aqiColor(v) { return v <= 50 ? "#5dffa8" : v <= 100 ? "#ffe066" : v <= 150 ? "#ffb347" : v <= 200 ? "#ff6b6b" : v <= 300 ? "#c77dff" : "#ff4d8d"; }
@@ -1288,13 +1292,22 @@
   // the laptop away), and handed to chip.js through window.ChipSkin + data-skin. chip.js merges it over the pack; if
   // that fails it says so in data-skin-err and sends chip:skinfail, and we go back to the base pack.
   const SKIN_ID = /^[a-z0-9-]{1,32}$/, SKIN_MAX = 600 * 1024;
-  let skinWant = null, skinText = "", skinBad = "", skinSeq = 0;  // id wanted, the text shown, the text chip.js refused, data-skin counter
+  let skinWant = null, skinText = "", skinBad = "", skinSeq = 0, skinGreeted = "";  // id wanted, the text shown, the text chip.js refused, data-skin counter, the name last introduced
+  // the name Chip goes by: the active skin's display name (set when it was installed on the dashboard), else config.js's
+  const buddyName = () => {
+    const sk = app.dataset.skin && window.ChipSkin;
+    return sk && typeof sk.name === "string" && sk.name.trim() ? sk.name.trim().slice(0, 40) : C.name;
+  };
   function skinShow(skin, text) {
     if (text && (text === skinBad || text === skinText)) return;
     skinText = text;
     window.ChipSkin = skin;
     app.dataset.skin = skin ? skin.id + "@" + ++skinSeq : "";
     paintAccent();
+    // a new look after start-up (installed, picked or renamed on the dashboard) introduces itself by its name
+    const name = buddyName();
+    if (performance.now() > 8000 && name !== skinGreeted && !state.night) setTimeout(() => { if (buddyName() === name) { express("joy", 1500); say(`Hi! I'm ${name} 👋`, 2500); } }, 1200);
+    skinGreeted = name;
   }
   async function loadSkin(id) {
     skinWant = id;
@@ -1330,7 +1343,7 @@
   });
 
   function applyPrefs(p) {
-    const was = brightnessNow();
+    const was = brightnessNow(), placeWas = placeKey();
     for (const k in DEFAULT_PREFS) if (typeof p[k] === typeof DEFAULT_PREFS[k]) prefs[k] = p[k];
     if (preview.get("accent")) prefs.accent = preview.get("accent");
     store.set("prefs", prefs);
@@ -1338,6 +1351,8 @@
     else if (gazeSrc) gazeClose();
     paintAccent();
     app.dataset.chipGlow = prefs.chipGlow;
+    app.dataset.eyeGap = prefs.eyeGap;  // px added to each eye's distance from the centre
+    app.dataset.phonesGap = preview.has("hpgap") ? preview.get("hpgap") : prefs.phonesGap;  // the same for each headphone ear cup
     app.dataset.eyes = preview.get("eyes") || prefs.eyeStyle;  // chip.js picks them up
     app.dataset.pupil = (preview.get("pupil") || prefs.pupilSize).toUpperCase();
     app.dataset.pupils = prefs.showPupils ? "1" : "0";
@@ -1354,6 +1369,9 @@
     if (!tabOn(screenIdx)) go(screenIdx);  // go() moves off a tab that was just hidden
     if (brightnessNow() !== was) phone.brightness(brightnessNow());
     burnGuard(prefs.burnGuard);
+    if (placeKey() !== placeWas) {  // a new place: drop the old place's forecast and fetch the new one
+      state.weather = state.aqi = null; store.set("weather", null); store.set("aqi", null); fetchWeather();
+    }
     refreshMood(); render(); renderToggles();
   }
   // OLED burn-in guard: every 3 minutes the face screen steps through a 3x3 orbit of 0..2 px offsets (nothing per frame)
@@ -1456,5 +1474,5 @@
   setInterval(fetchWeather, 20 * 60000);
   setInterval(checkVersion, 60000);
   fetchWeather(); pollLaptop(); pollPhone(); checkVersion();
-  if (!state.night && prefs.greetings) setTimeout(() => { express("surprised", 700); setTimeout(() => { anim("hop", 500); express("joy", 1500); say(`Hi! I'm ${C.name} 👋`, 2500); }, 700); }, 900);
+  if (!state.night && prefs.greetings) setTimeout(() => { express("surprised", 700); setTimeout(() => { anim("hop", 500); express("joy", 1500); say(`Hi! I'm ${buddyName()} 👋`, 2500); }, 700); }, 900);
 })();

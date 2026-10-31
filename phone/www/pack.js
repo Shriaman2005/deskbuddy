@@ -158,12 +158,12 @@
   }
 
   // ---------------------------------------------------------------- skins (chip-skin/1, see laptop/skin.js)
-  // A skin adds sprites, an eye style, colours and mouth/faceBase/faceTop sprites to a copy of the base pack. Nothing
+  // A skin adds sprites, an eye style, colours and mouth/faceBase/faceTop/headphones sprites to a copy of the base pack. Nothing
   // else is copied from it (never rig, clips, moods, states), every part is rebuilt field by field with its type
   // checked, and the maps are prototype-less, so a hostile file cannot reach Object.prototype. It throws on anything
   // wrong and leaves the base pack as it was (the caller falls back to the base pack).
   const SKIN_ID = /^[a-z0-9-]{1,32}$/, SKIN_NAME = /^[A-Za-z][A-Za-z0-9@_-]{0,31}$/, FRAME_NAME = /^[A-Za-z0-9_-]{1,32}$/;
-  const HEX = /^#[0-9a-fA-F]{6}$/, EYE_LAYERS = ["eyeL", "eyeR", "pupilL", "pupilR", "frontL", "frontR"], SKIN_LAYERS = ["mouth", "faceBase", "faceTop"];
+  const HEX = /^#[0-9a-fA-F]{6}$/, EYE_LAYERS = ["eyeL", "eyeR", "pupilL", "pupilR", "frontL", "frontR"], SKIN_LAYERS = ["mouth", "faceBase", "faceTop", "headphones"];
   const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
   const num = (v, lo, hi) => typeof v === "number" && isFinite(v) && v >= lo && v <= hi;
   const bad = (msg) => { throw new Error(msg); };

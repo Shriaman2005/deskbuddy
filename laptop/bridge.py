@@ -34,10 +34,11 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
 import sys
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # python -I skips the script's folder
@@ -58,7 +59,6 @@ SKIN_JS = os.path.join(HERE, "skin.js")
 SKIN_ID = re.compile(r"[a-z0-9-]{1,32}")
 SKIN_MAX = 600 * 1024  # bytes of a skin file (skin.js enforces the same)
 SKIN_LIMIT = 30        # installed skins
-SKIN_BASES = ("pet", "me", "character", "art", "idea")
 # Who may use the bridge: the dashboard (served from here) and the buddy page on the phone (through the tunnel).
 # Other websites open in the laptop's browser can reach 127.0.0.1 too, so requests from them are refused.
 HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
@@ -143,14 +143,15 @@ DEFAULTS = dict.fromkeys(TOGGLES, True) | {
     "sleepAt": "23:00", "wakeAt": "06:30", "brightnessNight": 3, "drowsyMin": 45,
     "torchSeconds": 3, "soundSeconds": 2, "soundVolume": 80, "soundStyle": "chime", "remindEvery": 20, "remindMinutes": 3,
     "pomoFocus": 25, "pomoShort": 5, "pomoLong": 15, "pomoLongEvery": 4, "pomoGoal": 8, "typingAfter": 10,
-    "accent": "cyan", "accentColor": "#2ee6f2", "chipGlow": 100, "idleRate": "normal", "idleOff": [],
+    "accent": "cyan", "accentColor": "#2ee6f2", "chipGlow": 100, "eyeGap": 0, "phonesGap": 0, "idleRate": "normal", "idleOff": [],
     "eyeStyle": pack_eyes()[0], "pupilSize": "M", "showPupils": True, "skin": "",  # eye style (a style id of the pack), pupil size, pupils on/off, installed skin id ("" = none)
+    "locName": "", "locLat": 0.0, "locLon": 0.0,  # weather place picked on the dashboard; "" = the one in phone/www/config.js
     "apps": {},  # app name -> APP_RULES choice; apps not listed follow the switches above
 }
 RANGES = {"stretchMin": (10, 180), "brightnessDay": (5, 255), "brightnessNight": (0, 100), "drowsyMin": (5, 240),
           "torchSeconds": (1, 60), "soundSeconds": (1, 60), "soundVolume": (5, 100), "remindEvery": (10, 300),
           "remindMinutes": (1, 30), "pomoFocus": (1, 180), "pomoShort": (1, 60), "pomoLong": (1, 90),
-          "pomoLongEvery": (2, 8), "pomoGoal": (1, 24), "typingAfter": (3, 120), "chipGlow": (0, 200)}
+          "pomoLongEvery": (2, 8), "pomoGoal": (1, 24), "typingAfter": (3, 120), "chipGlow": (0, 200), "eyeGap": (-14, 24), "phonesGap": (-16, 24)}
 CHOICES = {"soundStyle": ("chime", "beep", "alarm", "ping"),  # the sounds in phone/alert.py
            "accent": ("cyan", "terracotta", "sage", "violet", "rose", "amber", "sky", "custom"),  # accent names chip.js knows
            "idleRate": ("rare", "normal", "often"),
@@ -179,6 +180,12 @@ class Settings:
     def clean(key, value):
         """The value to store for this setting, or None if it doesn't fit."""
         default = DEFAULTS.get(key)
+        if key == "locName":
+            return " ".join(value.split())[:80] if isinstance(value, str) else None
+        if key in ("locLat", "locLon"):
+            lim = 90 if key == "locLat" else 180
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and abs(value) <= lim
+            return round(float(value), 4) if ok else None
         if isinstance(default, bool):
             return value if isinstance(value, bool) else None
         if isinstance(default, int):
@@ -226,6 +233,21 @@ class Settings:
                     json.dump({"rev": self.rev, "values": values}, f, indent=1)
                 os.replace(SETTINGS_FILE + ".tmp", SETTINGS_FILE)
         return self.get()
+
+
+def geocode(query):
+    """Up to 6 places matching the text: [{name, region, country, lat, lon}]; [] if there are none or the search is down."""
+    query = " ".join(query.split())[:80]
+    if len(query) < 2:
+        return []
+    url = "https://geocoding-api.open-meteo.com/v1/search?count=6&language=en&format=json&name=" + quote(query)
+    try:
+        with urllib.request.urlopen(url, timeout=6) as r:
+            found = json.load(r).get("results") or []
+    except (OSError, ValueError):
+        return []
+    return [{"name": f["name"], "region": f.get("admin1", ""), "country": f.get("country", ""),
+             "lat": f["latitude"], "lon": f["longitude"]} for f in found if "name" in f and "latitude" in f and "longitude" in f]
 
 
 def number(text):
@@ -1088,8 +1110,9 @@ class Gaze:
             if settings.get()["gazeFollow"] and not self.screen_locked():
                 self.tick()
                 time.sleep(self.STEP)
-            else:
-                self.deactivate()
+            else:   # gazeFollow off or locked: no pointer polling, checked once a second
+                if self.active:
+                    self.deactivate()
                 time.sleep(1)
 
     def stream(self, wfile):
@@ -1128,8 +1151,8 @@ class Skins:
             raise subprocess.SubprocessError(done.stderr.decode("utf-8", "replace")[:300])
         return done.stdout
 
-    def prompt(self, basis):
-        return self.run("prompt", basis).decode()
+    def prompt(self):
+        return self.run("prompt").decode()
 
     @staticmethod
     def write(path, text):
@@ -1154,8 +1177,26 @@ class Skins:
         except OSError:
             return None
 
-    def install(self):
-        """(list, None) after installing the draft, else (None, (status, error body))."""
+    @staticmethod
+    def clean_name(name):
+        """The display name to store (1-40 printable characters, spaces squeezed), or None."""
+        if not isinstance(name, str):
+            return None
+        name = " ".join("".join(ch for ch in name if ch.isprintable()).split())[:40]
+        return name or None
+
+    @staticmethod
+    def named(text, name):
+        """The skin JSON text with its display name replaced (name None = as it is)."""
+        if name is None:
+            return text
+        skin = json.loads(text)
+        skin["name"] = name
+        return json.dumps(skin, separators=(",", ":"), ensure_ascii=False)
+
+    def install(self, name=None):
+        """(list, None) after installing the draft, else (None, (status, error body)). name: the display name the
+        user picked on the dashboard (the phone greets with it), None keeps the file's own."""
         draft = self.draft()
         if draft is None:
             return None, (404, {"error": "no draft: check a skin first"})
@@ -1166,7 +1207,7 @@ class Skins:
         with self.lock:
             if not os.path.isfile(skin_path(skin_id)) and len(self.listing()) >= SKIN_LIMIT:
                 return None, (409, {"error": f"at most {SKIN_LIMIT} skins: delete one first"})
-            self.write(skin_path(skin_id), report["clean"])
+            self.write(skin_path(skin_id), self.named(report["clean"], name))
             try:
                 os.remove(os.path.join(SKINS_DIR, "_draft.json"))
             except OSError:
@@ -1200,6 +1241,15 @@ class Skins:
                 return f.read()
         except OSError:
             return None
+
+    def rename(self, skin_id, name):
+        """True if the installed skin exists and now has this display name."""
+        with self.lock:
+            text = self.get(skin_id)
+            if text is None:
+                return False
+            self.write(skin_path(skin_id), self.named(text, name))
+        return True
 
     def delete(self, skin_id):
         """True if it existed. The skin setting goes back to none when it was the active one."""
@@ -1329,6 +1379,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(gaze.layout())
         if url.path == "/settings":
             return self.send_json(settings.get())
+        if url.path == "/geocode":  # the dashboard's place search (Open-Meteo's free geocoder, the same service the phone's forecast uses)
+            return self.send_json(geocode(parse_qs(url.query).get("q", [""])[0]))
         if url.path.startswith("/skins"):
             return self.get_skins(url)
         if url.path == "/attention":
@@ -1349,11 +1401,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_skins(self, url):
         q = {k: v[0] for k, v in parse_qs(url.query).items()}
-        if url.path == "/skins/prompt":  # the chatbot prompt, built from the pack
-            if q.get("basis") not in SKIN_BASES:
-                return self.send_json({"error": "basis must be one of " + ", ".join(SKIN_BASES)}, 400)
+        if url.path == "/skins/prompt":  # the master prompt for the chatbot, built from the pack
             try:
-                return self.send_text(skins.prompt(q["basis"]))
+                return self.send_text(skins.prompt())
             except (OSError, subprocess.SubprocessError) as e:
                 return self.skin_failed(e)
         if url.path == "/skins":
@@ -1386,12 +1436,27 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(skins.check(body))
             except (OSError, ValueError, subprocess.SubprocessError) as e:
                 return self.skin_failed(e)
-        if path == "/skins/install":  # installs the draft
+        if path == "/skins/install":  # installs the draft; an optional {"name"} sets the name Chip goes by
+            body = self.read_json()
+            name = Skins.clean_name((body or {}).get("name"))
+            if body is None or ("name" in body and name is None):
+                return self.send_json({"error": "expected {\"name\": 1-40 characters} or nothing"}, 400)
             try:
-                listing, failed = skins.install()
+                listing, failed = skins.install(name)
             except (OSError, ValueError, KeyError, subprocess.SubprocessError) as e:
                 return self.skin_failed(e)
             return self.send_json(listing) if failed is None else self.send_json(failed[1], failed[0])
+        m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/rename", path)
+        if m:  # {"name"}: the display name of an installed skin
+            name = Skins.clean_name((self.read_json() or {}).get("name"))
+            if name is None:
+                return self.send_json({"error": "expected {\"name\": 1-40 characters}"}, 400)
+            try:
+                if not skins.rename(m.group(1), name):
+                    return self.send_json({"error": "not found"}, 404)
+            except (OSError, ValueError) as e:
+                return self.skin_failed(e)
+            return self.send_json(skins.listing())
         m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/delete", path)
         if m:
             if not skins.delete(m.group(1)):

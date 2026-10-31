@@ -189,18 +189,48 @@ class SkinTests(unittest.TestCase):
         self.assertLessEqual(len(r["errors"]), 25)
         self.assertGreater(r["omitted"], 0)
 
-    def test_prompts(self):
-        for basis in ("pet", "me", "character", "art", "idea"):
-            text = node("prompt", basis)
-            self.assertIn("standing on my desk next to my monitors.", text)
-            self.assertIn("When I paste validation errors", text)
-            self.assertIn("Making a Chip skin", text)          # the pack's own guide
-            self.assertIn("wide -> open", text)                 # the pack's fallbacks
-            self.assertIn("faceTop 128x26", text)               # the pack's skinSlots
-            block = re.search(r"```json\n(.*?)\n```", text, re.S).group(1)
-            self.assertTrue(check(block)["ok"])                 # the example inside the prompt passes
-        with self.assertRaises(RuntimeError):
-            node("prompt", "nope")
+    def test_headphones_slot(self):
+        band = ["#" * 21] + ["#" + "." * 19 + "#"] * 6
+        def ok(s):
+            s["sprites"]["phones"] = {"keys": {"#": "main"}, "anchor": [10, 6], "frames": {"on": band}}
+            s["headphones"] = "phones"
+        r = check(variant(ok))
+        self.assertTrue(r["ok"], r)
+        self.assertFalse([w for w in r["warnings"] if "headphones" in w["path"] or "phones" in w["path"]], r["warnings"])
+        def off_centre(s):
+            ok(s); s["sprites"]["phones"]["anchor"] = [3, 6]
+        r = check(variant(off_centre))
+        self.assertTrue(r["ok"])
+        self.assertTrue(any("middle column" in w["fix"] for w in r["warnings"]), r["warnings"])
+        def lopsided(s):
+            ok(s); s["sprites"]["phones"]["frames"]["on"] = ["#" * 21] + ["##" + "." * 19] * 6
+        self.assertTrue(any("same shape left and right" in w["problem"] for w in check(variant(lopsided))["warnings"]))
+        def too_big(s):
+            ok(s); s["sprites"]["phones"]["frames"]["on"] = ["#" * 21] * 80
+        self.assertFalse(check(variant(too_big))["ok"])
+        def missing(s):
+            s["headphones"] = "nope"
+        self.assertFalse(check(variant(missing))["ok"])
+
+    def test_pupil_sizes_warn(self):
+        def two(s):
+            s["eyes"]["pupils"] = ["S", "M"]
+        r = check(variant(two))
+        self.assertTrue(r["ok"])
+        self.assertTrue(any("changes nothing" in w["problem"] for w in r["warnings"]), r["warnings"])
+
+    def test_prompt(self):
+        text = node("prompt")
+        self.assertIn("phones and tablets", text)              # the screens it must obey
+        self.assertIn("320 x 180", text)
+        self.assertIn("Don't make the head round", text)       # the subject's own shape, not a round default
+        self.assertIn("If I paste validation errors back", text)
+        self.assertIn("Making a Chip skin", text)              # the pack's own guide
+        self.assertIn("wide -> open", text)                    # the pack's fallbacks
+        self.assertIn("faceTop 128x26", text)                  # the pack's skinSlots
+        self.assertIn("headphones 128x72", text)
+        block = re.search(r"```json\n(.*?)\n```", text, re.S).group(1)
+        self.assertTrue(check(block)["ok"])                    # the example inside the prompt passes
 
 
 if __name__ == "__main__":

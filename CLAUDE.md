@@ -18,6 +18,10 @@ bridge. README.md has the full feature list: read only the section you need.
   `example`; the bridge runs it as a subprocess for /skins/*. Reuses pack.js (eyeLook, pupilFit), so it checks what
   the phone draws; `python3 -I laptop/test_skins.py` tests it. `laptop/merge_pack.js <delta>` merges a pack delta.
   Skins live in ~/.config/deskbuddy/skins/ (<id>.json, _draft.json). Settings eyeStyle, pupilSize, skin.
+  A skin's "name" is what Chip calls itself ("Hi! I'm …"), set at install / renamed on the dashboard
+  (/skins/install {name}, /skins/<id>/rename). Optional "headphones" slot (128x72, symmetric, anchor on the middle column).
+- `design/headphones.js` draws the default headphones sprite (`--write` puts it in pack.json). Setting phonesGap
+  (ear-cup gap) is applied in player.js by repeating/cutting the headphones' anchor column, so it works for skins too.
 - `design/` — design deltas from Claude Design (e.g. pack-v2-delta.json) and their changelog; merged into
   pack.json with `laptop/merge_pack.js <delta> [pack] [out]` (additions only, refuses renames and removals).
 - Skins: ~/.config/deskbuddy/skins/<id>.json (installed, made in the dashboard) and _draft.json (the last upload that
