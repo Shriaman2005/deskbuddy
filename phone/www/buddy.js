@@ -44,6 +44,7 @@
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoLongEvery: 4, pomoAutoBreak: true, pomoAutoFocus: false, pomoGoal: 8,
     workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", chipGlow: 100, idleRate: "normal", idleOff: [],
+    eyeStyle: "", pupilSize: "M", showPupils: true, skin: "",  // eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
     brightnessDay: C.brightness.day,
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
   };
@@ -149,6 +150,9 @@
   }
   // Preview without waiting: ?mood=love&music=1&aqi=250&timer=10&screen=3
   const preview = new URLSearchParams(location.search);
+  if (preview.has("eyes")) app.dataset.eyes = preview.get("eyes");  // ?eyes=toon&pupil=L: chip.js's eye style and pupil size
+  if (preview.has("pupil")) app.dataset.pupil = preview.get("pupil").toUpperCase();
+  // ?skin=<id> shows an installed skin, ?skin=draft the last skin that passed the check (before it is installed)
   // busy at its computer (a scene is playing or a focus session runs): no tricks, no bobbing to the music
   const isWorking = () => app.classList.contains("scene") || (focus.running && focus.mode === "focus");
   function refreshMood() {
@@ -176,8 +180,9 @@
     head.classList.remove(cls); void head.offsetWidth; head.classList.add(cls);
     setTimeout(() => head.classList.remove(cls), ms);
   }
-  function look(x, y) {
+  function look(x, y, near = false) {  // x, y in -1..1; near: the target is close to the phone (Chip's pupils converge)
     face.style.setProperty("--lx", (x * 7).toFixed(2) + "vmin");
+    face.style.setProperty("--near", near ? "1" : "0");
     face.style.setProperty("--ly", (y * 5).toFixed(2) + "vmin");
     face.style.setProperty("--sl", (1 - x * 0.06).toFixed(3));
     face.style.setProperty("--sr", (1 + x * 0.06).toFixed(3));
@@ -383,7 +388,7 @@
     if (gesture.multi) return;
     if (screenIdx === 0 && mood !== "asleep") {  // eyes follow your finger
       look(Math.max(-1, Math.min(1, (e.clientX / innerWidth - 0.5) * 2.4)),
-        Math.max(-1, Math.min(1, (e.clientY / innerHeight - 0.45) * 2.4)));
+        Math.max(-1, Math.min(1, (e.clientY / innerHeight - 0.45) * 2.4)), true);
     }
     const dx = e.clientX - gesture.lastX;
     if (Math.abs(dx) > 14) {
@@ -566,7 +571,7 @@
     // the phone tells the laptop how it's doing, for the dashboard's status line
     const P = state.phone || {};
     const report = onPhone ? "?" + new URLSearchParams({ who: "phone", rev: prefsRev, mood, screen: screenIdx,
-      bat: P.battery ?? "", chg: P.charging ? 1 : 0, temp: P.temp ?? "" }) : "";
+      bat: P.battery ?? "", chg: P.charging ? 1 : 0, temp: P.temp ?? "", skinErr: app.dataset.skinErr || "" }) : "";
     const d = await getJSON(C.laptop + "/stats" + report, 2500);
     if (d) {
       const was = state.laptopOnline;
@@ -984,9 +989,9 @@
   const canvas = $("#viz"), vctx = canvas.getContext("2d");
   if (preview.has("viz")) vizStyle = preview.get("viz");
   // Chip's eyes follow the laptop's mouse pointer (bridge /gaze, see laptop/bridge.py Gaze)
-  let gazeSrc = null, following = false, cursorGaze = [0, 0];
-  function gazeLook(x, y) {  // the cursor's gaze only shows on the face screen, awake, and not under a finger
-    if (screenIdx === 0 && mood !== "asleep" && !state.night && !gesture) look(x, y);
+  let gazeSrc = null, following = false, cursorGaze = [0, 0, false];
+  function gazeLook(x, y, near) {  // the cursor's gaze only shows on the face screen, awake, and not under a finger
+    if (screenIdx === 0 && mood !== "asleep" && !state.night && !gesture) look(x, y, near);
   }
   function gazeOpen() {
     if (gazeSrc) return;
@@ -997,10 +1002,10 @@
         if (!gesture) look(0, 0);
         return;
       }
-      const [gx, gy] = e.data.split(",").map(Number);
-      cursorGaze = [gx, gy];
+      const [gx, gy, near] = e.data.split(",").map(Number);  // "gx,gy,near(0|1)"
+      cursorGaze = [gx, gy, near === 1];
       following = true;
-      gazeLook(gx, gy);
+      gazeLook(...cursorGaze);
     };
   }
   function gazeClose() {
@@ -1009,8 +1014,9 @@
     following = false;
     look(0, 0);
   }
-  if (preview.has("gaze")) {  // ?gaze=x,y pins the cursor's gaze for screenshots
-    cursorGaze = preview.get("gaze").split(",").map(Number);
+  if (preview.has("gaze")) {  // ?gaze=x,y pins the cursor's gaze for screenshots (-1..1, no /gaze stream)
+    const [gx, gy] = preview.get("gaze").split(",").map(Number);
+    cursorGaze = [gx || 0, gy || 0, false];
     following = true;
     setTimeout(() => gazeLook(...cursorGaze), 1500);
   }
@@ -1260,8 +1266,69 @@
     clockNow: "#cp-now", clockHours: "#cp-hours", clockAir: "#cp-air", mediaCard: ".media",
     ringCpu: '.ring[data-k="cpu"]', ringRam: '.ring[data-k="ram"]', ringGpu: '.ring[data-k="gpu"]', ringBattery: '.ring[data-k="battery"]',
   };
-  let prefsRev = store.get("prefsRev", -1), pendingPrefs = store.get("prefsPending", {}), prefsBusy = false;
+  let prefsRev = -1, pendingPrefs = store.get("prefsPending", {}), prefsBusy = false;
   const brightnessNow = () => (state.night ? prefs.brightnessNight : prefs.brightnessDay);
+  // the accent colour (Chip's eyes, glow and scenes), from the design's palettes in robot.js: the active skin's own
+  // accent if it has one, else the chosen one
+  function paintAccent() {
+    const sk = window.ChipSkin && app.dataset.skin ? window.ChipSkin : null;
+    const skinPal = sk && typeof sk.accent === "string" && /^#[0-9a-f]{6}$/i.test(sk.accent) ? window.chipCustomPalette(sk.accent.toLowerCase()) : null;
+    const pal = skinPal || (prefs.accent === "custom" && /^#[0-9a-f]{6}$/i.test(prefs.accentColor) ? window.chipCustomPalette(prefs.accentColor)
+      : window.CHIP_PALETTES[prefs.accent] || window.CHIP_PALETTES.cyan), rgb = (hex, a) =>
+      `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${a})`;
+    for (const [k, v] of [["--eye", pal.main], ["--glow", rgb(pal.main, 0.5)], ["--eye-night", pal.dark], ["--glow-night", rgb(pal.dark, 0.3)]]) {
+      document.documentElement.style.setProperty(k, v);
+    }
+    app.dataset.accent = prefs.accent;
+    app.dataset.accentHex = pal.main;  // chip.js bakes the pack in this colour
+  }
+
+  // ---------------------------------------------------------------- skins (chip-skin/1, made and checked on the laptop)
+  // The skin is fetched from the bridge, kept in localStorage per id (so the phone keeps its skin after a reboot with
+  // the laptop away), and handed to chip.js through window.ChipSkin + data-skin. chip.js merges it over the pack; if
+  // that fails it says so in data-skin-err and sends chip:skinfail, and we go back to the base pack.
+  const SKIN_ID = /^[a-z0-9-]{1,32}$/, SKIN_MAX = 600 * 1024;
+  let skinWant = null, skinText = "", skinBad = "", skinSeq = 0;  // id wanted, the text shown, the text chip.js refused, data-skin counter
+  function skinShow(skin, text) {
+    if (text && (text === skinBad || text === skinText)) return;
+    skinText = text;
+    window.ChipSkin = skin;
+    app.dataset.skin = skin ? skin.id + "@" + ++skinSeq : "";
+    paintAccent();
+  }
+  async function loadSkin(id) {
+    skinWant = id;
+    if (!id) { skinShow(null, ""); app.dataset.skinErr = ""; return; }
+    const fail = (why) => { skinShow(null, ""); app.dataset.skinErr = why; };
+    if (!SKIN_ID.test(id)) return fail("bad skin id");
+    const cacheable = id !== "draft", key = "skin." + id;
+    const cached = cacheable ? store.get(key, null) : null;
+    if (cached && cached.id === id) skinShow(cached, JSON.stringify(cached));  // at once, and without the laptop
+    const retry = () => setTimeout(() => { if (skinWant === id) loadSkin(id); }, 30000);
+    let res, text;
+    try {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 5000);
+      res = await fetch(C.laptop + (id === "draft" ? "/skins/draft.json" : "/skins/" + id + ".json"), { signal: ctl.signal, cache: "no-store" });
+      text = res.ok ? await res.text() : "";
+      clearTimeout(t);
+    } catch (e) {  // the laptop is away: keep the cached skin, try again later
+      if (skinWant === id && !cached) app.dataset.skinErr = "skin " + id + " not loaded: laptop unreachable and no copy saved";
+      return retry();
+    }
+    if (skinWant !== id) return;  // something else was wanted meanwhile
+    if (res.status === 404) { if (cacheable) store.set(key, null); return fail("skin " + id + " is not on the laptop"); }
+    if (!res.ok || text.length > SKIN_MAX) return retry();
+    let skin;
+    try { skin = JSON.parse(text); } catch (e) { return fail("skin " + id + " is not valid JSON"); }
+    if (!skin || (id !== "draft" && skin.id !== id)) return fail("skin " + id + ": the file has another id");  // the draft has its own id
+    if (cacheable) store.set(key, skin);
+    skinShow(skin, JSON.stringify(skin));
+  }
+  document.addEventListener("chip:skinfail", () => {  // chip.js refused it: the base pack is back
+    skinBad = skinText;
+    skinShow(null, "");
+  });
+
   function applyPrefs(p) {
     const was = brightnessNow();
     for (const k in DEFAULT_PREFS) if (typeof p[k] === typeof DEFAULT_PREFS[k]) prefs[k] = p[k];
@@ -1269,16 +1336,13 @@
     store.set("prefs", prefs);
     if (prefs.gazeFollow && !preview.has("gaze")) gazeOpen();
     else if (gazeSrc) gazeClose();
-    // the accent colour (Chip's eyes, glow and scenes), from the design's palettes in robot.js
-    const pal = prefs.accent === "custom" && /^#[0-9a-f]{6}$/i.test(prefs.accentColor) ? window.chipCustomPalette(prefs.accentColor)
-      : window.CHIP_PALETTES[prefs.accent] || window.CHIP_PALETTES.cyan, rgb = (hex, a) =>
-      `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${a})`;
-    for (const [k, v] of [["--eye", pal.main], ["--glow", rgb(pal.main, 0.5)], ["--eye-night", pal.dark], ["--glow-night", rgb(pal.dark, 0.3)]]) {
-      document.documentElement.style.setProperty(k, v);
-    }
-    app.dataset.accent = prefs.accent;
+    paintAccent();
     app.dataset.chipGlow = prefs.chipGlow;
-    app.dataset.accentHex = pal.main;  // chip.js bakes the pack in this colour
+    app.dataset.eyes = preview.get("eyes") || prefs.eyeStyle;  // chip.js picks them up
+    app.dataset.pupil = (preview.get("pupil") || prefs.pupilSize).toUpperCase();
+    app.dataset.pupils = prefs.showPupils ? "1" : "0";
+    const wantSkin = preview.has("skin") ? preview.get("skin") : prefs.skin;
+    if (wantSkin !== skinWant) loadSkin(wantSkin);
     if (isPomo() && !timerActive() && !alarmUntil && focus.total !== prefs[POMO[focus.mode]] * 60000) {
       focus.total = focus.left = prefs[POMO[focus.mode]] * 60000; saveFocus();
     }

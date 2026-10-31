@@ -22,14 +22,45 @@
     const rand = (a, b) => a + Math.random() * (b - a);
     const SCENES = new Set(["boot", "type", "stuck", "idea", "done", "switch", "deep", "flow", "release"]);
 
-    // ---------------------------------------------------------------- accent
+    // ---------------------------------------------------------------- skin, eye style and accent
+    // buddy.js sets data-skin (an id + counter, with the skin itself in window.ChipSkin), data-eyes (a pack.eyes style
+    // id), data-pupil (S, M or L), data-accent-hex and data-chip-glow. One pass applies them in this order: the skin
+    // first (it changes the pack, and the accent it brings is already in data-accent-hex), then the eyes (a skin's
+    // eye style wins over the chosen one), then one bake. Anything wrong with the skin: back to the base pack, keep
+    // running, say why in data-skin-err (buddy.js reports it to the bridge) and tell buddy.js to drop the skin.
+    let skinKey = "";
+    function applySkin() {
+      const key = app.dataset.skin && window.ChipSkin ? app.dataset.skin : "";
+      if (key === skinKey) return;
+      skinKey = key;
+      ChipPack.setSkin(key ? window.ChipSkin : null);
+      if (key) app.dataset.skinErr = "";
+    }
+    function applyEyes() {
+      const sk = ChipPack.skin;
+      player.setEyes(sk ? "skin:" + sk.id : app.dataset.eyes, app.dataset.pupil, app.dataset.pupils !== "0");
+    }
     function applyAccent() {
       const hex = app.dataset.accentHex || window.CHIP_PALETTES.cyan.main;
       const glow = app.dataset.chipGlow === undefined ? 1 : Number(app.dataset.chipGlow) / 100;
       if (ChipPack.setAccent(hex, glow)) player.refresh();
     }
-    applyAccent();
-    new MutationObserver(applyAccent).observe(app, { attributes: true, attributeFilter: ["data-accent-hex", "data-chip-glow"] });
+    function applyLook() {
+      try {
+        applySkin(); applyEyes(); applyAccent();
+      } catch (e) {
+        if (!ChipPack.skin && !skinKey) throw e;   // not the skin's fault
+        const id = ChipPack.skin ? ChipPack.skin.id : (window.ChipSkin || {}).id;
+        app.dataset.skinErr = String(e && e.message || e).slice(0, 100);
+        console.warn("[chip] skin " + id + " failed, using the base pack:", e);
+        skinKey = "";
+        ChipPack.setSkin(null);
+        document.dispatchEvent(new CustomEvent("chip:skinfail", { detail: id }));   // buddy.js stops using its accent
+        applyEyes(); applyAccent();
+      }
+    }
+    applyLook();
+    new MutationObserver(applyLook).observe(app, { attributes: true, attributeFilter: ["data-skin", "data-eyes", "data-pupil", "data-pupils", "data-accent-hex", "data-chip-glow"] });
 
     // ---------------------------------------------------------------- signals
     const sig = () => ({
@@ -75,14 +106,14 @@
       const inFace = name === "face";
       player.setMood(inFace ? moodNow() : "neutral");
       if (inFace) {
-        const x = parseFloat(face.style.getPropertyValue("--lx")) / 7 || 0, y = parseFloat(face.style.getPropertyValue("--ly")) / 5 || 0;
-        player.setGaze(x * 6, y * 4);
+        const css = (k) => parseFloat(face.style.getPropertyValue(k)) || 0;   // buddy.js look(x, y, near)
+        player.setGaze(css("--lx") / 7, css("--ly") / 5, css("--near") > 0);
         if (!s.night && q >= nextIdle) {
           const ip = idlePrefs(), list = (s.away ? P.idleAway : P.idle).filter((i) => !ip.off.includes(i.clip));
           if (ip.on && list.length && player.mood === "neutral" && !player.busy()) player.play(pickWeighted(list));
           nextIdle = q + rand(...P.idleEvery) * ip.rate;
         }
-      } else player.setGaze(0, 0);
+      } else player.setGaze(0, 0, false);
       if (st.flourish && q >= nextFlourish) {
         player.play(st.flourish[0].clip);
         nextFlourish = q + rand(...st.flourish[0].every);

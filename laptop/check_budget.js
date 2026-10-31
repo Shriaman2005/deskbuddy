@@ -2,6 +2,7 @@
 // Phase-4 budget check: steps Chip's player through every state x every clip (and every mood) in headless
 // Chrome and reports the peak number of moving layers (limit 12) and rotated/scaled layers (limit 2).
 // Needs the bridge running (it serves the preview). Usage: node laptop/check_budget.js
+// SKIN=<id|draft> node laptop/check_budget.js measures with that skin merged over the pack (faceBase/faceTop add layers).
 const { spawn } = require("child_process");
 const SWEEP = `(() => {
   const pack = ChipPack.pack, p = chip, FPS = pack.fps || 12, peaks = [];
@@ -40,7 +41,7 @@ const SWEEP = `(() => {
   ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend[d.id]) pend[d.id](d.result || d.error); };
   const send = (method, params = {}) => new Promise((r) => { pend[++id] = r; ws.send(JSON.stringify({ id, method, params })); });
   await send("Runtime.enable"); await send("Page.enable");
-  await send("Page.navigate", { url: "http://127.0.0.1:8765/preview/pack-test.html?budget" });
+  await send("Page.navigate", { url: "http://127.0.0.1:8765/preview/pack-test.html?budget" + (process.env.SKIN ? "&skin=" + encodeURIComponent(process.env.SKIN) : "") });
   for (let i = 0; i < 50; i++) { const r = await send("Runtime.evaluate", { expression: "!!window.chip", returnByValue: true }); if (r.result && r.result.value) break; await new Promise((r) => setTimeout(r, 200)); }
   const r = await send("Runtime.evaluate", { expression: SWEEP, returnByValue: true, timeout: 300000 });
   ch.kill();

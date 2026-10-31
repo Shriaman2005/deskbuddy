@@ -2,6 +2,10 @@
 // Time is stepped at pack.fps; each frame only translates, rotates and fades baked bitmaps.
 // Track values are offsets from a layer's `at` (x, y, rot) or absolute (opacity, frame); the last clip to touch
 // a property wins, over the scene's pose, over the mood.
+// Eyes (chip-pack/2): setEyes picks a style, which swaps the sprites of eyeL/eyeR/pupilL/pupilR/frontL/frontR. Each eye
+// frame resolves through the style (and pack.fallbacks) to a back frame, a front frame and a pupil; the pupil and the
+// front follow their eye's frame. setGaze moves the eyes by the style's shift and each pupil across its frame's box,
+// in at most two steps per jump (pack.saccade).
 (function (root) {
   "use strict";
 
@@ -19,17 +23,89 @@
     layers.forEach((l) => { byId[l.id] = l; });
     const roots = [];
     layers.forEach((l) => (l.parent ? byId[l.parent].children : roots).push(l));
-    const frameOf = (l) => (l.sprite ? Object.keys(pack.sprites[l.sprite].frames)[0] : null);
+    // a layer's first frame, of the sprite it shows now (a skin may fill faceBase and faceTop, which the rig leaves empty)
+    const frameOf = (l) => {
+      const n = S.spr[l.id] !== undefined ? S.spr[l.id] : l.sprite;
+      return n ? Object.keys(ChipPack.source(n).frames)[0] : null;
+    };
+    const EYE_OF = { pupilL: "eyeL", frontL: "eyeL", pupilR: "eyeR", frontR: "eyeR" };
+    const SAC = Object.assign({ frames: 2, oneFrameUpTo: 8, secondFrameAt: 0.67, hold: 4, deadband: 3, idleToCentre: 2.5 }, pack.saccade);
 
     // ---------------------------------------------------------------- state
     const S = {
-      mood: null, moodDef: null, camera: "face", signals: {}, gaze: [0, 0],
+      mood: null, moodDef: null, camera: "face", signals: {},
       oneShots: [], moodLoop: null, loops: [], loopT0: 0, scene: { show: {}, pose: {} },
       shown: {}, moodFrame: {}, text: {}, textStr: {},
       nextBlink: 0, doubleAt: 0, t0: 0, step: -1, dirty: true, raf: 0, frozen: null,
       onStep: null, onEvent: null, shouldDraw: null,
       stats: { moving: 0, tilted: 0, peakMoving: 0, peakTilted: 0 }, pos: {}, camPos: "",
+      // eyes: style, pupil size, sprite per layer id, resolved frames; gaze target, gaze shown, the saccade's landing
+      style: null, pupil: "M", noPupil: false, skinRev: -1, spr: {}, env: null, looks: {}, eyeNow: {},
+      gazeT: [0, 0, false], gazeAt: 0, gz: [0, 0], conv: false, land: null, hold: 0,
     };
+
+    // ---------------------------------------------------------------- eyes
+    // until setEyes: the rig's own eye sprites, no pupils
+    S.env = { style: null, names: { eyeL: byId.eyeL.sprite, eyeR: byId.eyeR.sprite }, fb: pack.fallbacks && pack.fallbacks.eye, spr: ChipPack.source };
+    function setEyes(styleId, pupilSize, showPupils = true) {
+      const eyes = ChipPack.pack.eyes;   // the base pack's, or the base pack's with a skin's style added
+      if (!eyes) return;
+      const id = typeof styleId === "string" && Object.prototype.hasOwnProperty.call(eyes.styles, styleId) ? styleId : eyes.default, st = eyes.styles[id];
+      const size = st.pupils.includes(pupilSize) ? pupilSize : st.pupilDefault, noPupil = !showPupils;
+      if (S.style === st && S.pupil === size && S.noPupil === noPupil && S.skinRev === ChipPack.skinRev) return;
+      S.skinRev = ChipPack.skinRev;
+      ChipPack.setStyle(id);
+      // a layer the style leaves out is null (drawn as nothing), not the rig's default sprite
+      S.style = st; S.pupil = size; S.noPupil = noPupil; S.looks = {};
+      S.spr = Object.fromEntries(["eyeL", "eyeR", "pupilL", "pupilR", "frontL", "frontR"].map((l) => [l, st.sprites[l] || null]));
+      const skinLayers = ChipPack.skinLayers;   // the skin's own mouth, faceBase, faceTop
+      for (const l of ["mouth", "faceBase", "faceTop"]) if (skinLayers[l]) S.spr[l] = skinLayers[l];
+      S.env = { style: st, names: S.spr, fb: pack.fallbacks && pack.fallbacks.eye, spr: ChipPack.source };
+      S.dirty = true;
+    }
+
+    // what eye frame f of eyeL/eyeR draws (ChipPack.eyeLook, cached): {back, front, pupil (frame or null), box, shift, anchor}
+    function eyeLook(id, f) {
+      const k = id + ":" + f;
+      // showPupils off: the look has no pupil (as a shut eye has none), so the eye is drawn plain
+      return S.looks[k] || (S.looks[k] = S.noPupil ? { ...ChipPack.eyeLook(S.env, id, f, S.pupil), pupil: null } : ChipPack.eyeLook(S.env, id, f, S.pupil));
+    }
+    // the pupil layer's offset from its eye: the box point for the gaze shown, minus the eye's anchor, converged inward
+    function pupilAt(look, side) {
+      const [x, y] = ChipPack.pupilPoint(look.box, side, S.gz[0], S.gz[1], S.conv ? S.style.converge || 0 : 0);
+      return [x - look.anchor[0], y - look.anchor[1]];
+    }
+    // the whole-eye shift: a blink keeps the shift of the mood it interrupts
+    function eyeShift(ov) {
+      const o = ov.eyeL || {}, f = S.oneShots.some((c) => c.name === "blink") ? o.base : o.frame;
+      const sh = eyeLook("eyeL", f !== undefined && f !== null ? f : S.moodFrame.eyeL || frameOf(byId.eyeL)).shift;
+      return [Math.round(sh[0] * S.gz[0]), Math.round(sh[1] * S.gz[1])];
+    }
+
+    // gaze: x, y in -1..1, near = the target is close (the pupils converge, as they do when the gaze rests)
+    function setGaze(x, y, near) {
+      const t = [Math.max(-1, Math.min(1, +x || 0)), Math.max(-1, Math.min(1, +y || 0)), !!near];
+      if (t.join() === S.gazeT.join()) return;
+      S.gazeT = t; S.gazeAt = S.step * STEP;
+      if (S.frozen !== null) { S.gz = t.slice(0, 2); S.conv = t[2]; S.land = null; S.dirty = true; }   // previews: no saccade
+    }
+    // one step of the saccade: a jump up to oneFrameUpTo px lands at once, a longer one goes secondFrameAt of the
+    // way and lands on the next step; then the gaze holds for `hold` steps. Moves under `deadband` px are skipped.
+    function tickGaze(T) {
+      if (S.land) { S.gz = S.land; S.land = null; S.hold = SAC.hold; S.dirty = true; return; }
+      if (S.hold > 0) { S.hold--; return; }
+      const [tx, ty, near] = S.gazeT, conv = near || T - S.gazeAt >= SAC.idleToCentre;
+      const dx = tx - S.gz[0], dy = ty - S.gz[1];
+      if (!dx && !dy && conv === S.conv) return;
+      const look = S.eyeNow.eyeL ? eyeLook("eyeL", S.eyeNow.eyeL.f) : null, sh = look ? look.shift : [0, 0];
+      const half = look && look.box ? [(look.box[2] - look.box[0]) / 2, (look.box[3] - look.box[1]) / 2] : [0, 0];
+      const px = Math.max(Math.abs(dx) * (sh[0] + half[0]), Math.abs(dy) * (sh[1] + half[1]));
+      if (px < SAC.deadband && conv === S.conv) return;
+      S.conv = conv;
+      if (px <= SAC.oneFrameUpTo || SAC.frames < 2) { S.gz = [tx, ty]; S.hold = SAC.hold; }
+      else { S.gz = [S.gz[0] + dx * SAC.secondFrameAt, S.gz[1] + dy * SAC.secondFrameAt]; S.land = [tx, ty]; }
+      S.dirty = true;
+    }
 
     function setMood(name) {
       const m = pack.moods[name] || pack.moods.neutral;
@@ -140,10 +216,18 @@
     function drawLayer(l, ov, parentAlpha, moved, tilted) {
       if (!when(l.when)) return;
       const o = ov[l.id];
-      if (l.hidden && !S.shown[l.id] && !S.scene.show[l.id] && !(o && o.rev)) return;
+      const spr = S.spr[l.id] !== undefined ? S.spr[l.id] : l.sprite;
+      // a sprite-less slot (faceBase, faceTop) shows once it is given a sprite
+      if (l.hidden && !S.shown[l.id] && !S.scene.show[l.id] && !(o && o.rev) && !(l.sprite === null && spr)) return;
       const alpha = parentAlpha * (o && o.opacity !== undefined ? o.opacity : 1);
       if (alpha <= 0.001) return;
-      const gz = l.id === "gaze" ? S.gaze : null;
+      const eye = EYE_OF[l.id] && S.eyeNow[EYE_OF[l.id]];
+      let frame = null;
+      if (eye) {   // a pupil or front layer: follows its eye's frame
+        frame = l.id[0] === "p" ? eye.look.pupil : eye.look.front;
+        if (!frame) return;
+      }
+      const gz = l.id === "gaze" ? eyeShift(ov) : eye && l.id[0] === "p" ? pupilAt(eye.look, l.id.slice(-1)) : null;
       const x = l.at[0] + (o && o.x || 0) + (gz ? gz[0] : 0), y = l.at[1] + (o && o.y || 0) + (gz ? gz[1] : 0);
       ctx.save();
       ctx.translate(x, y);
@@ -151,9 +235,14 @@
       const key = x + "," + y;
       if (S.pos[l.id] !== undefined && S.pos[l.id] !== key) moved = true;
       S.pos[l.id] = key;
-      if (l.sprite) {
-        const b = ChipPack.sprite(l.sprite);
-        const f = o && o.frame !== undefined && o.frame !== null ? o.frame : (S.moodFrame[l.id] || frameOf(l));
+      if (spr) {
+        const b = ChipPack.sprite(spr);
+        let f = frame || (o && o.frame !== undefined && o.frame !== null ? o.frame : (S.moodFrame[l.id] || frameOf(l)));
+        if (l.id === "eyeL" || l.id === "eyeR") {
+          const look = eyeLook(l.id, f);
+          S.eyeNow[l.id] = { f, look };
+          f = look.back;
+        } else if (l.id === "mouth" && b && !b.frames[f]) f = ChipPack.chain(pack.fallbacks && pack.fallbacks.mouth, f).find((n) => b.frames[n]);
         const cv = b && (b.frames[f] || b.frames[frameOf(l)]);
         if (cv) { ctx.globalAlpha = alpha; ctx.drawImage(cv, -b.ax, -b.ay); ctx.globalAlpha = 1; if (moved) S.stats.moving++; if (tilted) S.stats.tilted++; }
       } else if (l.text && S.text[l.id]) {
@@ -212,7 +301,7 @@
       if (!fresh && !S.dirty) return;
       if (fresh) {
         S.step = step;
-        if (S.frozen === null) { tickBlink(step * STEP); if (S.onStep) S.onStep(step * STEP); }
+        if (S.frozen === null) { tickBlink(step * STEP); if (S.onStep) S.onStep(step * STEP); tickGaze(step * STEP); }
       }
       if (S.shouldDraw && !S.shouldDraw()) return;   // time and state keep running; drawing waits (dirty stays set)
       S.dirty = false;
@@ -239,7 +328,7 @@
       },
       play, playing, busy, setText,
       setSignals(s) { Object.assign(S.signals, s); S.dirty = true; },
-      setGaze(x, y) { S.gaze = [Math.round(x), Math.round(y)]; S.dirty = true; },
+      setGaze, setEyes,
       set onStep(fn) { S.onStep = fn; },
       set onEvent(fn) { S.onEvent = fn; },
       set shouldDraw(fn) { S.shouldDraw = fn; },

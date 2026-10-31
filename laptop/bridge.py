@@ -13,6 +13,8 @@
 - Streams a cava-style audio spectrum of what the laptop is playing at /viz (server-sent events).
 - Streams where Chip should look to follow the mouse pointer at /gaze (server-sent events). The pointer position
   comes from the chip-gaze GNOME Shell extension (laptop/gnome-extension), which Wayland apps cannot do themselves.
+- Stores Chip skins (chip-skin/1 JSON made with a chatbot) under /skins: the chatbot prompt, the check, draft,
+  install, list, delete. laptop/skin.js does the checking; photos never reach the laptop, only JSON.
 - Keeps the ssh tunnel to the phone up over the home Wi-Fi, and finds the phone again by itself if its
   address changes (PhoneLink). Nothing needs a cable or adb.
 - Serves the dashboard at http://127.0.0.1:8765/ for showing/hiding the buddy's features and setting
@@ -50,6 +52,13 @@ SETTINGS_FILE = os.path.expanduser("~/.config/deskbuddy/settings.json")
 GAZE_FILE = os.path.expanduser("~/.config/deskbuddy/gaze.json")  # where the phone sits, per monitor layout
 DASHBOARD = os.path.join(HERE, "dashboard.html")
 PREVIEW = os.path.realpath(os.path.join(HERE, "..", "phone", "www"))  # the buddy page itself, for the dashboard's preview
+PACK_FILE = os.path.join(PREVIEW, "pack.json")
+SKINS_DIR = os.path.expanduser("~/.config/deskbuddy/skins")  # <id>.json per installed skin, _draft.json for the passing upload
+SKIN_JS = os.path.join(HERE, "skin.js")
+SKIN_ID = re.compile(r"[a-z0-9-]{1,32}")
+SKIN_MAX = 600 * 1024  # bytes of a skin file (skin.js enforces the same)
+SKIN_LIMIT = 30        # installed skins
+SKIN_BASES = ("pet", "me", "character", "art", "idea")
 # Who may use the bridge: the dashboard (served from here) and the buddy page on the phone (through the tunnel).
 # Other websites open in the laptop's browser can reach 127.0.0.1 too, so requests from them are refused.
 HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
@@ -106,6 +115,28 @@ TOGGLES = (
     "pomoAutoBreak", "pomoAutoFocus", "workScene",                                  # timer
     "typingScene",                                                                  # Chip types along with you
 )
+
+
+_pack_eyes = {"mtime": None, "default": "classic", "ids": ("classic",)}
+
+
+def pack_eyes():
+    """(default eye style, style ids) from pack.json, re-read when the file changes."""
+    try:
+        mtime = os.stat(PACK_FILE).st_mtime
+        if mtime != _pack_eyes["mtime"]:
+            with open(PACK_FILE) as f:
+                eyes = json.load(f)["eyes"]
+            _pack_eyes.update(mtime=mtime, default=eyes["default"], ids=tuple(eyes["styles"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return _pack_eyes["default"], _pack_eyes["ids"]
+
+
+def skin_path(skin_id):
+    return os.path.join(SKINS_DIR, skin_id + ".json")
+
+
 DEFAULTS = dict.fromkeys(TOGGLES, True) | {
     "fastDictation": False, "dictateOnLaptop": False, "torchAway": False, "torchNight": False, "notifyAllApps": False, "pomoAutoFocus": False, "burnGuard": False, "gazeFollow": False,
     "stretchMin": 50, "brightnessDay": 90,
@@ -113,6 +144,7 @@ DEFAULTS = dict.fromkeys(TOGGLES, True) | {
     "torchSeconds": 3, "soundSeconds": 2, "soundVolume": 80, "soundStyle": "chime", "remindEvery": 20, "remindMinutes": 3,
     "pomoFocus": 25, "pomoShort": 5, "pomoLong": 15, "pomoLongEvery": 4, "pomoGoal": 8, "typingAfter": 10,
     "accent": "cyan", "accentColor": "#2ee6f2", "chipGlow": 100, "idleRate": "normal", "idleOff": [],
+    "eyeStyle": pack_eyes()[0], "pupilSize": "M", "showPupils": True, "skin": "",  # eye style (a style id of the pack), pupil size, pupils on/off, installed skin id ("" = none)
     "apps": {},  # app name -> APP_RULES choice; apps not listed follow the switches above
 }
 RANGES = {"stretchMin": (10, 180), "brightnessDay": (5, 255), "brightnessNight": (0, 100), "drowsyMin": (5, 240),
@@ -121,7 +153,8 @@ RANGES = {"stretchMin": (10, 180), "brightnessDay": (5, 255), "brightnessNight":
           "pomoLongEvery": (2, 8), "pomoGoal": (1, 24), "typingAfter": (3, 120), "chipGlow": (0, 200)}
 CHOICES = {"soundStyle": ("chime", "beep", "alarm", "ping"),  # the sounds in phone/alert.py
            "accent": ("cyan", "terracotta", "sage", "violet", "rose", "amber", "sky", "custom"),  # accent names chip.js knows
-           "idleRate": ("rare", "normal", "often")}
+           "idleRate": ("rare", "normal", "often"),
+           "pupilSize": ("S", "M", "L")}
 # the idle clips in pack.json personality (idle + idleAway); idleOff lists the ones switched off
 IDLE_CLIPS = ("curious", "happyBlip", "suspicious", "look", "wink", "whistle", "sneeze", "peek", "spin", "wiggle",
               "smirkBlip", "yawn", "bored", "nod")
@@ -165,6 +198,12 @@ class Settings:
             if not isinstance(value, dict):
                 return None
             return {k[:60]: v for k, v in list(value.items())[:300] if isinstance(k, str) and v in APP_RULES}
+        if key == "eyeStyle":  # a style id of the pack
+            return value if isinstance(value, str) and value in pack_eyes()[1] else None
+        if key == "skin":  # "" or the id of an installed skin
+            if value == "" or (isinstance(value, str) and SKIN_ID.fullmatch(value) and os.path.isfile(skin_path(value))):
+                return value
+            return None
         if isinstance(default, str):  # a time of day, HH:MM
             return value if isinstance(value, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value) else None
         return None
@@ -889,8 +928,8 @@ class Gaze:
     """Works out where Chip should look: the direction from the phone to the mouse pointer, -1..1 on both axes.
     Runs only while a phone is connected to /gaze, gazeFollow is on and the screen isn't locked."""
     STEP = 0.34       # at most 3 updates a second: every one costs the phone a redraw
-    GAZE_RANGE = (6, 4)  # the rig's gaze steps per axis (chip.js setGaze x * 6, y * 4)
     IDLE_AFTER = 20   # seconds without the pointer moving
+    NEAR = 0.15       # the pointer counts as near the phone within this share of the layout's diagonal
 
     def __init__(self):
         self.lock = threading.Condition()
@@ -938,9 +977,10 @@ class Gaze:
         if monitors:
             self.monitors = monitors
         spot = self.phone_spot(monitors)
+        g = self.gaze_of(cursor, monitors, spot) if cursor and monitors else None
         return {"ok": cursor is not None or bool(monitors), "monitors": monitors,
                 "phone": [round(v) for v in spot] if spot else None, "cursor": list(cursor) if cursor else None,
-                "gaze": [1 / self.GAZE_RANGE[0], 1 / self.GAZE_RANGE[1]]}
+                "gaze": [g[0], g[1]] if g else None}
 
     def set_phone(self, x, y):
         """Remember the phone's spot for the current monitor setup, kept within one monitor height of the screens."""
@@ -960,21 +1000,27 @@ class Gaze:
 
     # -- where to look
 
+    @classmethod
+    def gaze_of(cls, cursor, monitors, spot):
+        """(gx, gy, near): per axis, the pointer's offset from the phone over the distance from the phone to the
+        edge of the monitors' bounding box on that side, so each edge is full deflection; eased, in 0.1 steps."""
+        px, py = spot
+        x0, y0, x1, y1 = cls.bounds(monitors)
+        def axis(d, e):
+            g = max(-1, min(1, d / e)) if e > 0 else 0
+            return round(math.copysign(abs(g) ** 0.6, g), 1) + 0.0
+        dx, dy = cursor[0] - px, cursor[1] - py
+        gx = axis(dx, x1 - px if dx > 0 else px - x0)
+        gy = axis(dy, y1 - py if dy > 0 else py - y0)
+        return gx, gy, math.hypot(dx, dy) <= cls.NEAR * math.hypot(x1 - x0, y1 - y0)
+
     def look(self):
-        """"gx,gy" for the phone, or "idle". The phone only applies it."""
+        """"gx,gy,near(0|1)" for the phone, or "idle". The phone only applies it."""
         cursor, monitors = self.cursor, self.monitors
         if not cursor or not monitors or time.monotonic() - self.moved_at > self.IDLE_AFTER:
             return "idle"
-        px, py = self.phone_spot(monitors)
-        x0, y0, x1, y1 = self.bounds(monitors)
-        def axis(d, e, steps):  # distance to the screens' edge on that side maps to full deflection
-            g = max(-1, min(1, d / e)) if e > 0 else 0
-            g = math.copysign(abs(g) ** 0.6, g)
-            return round(g * steps) / steps + 0.0
-        dx, dy = cursor[0] - px, cursor[1] - py
-        gx = axis(dx, x1 - px if dx > 0 else px - x0, self.GAZE_RANGE[0])
-        gy = axis(dy, y1 - py if dy > 0 else py - y0, self.GAZE_RANGE[1])
-        return f"{gx:.2f},{gy:.2f}"
+        gx, gy, near = self.gaze_of(cursor, monitors, self.phone_spot(monitors))
+        return f"{gx:.1f},{gy:.1f},{int(near)}"
 
     def publish(self, frame):
         with self.lock:
@@ -1065,6 +1111,108 @@ class Gaze:
                 self.clients -= 1
 
 
+# ---------------------------------------------------------------- skins (custom looks for Chip)
+
+class Skins:
+    """Skin files (chip-skin/1) made with a chatbot and uploaded from the dashboard. laptop/skin.js does the checking
+    (a subprocess with 10 s, so a hostile file can't hang the bridge); only JSON ever gets here, never pictures.
+    A passing upload becomes the draft; installing the draft stores it as <id>.json."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+
+    @staticmethod
+    def run(*args, stdin=b""):
+        done = subprocess.run(["node", SKIN_JS, *args], input=stdin, capture_output=True, timeout=10)
+        if done.returncode:
+            raise subprocess.SubprocessError(done.stderr.decode("utf-8", "replace")[:300])
+        return done.stdout
+
+    def prompt(self, basis):
+        return self.run("prompt", basis).decode()
+
+    @staticmethod
+    def write(path, text):
+        os.makedirs(SKINS_DIR, exist_ok=True)
+        with open(path + ".tmp", "w") as f:
+            f.write(text)
+        os.replace(path + ".tmp", path)
+
+    def check(self, body):
+        """The report for an upload; a passing one is kept as the draft."""
+        report = json.loads(self.run("check", "-", "--clean", stdin=body))
+        clean = report.pop("clean", None)
+        if report.get("ok") and clean:
+            with self.lock:
+                self.write(os.path.join(SKINS_DIR, "_draft.json"), clean)
+        return report
+
+    def draft(self):
+        try:
+            with open(os.path.join(SKINS_DIR, "_draft.json")) as f:
+                return f.read()
+        except OSError:
+            return None
+
+    def install(self):
+        """(list, None) after installing the draft, else (None, (status, error body))."""
+        draft = self.draft()
+        if draft is None:
+            return None, (404, {"error": "no draft: check a skin first"})
+        report = json.loads(self.run("check", "-", "--clean", stdin=draft.encode()))  # the pack may have changed since
+        if not report.get("ok"):
+            return None, (409, {"error": "the draft no longer passes the check", "report": {k: v for k, v in report.items() if k != "clean"}})
+        skin_id = report["skin"]["id"]
+        with self.lock:
+            if not os.path.isfile(skin_path(skin_id)) and len(self.listing()) >= SKIN_LIMIT:
+                return None, (409, {"error": f"at most {SKIN_LIMIT} skins: delete one first"})
+            self.write(skin_path(skin_id), report["clean"])
+            try:
+                os.remove(os.path.join(SKINS_DIR, "_draft.json"))
+            except OSError:
+                pass
+        return self.listing(), None
+
+    @staticmethod
+    def listing():
+        out = []
+        try:
+            names = sorted(os.listdir(SKINS_DIR))
+        except OSError:
+            return out
+        for n in names:
+            m = re.fullmatch(r"([a-z0-9-]{1,32})\.json", n)
+            if not m:
+                continue  # _draft.json and strays
+            try:
+                with open(os.path.join(SKINS_DIR, n)) as f:
+                    skin = json.load(f)
+                out.append({"id": m.group(1), "name": str(skin.get("name", ""))[:40], "author": str(skin.get("author", ""))[:40],
+                            "bytes": os.path.getsize(os.path.join(SKINS_DIR, n))})
+            except (OSError, ValueError, AttributeError):
+                continue
+        return out
+
+    @staticmethod
+    def get(skin_id):
+        try:
+            with open(skin_path(skin_id)) as f:
+                return f.read()
+        except OSError:
+            return None
+
+    def delete(self, skin_id):
+        """True if it existed. The skin setting goes back to none when it was the active one."""
+        with self.lock:
+            try:
+                os.remove(skin_path(skin_id))
+            except OSError:
+                return False
+        if settings.get()["skin"] == skin_id:
+            settings.update({"skin": ""})
+        return True
+
+
 # ---------------------------------------------------------------- http
 
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -1097,6 +1245,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_text(self, text, code=200):
+        body = text.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.cors()
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def send_file(self, path):
         try:
             with open(path, "rb") as f:
@@ -1118,6 +1276,19 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return data if isinstance(data, dict) else None
 
+    def read_body(self, limit):
+        """The raw request body, or None after answering 413 when it is longer than limit."""
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > limit:
+            self.close_connection = True
+            self.send_json({"error": f"too large (at most {limit // 1024} KB)"}, 413)
+            return None
+        return self.rfile.read(length)
+
+    def skin_failed(self, e):
+        print("skins:", e, flush=True)
+        self.send_json({"error": "the skin checker failed or timed out"}, 503)
+
     def do_OPTIONS(self):
         if not self.allowed():
             return
@@ -1136,7 +1307,8 @@ class Handler(BaseHTTPRequestHandler):
             if q.get("who") == "phone":  # the buddy reports back, for the dashboard's status line
                 phone.update(seen=time.time(), rev=number(q.get("rev")), mood=q.get("mood", "")[:20],
                              screen=number(q.get("screen")), battery=number(q.get("bat")),
-                             charging=q.get("chg") == "1", temp=number(q.get("temp")))
+                             charging=q.get("chg") == "1", temp=number(q.get("temp")),
+                             skinErr=q.get("skinErr", "")[:120])  # why the phone fell back to the base pack, "" = fine
             return self.send_json(dict(stats.snapshot(), **typing.snapshot(), settingsRev=settings.rev,
                                        attention=attention.pending()))
         if url.path == "/viz":
@@ -1157,6 +1329,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(gaze.layout())
         if url.path == "/settings":
             return self.send_json(settings.get())
+        if url.path.startswith("/skins"):
+            return self.get_skins(url)
         if url.path == "/attention":
             return self.send_json({"events": attention.recent(), "apps": apps.listing()})
         if url.path == "/phone":
@@ -1173,9 +1347,63 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_file(path)
         self.send_json({"error": "not found"}, 404)
 
+    def get_skins(self, url):
+        q = {k: v[0] for k, v in parse_qs(url.query).items()}
+        if url.path == "/skins/prompt":  # the chatbot prompt, built from the pack
+            if q.get("basis") not in SKIN_BASES:
+                return self.send_json({"error": "basis must be one of " + ", ".join(SKIN_BASES)}, 400)
+            try:
+                return self.send_text(skins.prompt(q["basis"]))
+            except (OSError, subprocess.SubprocessError) as e:
+                return self.skin_failed(e)
+        if url.path == "/skins":
+            return self.send_json(skins.listing())
+        if url.path == "/skins/draft.json":
+            text = skins.draft()
+            return self.send_json({"error": "no draft"}, 404) if text is None else self.send_raw_json(text)
+        m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})\.json", url.path)
+        text = skins.get(m.group(1)) if m else None
+        if text is None:
+            return self.send_json({"error": "not found"}, 404)
+        self.send_raw_json(text)
+
+    def send_raw_json(self, text):
+        body = text.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.cors()
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def post_skins(self, path):
+        if path == "/skins/check":  # the body is the skin JSON text; a passing one becomes the draft
+            body = self.read_body(SKIN_MAX)
+            if body is None:
+                return
+            try:
+                return self.send_json(skins.check(body))
+            except (OSError, ValueError, subprocess.SubprocessError) as e:
+                return self.skin_failed(e)
+        if path == "/skins/install":  # installs the draft
+            try:
+                listing, failed = skins.install()
+            except (OSError, ValueError, KeyError, subprocess.SubprocessError) as e:
+                return self.skin_failed(e)
+            return self.send_json(listing) if failed is None else self.send_json(failed[1], failed[0])
+        m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/delete", path)
+        if m:
+            if not skins.delete(m.group(1)):
+                return self.send_json({"error": "not found"}, 404)
+            return self.send_json(skins.listing())
+        self.send_json({"error": "not found"}, 404)
+
     def do_POST(self):
         if not self.allowed():
             return
+        if self.path.split("?")[0].startswith("/skins/"):
+            return self.post_skins(self.path.split("?")[0])
         if self.path.split("?")[0] in ("/settings", "/settings/reset"):
             changes = self.read_json()
             if changes is None:
@@ -1242,6 +1470,7 @@ phone_link = PhoneLink()
 visualizer = Visualizer()
 gaze = Gaze()
 settings = Settings()
+skins = Skins()
 phone = {}  # what the buddy said about itself on its last /stats poll
 apps = Apps()
 attention = Attention()

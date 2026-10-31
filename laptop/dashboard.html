@@ -189,6 +189,49 @@ input[type=range]:disabled { cursor: default; }
 .gaze .grab.on { cursor: grabbing; }
 .gaze .grab .hit { fill: transparent; }
 
+/* ---------- eye styles, preview strips, skins */
+.eyes { padding: 2px 0 8px; }
+.eyes .skinnote, .mk .note { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.eyes .skinnote { padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08); border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); }
+.eyes.paused .styles { opacity: .45; }
+.styles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 6px 0 4px; }
+.styles .chip { display: block; text-align: left; padding: 10px 12px; border-radius: 12px; }
+.styles .chip b { display: block; font-weight: 600; font-size: 14.5px; }
+.styles .chip small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.look { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; margin: 10px 0 6px; border-radius: 10px; background: #000; border: 1px solid var(--line2); }
+.look iframe { position: absolute; left: 0; top: 0; width: 640px; height: 360px; border: 0; transform-origin: 0 0; pointer-events: none; background: #000; }
+.mk .step { padding: 12px 0 10px; border-top: 1px solid var(--line); }
+.mk .step:first-of-type { border-top: 0; }
+.mk h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14.5px; font-weight: 600; }
+.mk h3 i { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #12303e; border: 1px solid #2d6a85; font: 400 17px/1 var(--pixel); font-style: normal; color: var(--eye); }
+.mk .pick.wrap { flex-wrap: wrap; margin-bottom: 8px; }
+.mk textarea { display: block; width: 100%; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--soft);
+  font: 12px/1.4 ui-monospace, "Ubuntu Mono", monospace; resize: vertical; }
+.mk .acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
+.mk .hint { margin: 8px 0 2px; color: var(--muted); font-size: 12.5px; }
+.mk input[type=file] { max-width: 100%; margin-bottom: 8px; color: var(--soft); font-size: 13px; }
+.mk input[type=file]::file-selector-button { padding: 6px 12px; margin-right: 10px; border-radius: 9px; background: #101d26; border: 1px solid var(--line2); color: var(--soft); font: inherit; cursor: pointer; }
+.mk .chip:disabled { opacity: .4; cursor: default; }
+.mk .chip.go { background: #12303e; border-color: var(--good); color: var(--fg); }
+.mk .res-head { margin: 0 0 8px; font-weight: 600; }
+.mk .res-head.good { color: var(--good); }
+.mk .res-head.bad { color: var(--bad); }
+.mk ol.errs { margin: 0 0 8px; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--soft); }
+.mk ol.errs code { color: var(--eye); font-size: 12px; overflow-wrap: anywhere; }
+.mk ol.errs span, .mk ol.errs small { overflow-wrap: anywhere; }
+.mk ol.errs small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.mk details { margin: 0 0 8px; color: var(--soft); font-size: 13px; }
+.mk details summary { cursor: pointer; color: var(--muted); }
+.mk details ul { margin: 6px 0 0; padding-left: 20px; overflow-wrap: anywhere; }
+.mk .skin-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.mk .skin-row:first-child { border-top: 0; }
+.mk .skin-row .txt { flex: 1; min-width: 120px; }
+.mk .skin-row b { display: block; font-weight: 550; font-size: 14px; overflow-wrap: anywhere; }
+.mk .skin-row small { display: block; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.mk .skin-row .tag { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #12303e; color: var(--good); }
+.mk .skin-row .ask { color: var(--bad); font-size: 13px; }
+.mk .empty { color: var(--muted); font-size: 13px; margin: 0 0 4px; }
+
 /* ---------- footer + toast */
 footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 4px clamp(16px, 4vw, 40px) 40px;
   max-width: 1480px; margin: 0 auto; color: var(--muted); font-size: 13px; }
@@ -280,6 +323,21 @@ footer code { color: var(--soft); }
   const IDLE = [["curious", "🧐 Curious"], ["happyBlip", "😊 Happy"], ["suspicious", "🤨 Suspicious"], ["look", "👀 Look around"],
     ["wink", "😉 Wink"], ["whistle", "😗 Whistle"], ["sneeze", "🤧 Sneeze"], ["peek", "🫣 Peek"], ["spin", "🌀 Spin"],
     ["wiggle", "💃 Wiggle"], ["smirkBlip", "😏 Smirk"], ["yawn", "🥱 Yawn (away)"], ["bored", "😑 Bored (away)"], ["nod", "😴 Nod off (away)"]];
+  // the eyes card's look picker and the skin maker's three steps; filled in below (all text from the pack, the bridge or the user via textContent)
+  const EYES_HTML = `<div class="eyes" id="eyes"><p class="skinnote" id="eyes-skin" hidden>A custom skin is on, so Chip's own looks are paused. ` +
+    `Use “Back to Chip's own look” in Make your own Chip to switch them on again.</p><div class="styles" id="eye-styles"></div>` +
+    `<div class="row choice" id="pupil-row" hidden><span class="txt"><b>Pupil size</b><small>The dark centre that follows your cursor</small></span>` +
+    `<div class="pick" id="pupil-pick"></div></div><div class="look" id="eye-look"><iframe id="eye-frame" title="Eye style preview" tabindex="-1"></iframe></div></div>`;
+  const SKINS_HTML = `<div class="mk" id="mk"><p class="note">Turn your pet, yourself, a character or your own art into Chip. An AI chat does the drawing; Chip checks the result before using it.</p>` +
+    `<div class="step"><h3><i>1</i>Get the prompt</h3><div class="pick wrap" id="mk-basis"></div>` +
+    `<textarea id="mk-prompt" readonly rows="6" placeholder="Pick one above and the prompt appears here." aria-label="Prompt for your AI chat"></textarea>` +
+    `<div class="acts"><button class="chip" id="mk-copy" disabled>Copy prompt</button></div>` +
+    `<p class="hint">Paste it into any AI chat (ChatGPT, Gemini, Claude…) and attach your pictures there. Your photos go only to that chatbot; Chip only receives the finished JSON.</p></div>` +
+    `<div class="step"><h3><i>2</i>Upload the result</h3><input type="file" id="mk-file" accept=".json,application/json,text/plain" aria-label="Skin JSON file">` +
+    `<textarea id="mk-paste" rows="3" spellcheck="false" placeholder="…or paste the JSON your AI sent" aria-label="Paste the skin JSON"></textarea>` +
+    `<div class="acts"><button class="chip" id="mk-check">Check it</button></div></div>` +
+    `<div class="step" id="mk-result" hidden><h3><i>3</i>Result</h3><div id="mk-out"></div></div>` +
+    `<div class="step"><h3>Your skins</h3><div id="mk-list"></div><div class="acts"><button class="chip" id="mk-own">Back to Chip's own look</button></div></div></div>`;
   const CARDS = [
     { icon: "🔔", title: "Attention alerts", master: "torch", attention: true,
       note: "When an AI agent or an app needs you, Chip blinks the phone's torch and/or plays a sound, and says who.", rows: [
@@ -321,9 +379,11 @@ footer code { color: var(--soft); }
       range("typingAfter", "Once you've typed for", 3, 60, 1, "sec", "typingScene"),
       sw("burnGuard", "OLED burn-in guard", "Every 3 minutes the face screen shifts by up to 2 px, in a small loop, so nothing sits on the same pixels"),
     ] },
-    { icon: "👀", title: "Eyes follow the cursor", gaze: true, rows: [
+    { icon: "👀", title: "Eyes follow the cursor", gaze: true, eyes: true, rows: [
       sw("gazeFollow", "Eyes follow the mouse", "Chip looks at your cursor on any monitor"),
+      sw("showPupils", "Pupils", "The dark centre of each eye. Off, the eyes are plain whites with no centre"),
     ] },
+    { icon: "🎨", title: "Make your own Chip", skins: true },
     { icon: "📍", title: "Floating dock", master: "dock", dock: true,
       note: "The bar along the bottom of the face. Tap an item to show or hide it." },
     { icon: "⏳", title: "Timer & Pomodoro", needs: "tabTimer",
@@ -425,6 +485,8 @@ footer code { color: var(--soft); }
         items.map(([k, label]) => `<button class="chip" data-k="${k}" aria-pressed="true">${label}</button>`).join("") +
         `</div></div>`).join("") + `</div>`;
     }
+    if (c.eyes) body += EYES_HTML;
+    if (c.skins) body += SKINS_HTML;
     body += (c.rows || []).map(rowHTML).join("");
     if (c.attention) {
       body += `<div class="attn" data-needs="torch"><button class="chip" id="torch-test">🔔 Test the alert</button>` +
@@ -488,6 +550,7 @@ footer code { color: var(--soft); }
     document.documentElement.style.setProperty("--eye", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);  // the page follows Chip's accent
     renderSleep();
     renderStatus();
+    renderLook();
   }
   const ACCENTS = { cyan: "#2ee6f2", terracotta: "#ee9358", sage: "#b4d38c", violet: "#a78bfa", rose: "#f472b6", amber: "#f5c04a", sky: "#6cb8ff" };
   const tabOn = (i) => [true, S.tabClock, S.tabLaptop, S.tabTimer, S.tabViz][i];
@@ -734,6 +797,203 @@ footer code { color: var(--soft); }
     gazeDrag = null; gazeKey = ""; loadGaze();
   });
   showGaze(null);
+
+  // ---------------------------------------------------------------- live previews that look around
+  // The preview pages are the real Chip page (same origin), pinned with &gaze= so nothing else moves the eyes; every
+  // 1.5 s we set the same CSS variables buddy.js's look() sets (chip.js reads --lx/--ly/--near). Only while on screen.
+  const looks = [], LOOK_CYCLE = [[0, 0], [-1, 0], [1, 0], [0, -1]];
+  let lookStep = 0, lookTick = 0;
+  function aim(frame, [x, y]) {
+    try {
+      const st = frame.contentDocument.getElementById("face").style;
+      st.setProperty("--lx", (x * 7).toFixed(2) + "vmin"); st.setProperty("--ly", (y * 5).toFixed(2) + "vmin"); st.setProperty("--near", "0");
+    } catch (e) { /* still loading */ }
+  }
+  function lookTimer() {
+    const on = !document.hidden && looks.some((l) => l.visible);
+    if (on && !lookTick) lookTick = setInterval(() => { const g = LOOK_CYCLE[lookStep++ % LOOK_CYCLE.length]; for (const l of looks) if (l.visible) aim(l.frame, g); }, 1500);
+    else if (!on && lookTick) { clearInterval(lookTick); lookTick = 0; }
+  }
+  function addLook(wrap) {  // wrap = .look with one iframe; returns the object whose .url you set
+    const l = { wrap, frame: $("iframe", wrap), visible: false, want: "", shown: "", set url(u) { this.want = u; this.load(); },
+      load() { if (this.visible && this.want && this.shown !== this.want) { this.shown = this.want; this.frame.src = this.want; } } };
+    new ResizeObserver(() => { l.frame.style.transform = `scale(${wrap.clientWidth / 640})`; }).observe(wrap);
+    new IntersectionObserver((es) => { l.visible = es[es.length - 1].isIntersecting; l.load(); lookTimer(); }).observe(wrap);
+    l.frame.addEventListener("load", () => aim(l.frame, LOOK_CYCLE[(lookStep + LOOK_CYCLE.length - 1) % LOOK_CYCLE.length]));
+    looks.push(l);
+    return l;
+  }
+  document.addEventListener("visibilitychange", lookTimer);
+  const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  async function copyText(text, what) {
+    try { await navigator.clipboard.writeText(text); toast(what + " copied ✓"); }
+    catch (e) {
+      const t = mk("textarea"); t.value = text; document.body.appendChild(t); t.select();
+      const ok = document.execCommand("copy"); t.remove();
+      toast(ok ? what + " copied ✓" : "Couldn't copy: select the text and copy it yourself", !ok);
+    }
+  }
+
+  // ---------------------------------------------------------------- eye styles
+  let EYES = null, eyeLook = null, eyeBuilt = false, pupilFor = "";   // pack.json's eyes block
+  fetch("/preview/pack.json").then((r) => (r.ok ? r.json() : null)).then((p) => { EYES = p && p.eyes; if (S) renderLook(); }).catch(() => {});
+  function renderEyes() {
+    const box = $("#eyes");
+    if (!EYES) return;
+    if (!eyeBuilt) {
+      eyeBuilt = true;
+      eyeLook = addLook($("#eye-look"));
+      for (const [id, st] of Object.entries(EYES.styles)) {
+        const b = mk("button", "chip");
+        b.dataset.k = "eyeStyle"; b.dataset.v = id;
+        b.append(mk("b", "", st.label), mk("small", "", st.blurb || ""));
+        $("#eye-styles").append(b);
+      }
+    }
+    const cur = Object.hasOwn(EYES.styles, S.eyeStyle) ? S.eyeStyle : EYES.default, st = EYES.styles[cur];
+    box.classList.toggle("paused", !!S.skin);
+    $("#eyes-skin").hidden = !S.skin;
+    for (const b of $$("#eye-styles .chip")) b.setAttribute("aria-pressed", String(b.dataset.v === cur));
+    const sizes = st.pupils || [], size = sizes.includes(S.pupilSize) ? S.pupilSize : st.pupilDefault;
+    $("#pupil-row").hidden = !sizes.length || !S.showPupils;
+    if (pupilFor !== cur) {   // the sizes this style offers
+      pupilFor = cur;
+      $("#pupil-pick").replaceChildren(...sizes.map((z) => { const b = mk("button", "chip", z); b.dataset.k = "pupilSize"; b.dataset.v = z; return b; }));
+    }
+    for (const b of $$("#pupil-pick .chip")) b.setAttribute("aria-pressed", String(b.dataset.v === size));
+    // &skin= (empty) keeps a skin that is switched on from covering the style being shown
+    eyeLook.url = `/preview/index.html?screen=0&mood=neutral&skin=&eyes=${encodeURIComponent(cur)}&pupil=${size || "M"}&gaze=0,0`;
+  }
+
+  // ---------------------------------------------------------------- make your own Chip
+  let skinList = [], skinConfirm = "", skinLook = null, lastReport = null;
+  const BASES = [["pet", "My pet"], ["me", "Me"], ["character", "A character or theme"], ["art", "My concept art"], ["idea", "Just an idea"]];
+  for (const [v, label] of BASES) { const b = mk("button", "chip", label); b.dataset.basis = v; b.setAttribute("aria-pressed", "false"); $("#mk-basis").append(b); }
+  $("#mk-basis").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-basis]");
+    if (!b) return;
+    for (const x of $$("#mk-basis .chip")) x.setAttribute("aria-pressed", String(x === b));
+    const box = $("#mk-prompt");
+    box.value = "Getting the prompt…"; $("#mk-copy").disabled = true;
+    const r = await fetch("/skins/prompt?basis=" + encodeURIComponent(b.dataset.basis), { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null);
+    if (r === null) { box.value = ""; return toast("Couldn't get the prompt. Is the desk buddy bridge running?", true); }
+    box.value = r; box.scrollTop = 0; $("#mk-copy").disabled = false;
+  });
+  $("#mk-copy").addEventListener("click", () => copyText($("#mk-prompt").value, "Prompt"));
+
+  async function checkSkin(text) {
+    const out = $("#mk-out");
+    $("#mk-result").hidden = false;
+    out.replaceChildren(mk("p", "hint", "Checking…"));
+    if (new Blob([text]).size > 600 * 1024) return showReport({ ok: false, errors: [{ path: "$", problem: "the file is bigger than 600 KB", fix: "shrink it: fewer or smaller sprites, fewer frames, no extra blank lines" }],
+      warnings: [], message: "Your Chip skin didn't pass the check. Fix exactly these problems, keep everything else, and send the complete JSON again:\n1. $: the file is bigger than 600 KB. Fix: shrink it: fewer or smaller sprites, fewer frames, no extra blank lines." });
+    const res = await fetch("/skins/check", { method: "POST", headers: { "Content-Type": "text/plain" }, body: text }).catch(() => null);
+    const r = res && res.ok ? await res.json().catch(() => null) : null;
+    if (!r) { out.replaceChildren(mk("p", "res-head bad", res ? "The check didn't run (" + res.status + "). Try again." : "Couldn't reach the bridge. Is it running?")); return; }
+    showReport(r);
+  }
+  function showReport(r) {
+    lastReport = r;
+    const out = $("#mk-out");
+    out.replaceChildren();
+    if (!r.ok) {
+      const n = r.errors.length + (r.omitted || 0);
+      out.append(mk("p", "res-head bad", `Chip can't use this yet: ${n} problem${n === 1 ? "" : "s"} to fix`));
+      const ol = mk("ol", "errs");
+      for (const e of r.errors) {
+        const li = mk("li");
+        li.append(mk("code", "", e.path), mk("span", "", " " + e.problem), mk("small", "", "Fix: " + e.fix));
+        ol.append(li);
+      }
+      out.append(ol);
+      if (r.omitted) out.append(mk("p", "hint", `${r.omitted} more will show up after you fix these.`));
+      const acts = mk("div", "acts"), copy = mk("button", "chip go", "Copy message for your AI");
+      copy.addEventListener("click", () => copyText(r.message, "Message"));
+      acts.append(copy);
+      out.append(acts, mk("p", "hint", "Paste it into the same AI chat. It fixes exactly these and sends the whole file again; upload that here."));
+      return;
+    }
+    const sk = r.skin || {};
+    out.append(mk("p", "res-head good", `✓ “${sk.name || sk.id}”${sk.author ? " by " + sk.author : ""} passes the check`));
+    if (r.warnings && r.warnings.length) {
+      const d = mk("details"), ul = mk("ul");
+      d.append(mk("summary", "", `${r.warnings.length} optional note${r.warnings.length === 1 ? "" : "s"}: fine to leave`));
+      for (const w of r.warnings) ul.append(mk("li", "", `${w.path}: ${w.problem}. ${w.fix}`));
+      d.append(ul); out.append(d);
+    }
+    const wrap = mk("div", "look"); wrap.append(mk("iframe")); wrap.firstChild.title = "Skin preview"; wrap.firstChild.tabIndex = -1;
+    out.append(wrap);
+    if (skinLook) looks.splice(looks.indexOf(skinLook), 1);
+    skinLook = addLook(wrap);
+    skinLook.url = `/preview/index.html?screen=0&mood=neutral&skin=draft&gaze=0,0&_=${Date.now()}`;
+    const acts = mk("div", "acts"), use = mk("button", "chip go", "Use on Chip");
+    use.addEventListener("click", async () => {
+      use.disabled = true;
+      const res = await fetch("/skins/install", { method: "POST" }).catch(() => null);
+      const body = res ? await res.json().catch(() => null) : null;
+      if (!res || !res.ok || !Array.isArray(body)) {
+        use.disabled = false;
+        if (body && body.report) return showReport(body.report);
+        return toast(body && body.error ? body.error : "Couldn't install it. Is the bridge running?", true);
+      }
+      skinList = body; skinConfirm = "";
+      await save({ skin: sk.id });
+      acts.replaceChildren(mk("span", "res-head good", "✓ Chip is using it now. The phone picks it up within a minute."));
+      renderSkins();
+    });
+    acts.append(use);
+    if (skinList.some((x) => x.id === sk.id)) acts.append(mk("span", "hint", `Replaces your installed “${sk.id}”.`));
+    out.append(acts);
+  }
+  $("#mk-file").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";   // the same file can be picked again after fixing it
+    if (!f) return;
+    $("#mk-paste").value = "";
+    checkSkin(await f.text());
+  });
+  $("#mk-check").addEventListener("click", () => {
+    const t = $("#mk-paste").value;
+    if (!t.trim()) return toast("Paste the JSON first, or pick a file", true);
+    checkSkin(t);
+  });
+
+  async function loadSkins() {
+    const r = await fetch("/skins", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (r) { skinList = r; renderSkins(); }
+  }
+  function renderSkins() {
+    const box = $("#mk-list");
+    if (!box) return;
+    $("#mk-own").disabled = !(S && S.skin);
+    if (!skinList.length) return box.replaceChildren(mk("p", "empty", "No skins yet. Make one above."));
+    box.replaceChildren(...skinList.map((k) => {
+      const row = mk("div", "skin-row"), txt = mk("div", "txt"), active = !!(S && S.skin === k.id);
+      txt.append(mk("b", "", k.name || k.id), mk("small", "", [k.author, (k.bytes / 1024).toFixed(1) + " KB"].filter(Boolean).join(" · ")));
+      row.append(txt);
+      if (active) row.append(mk("span", "tag", "In use"));
+      if (skinConfirm === k.id) {   // the confirmation lives in the row, no browser dialog
+        const yes = mk("button", "chip", "Yes, delete"), no = mk("button", "chip", "Cancel");
+        yes.addEventListener("click", async () => {
+          const ok = await fetch(`/skins/${encodeURIComponent(k.id)}/delete`, { method: "POST" }).then((x) => x.ok).catch(() => false);
+          skinConfirm = "";
+          if (!ok) toast("Couldn't delete it", true); else toast("Deleted ✓");
+          await loadSkins(); loadSettings();
+        });
+        no.addEventListener("click", () => { skinConfirm = ""; renderSkins(); });
+        row.append(mk("span", "ask", `Delete “${k.name || k.id}”?`), yes, no);
+      } else {
+        if (!active) { const use = mk("button", "chip", "Use"); use.addEventListener("click", () => save({ skin: k.id })); row.append(use); }
+        const del = mk("button", "chip", "Delete");
+        del.addEventListener("click", () => { skinConfirm = k.id; renderSkins(); });
+        row.append(del);
+      }
+      return row;
+    }));
+  }
+  $("#mk-own").addEventListener("click", () => save({ skin: "" }));
+  function renderLook() { renderEyes(); renderSkins(); }
+  loadSkins();
 
   loadSettings(); loadPhone(); loadAttention();
   setInterval(loadAttention, 4000);

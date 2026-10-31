@@ -102,6 +102,34 @@ Chip's eyes can follow the laptop's mouse pointer across all monitors. Off by de
   connected, the setting is on and the screen is unlocked). Nothing is logged or sent anywhere except to the
   bridge on this laptop, and the only thing stored is the phone's spot in `~/.config/deskbuddy/gaze.json`.
 
+## Eye styles
+Chip's eyes come in three styles from its pack (`phone/www/pack.json`, `eyes.styles`): **Classic** (its own scanline
+eyes), **Toon** (big bright eyes with an accent-coloured iris) and **Button** (round accent eyes with a big black pupil).
+- Pick one in the dashboard's **Eyes follow the cursor** card, where a live preview shows it looking around. The
+  setting is `eyeStyle` (empty = the pack's default, Classic).
+- The pupil is S, M or L (`pupilSize`, default M). Only styles that offer a size show the choice.
+- The pupil follows the cursor: it moves inside its box, converges a little when the pointer is near the phone,
+  and returns to the centre after a while without movement.
+- While a custom skin is on, its own eye style replaces these and the card says so.
+
+## Make your own Chip
+A skin changes Chip's art only: its eyes, mouth, and the face plate and ears, plus its accent and colours.
+Animation, moods and timing stay Chip's. You make it with any AI chat (ChatGPT, Gemini, Claude…), and the dashboard's
+**Make your own Chip** card checks the result before Chip uses it.
+1. **Get the prompt.** Pick what it's based on (my pet, me, a character or theme, my concept art, or just an idea).
+   Copy the prompt and paste it into the chat, and attach your pictures there. Your photos go only to that chatbot.
+2. **Upload the result.** Save the JSON the chat gives you and pick the file, or paste it into the box.
+3. **Read the result.** A skin that fails lists each problem with its path (`$.sprites.eyeL.frames.open`), what is
+   wrong and how to fix it. **Copy message for your AI** copies a ready reply: paste it into the same chat, and it
+   fixes exactly those problems and sends the whole file again. A skin that passes shows a live preview, and
+   **Use on Chip** installs it and switches it on. The phone picks it up within a minute.
+- Your skins are listed below, with **Use** and **Delete** (Delete asks first, inside the card). **Back to Chip's
+  own look** switches the skin off.
+- A skin is one JSON file under 600 KB (`chip-skin/1`). Only that file reaches the laptop, never the pictures.
+  The phone keeps a copy of the skin it is using, so it still shows it when the laptop is away.
+- Checks and previews run on the laptop: `laptop/skin.js` (`check`, `prompt`, `example`), `laptop/test_skins.py`
+  tests it. Installed skins are stored in `~/.config/deskbuddy/skins/`.
+
 ## Pieces
 | Where | What |
 |---|---|
