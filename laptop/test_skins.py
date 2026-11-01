@@ -27,6 +27,34 @@ def check(skin):
 
 
 EXAMPLE = json.loads(node("example"))
+PACK = json.load(open(os.path.join(HERE, "..", "phone", "www", "pack.json")))
+DEADPOOL = os.path.expanduser("~/.config/deskbuddy/skins/deadpool-mask.json")
+FIT_WARNINGS = ("cover the inside of the eyes", "don't sit on the ears", "look flat")   # the headphones-fit warnings
+
+
+def chip_skin():
+    """Chip's own default eyes and headphones from the pack, as a skin. The pack stores ragged rows (pack.js pads them),
+    and its eyeR is drawn on a 42x49 grid, over the eye slot: so rows are padded and the right side mirrors the left."""
+    style = PACK["eyes"]["styles"][PACK["eyes"]["default"]]
+    names, width = style["sprites"], PACK["skinSlots"]["eye"][0]
+
+    def padded(name, w=0):
+        sp = copy.deepcopy(PACK["sprites"][name])
+        sp["frames"] = {k: [r.ljust(max(w, *map(len, rows)), ".") for r in rows] for k, rows in sp["frames"].items()}
+        return sp
+    return {
+        "format": "chip-skin/1", "id": "chip-own", "name": "Chip", "accent": None,
+        "sprites": {names["eyeL"]: padded(names["eyeL"], width), "eyeR": {"mirror": names["eyeL"]},
+                    names["frontL"]: padded(names["frontL"], width), names["frontR"]: {"mirror": names["frontL"]},
+                    names["pupilL"]: padded(names["pupilL"]), "headphones": padded("headphones")},
+        "eyes": {**style, "sprites": {**names, "eyeR": "eyeR"},
+                 "frames": {k: {a: b for a, b in v.items() if a != "boxR"} for k, v in style["frames"].items()}},
+        "headphones": "headphones",
+    }
+
+
+def fit_warnings(report):
+    return [w for w in report["warnings"] if any(t in w["problem"] for t in FIT_WARNINGS)]
 
 
 def variant(change):
@@ -196,7 +224,7 @@ class SkinTests(unittest.TestCase):
             s["headphones"] = "phones"
         r = check(variant(ok))
         self.assertTrue(r["ok"], r)
-        self.assertFalse([w for w in r["warnings"] if "headphones" in w["path"] or "phones" in w["path"]], r["warnings"])
+        self.assertFalse([w for w in r["warnings"] if "phones" in w["path"] and w not in fit_warnings(r)], r["warnings"])
         def off_centre(s):
             ok(s); s["sprites"]["phones"]["anchor"] = [3, 6]
         r = check(variant(off_centre))
@@ -211,6 +239,65 @@ class SkinTests(unittest.TestCase):
         def missing(s):
             s["headphones"] = "nope"
         self.assertFalse(check(variant(missing))["ok"])
+
+    def test_chip_headphones_fit(self):
+        r = check(chip_skin())
+        self.assertTrue(r["ok"], r["message"])
+        self.assertEqual(fit_warnings(r), [])
+
+    def headphones_variant(self, change):
+        skin = chip_skin()
+        hp = skin["sprites"]["headphones"]
+        ax, ay = hp["anchor"]
+        rows = [list(r) for r in hp["frames"]["on"]]
+        change(rows, ax, ay)
+        hp["frames"]["on"] = ["".join(r) for r in rows]
+        r = check(skin)
+        self.assertTrue(r["ok"], r["message"])       # warnings only: an installed skin keeps working
+        return r
+
+    def assertFit(self, r, text, path, *words):
+        hits = [w for w in r["warnings"] if text in w["problem"]]
+        self.assertEqual(len(hits), 1, r["warnings"])
+        self.assertEqual(hits[0]["path"], path)
+        self.assertTrue(hits[0]["fix"])
+        for w in words:
+            self.assertIn(w, hits[0]["problem"] + " " + hits[0]["fix"])
+        self.assertEqual(len(fit_warnings(r)), 1, fit_warnings(r))   # only this one fires
+
+    def test_headphones_cover_eyes(self):
+        def bar(rows, ax, ay):   # a strap across both eyes at eye level
+            for y in range(ay - 9, ay - 4):
+                for x in range(ax - 46, ax + 47):
+                    if abs(x - ax) >= 20:
+                        rows[y][x] = "p"
+        r = self.headphones_variant(bar)
+        self.assertFit(r, "cover the inside of the eyes", "$.sprites.headphones.frames.on", "(-33,-7)", "1 px outline")
+
+    def test_headphones_miss_ears(self):
+        def no_cups(rows, ax, ay):   # band only: nothing beyond |x| 40
+            for r in rows:
+                for x in range(len(r)):
+                    if abs(x - ax) > 40:
+                        r[x] = "."
+        r = self.headphones_variant(no_cups)
+        self.assertFit(r, "don't sit on the ears", "$.sprites.headphones.frames.on", "either side", "x -50 and 50")
+
+    def test_headphones_flat(self):
+        def two_tones(rows, ax, ay):
+            for r in rows:
+                for x, c in enumerate(r):
+                    if c != ".":
+                        r[x] = "D" if c == "D" else "p"
+        r = self.headphones_variant(two_tones)
+        self.assertFit(r, "look flat", "$.sprites.headphones.keys", "only 2 colours", "3 tones")
+
+    @unittest.skipUnless(os.path.exists(DEADPOOL), "deadpool-mask.json isn't installed")
+    def test_installed_deadpool_no_fit_warnings(self):
+        with open(DEADPOOL, "rb") as f:
+            r = check(f.read())
+        self.assertTrue(r["ok"], r["message"])
+        self.assertEqual(fit_warnings(r), [])
 
     def test_pupil_sizes_warn(self):
         def two(s):
@@ -229,6 +316,15 @@ class SkinTests(unittest.TestCase):
         self.assertIn("wide -> open", text)                    # the pack's fallbacks
         self.assertIn("faceTop 128x26", text)                  # the pack's skinSlots
         self.assertIn("headphones 128x72", text)
+        ref = text.index("Reference: how Chip's own headphones are drawn")   # design/headphones.js, read at prompt time
+        code = re.search(r"```js\n(.*?)\n```", text[ref:], re.S).group(1)
+        with open(os.path.join(HERE, "..", "design", "headphones.js")) as f:
+            self.assertIn(code.split("\n")[-2], f.read())               # its own code, not a copy
+        self.assertIn("between two ellipses", code)
+        self.assertNotIn("--write", code)
+        self.assertNotIn("pack.json", code)
+        for n in ["(-33, -7) and (33, -7)", "40x48", "from -16 to 24 px", "cups span x 51..63", "y -33"]:
+            self.assertIn(n, text[ref:])
         block = re.search(r"```json\n(.*?)\n```", text, re.S).group(1)
         self.assertTrue(check(block)["ok"])                    # the example inside the prompt passes
 

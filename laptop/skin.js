@@ -33,6 +33,38 @@ const list = (a) => (a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " a
 const rowsText = (rows) => (rows.length === 1 ? "row " : "rows ") + list(rows.length > 8 ? [...rows.slice(0, 8), `${rows.length - 8} more`] : rows.map(String));
 const quoted = (a) => a.map((s) => JSON.stringify(s));
 
+// ---------------------------------------------------------------- headphones fit (the check's warnings, the prompt's numbers)
+const rigAt = (id) => (pack.rig.find((r) => r.id === id) || {}).at || [0, 0];
+const EYE_ROWS = 8;   // "eye height": the eye anchors' row +-8 px
+const EYE_COVER = 0.02;   // the share of the eyes' inside the headphones may cover before the check warns
+const firstFrame = (sp) => Object.keys(sp.frames)[0];
+// [x, y, char] of every drawn pixel, relative to the head's centre, with the sprite's anchor placed at `at`
+const inkOf = (sp, frame, at = [0, 0]) => {
+  const out = [], rows = sp && sp.frames && sp.frames[frame];
+  if (Array.isArray(rows)) rows.forEach((r, y) => [...r].forEach((c, x) => { if (c !== ".") out.push([at[0] + x - sp.anchor[0], at[1] + y - sp.anchor[1], c]); }));
+  return out;
+};
+// hp: the headphones sprite; eyes: {eyeL, eyeR, frontL, frontR} sprites (mirrors resolved, fronts optional);
+// face: the faceBase/faceTop sprites (may be none). All at the default gaps, eyes in their "open" look.
+function phonesFit(hp, eyes, face) {
+  const eyeY = rigAt("eyeL")[1], y0 = eyeY - EYE_ROWS, y1 = eyeY + EYE_ROWS;
+  const eyeSet = new Set();
+  for (const s of ["L", "R"]) for (const l of ["eye", "front"]) for (const [x, y] of inkOf(eyes[l + s], "open", rigAt("eye" + s))) eyeSet.add(x + "," + y);
+  // the inside of the eyes = not their 1 px outline. Chip's own band rests on the outline at the top of its eyes;
+  // a band that follows a slanted eye edge may nick its corner (deadpool-mask: 13 px, 0.7%), hence EYE_COVER
+  const inside = (x, y) => [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => eyeSet.has(`${x + dx},${y + dy}`));
+  const ink = inkOf(hp, firstFrame(hp));
+  const covered = ink.filter(([x, y]) => inside(x, y)), eyePx = eyeSet.size;
+  const atEyes = (pts) => pts.filter(([, y]) => y >= y0 && y <= y1);
+  let head = atEyes(face.flatMap((sp) => inkOf(sp, firstFrame(sp))));
+  if (!head.length) head = atEyes([...eyeSet].map((k) => k.split(",").map(Number)));   // no face sprite: the eyes are the face
+  const edge = head.length ? [Math.min(...head.map((p) => p[0])), Math.max(...head.map((p) => p[0]))] : null;
+  const near = atEyes(ink);
+  const reach = edge ? { left: near.some(([x]) => x <= edge[0]), right: near.some(([x]) => x >= edge[1]) } : { left: true, right: true };
+  const colours = [...new Set(ink.map(([, , c]) => hp.keys[c]))];
+  return { covered, eyePx, coversEyes: covered.length > EYE_COVER * eyePx, rows: [y0, y1], edge, reach, colours };
+}
+
 // ---------------------------------------------------------------- check
 function check(buf, opts = {}) {
   const errors = [], warnings = [];
@@ -352,6 +384,22 @@ function check(buf, opts = {}) {
         const lop = rows.filter((r) => mask(r) !== [...mask(r)].reverse().join("")).length;   // the outline, colours may differ
         if (lop > rows.length / 4) W(["sprites", o, "frames"], `${lop} of the ${rows.length} rows aren't the same shape left and right`, "draw the headphones symmetric around the middle column (the ear-cup gap setting moves both cups by the same amount)");
       }
+      // how they sit on this face: off the eyes, cups on the ears, shaded
+      const fit = phonesFit(sp, { eyeL: resolve(names.eyeL), eyeR: resolve(names.eyeR), frontL: names.frontL && resolve(names.frontL), frontR: names.frontR && resolve(names.frontR) },
+        ["faceBase", "faceTop"].filter((k) => extra[k]).map((k) => resolve(extra[k])));
+      const f0 = ["sprites", o, "frames", firstFrame(sp)], col = (X) => X + sp.anchor[0], row = (Y) => Y + sp.anchor[1];
+      if (fit.coversEyes) {
+        const ys = fit.covered.map((p) => p[1]);
+        W(f0, `at the default ear-cup gap, ${fit.covered.length} pixels of the headphones (${Math.round(100 * fit.covered.length / fit.eyePx)}% of the eyes) cover the inside of the eyes (open look, eyes anchored at (${rigAt("eyeL")}) and (${rigAt("eyeR")}) from the head's centre), at y ${Math.min(...ys)} to ${Math.max(...ys)} (sprite ${rowsText([...new Set(ys.map(row))].sort((a, b) => a - b))})`,
+          "keep the band above the eyes and the cups outside them: raise or narrow the band, or move the cups out (touching the eyes' 1 px outline is fine)");
+      }
+      if (!fit.reach.left || !fit.reach.right) {
+        const sides = !fit.reach.left && !fit.reach.right ? "either side" : !fit.reach.left ? "the left side" : "the right side";
+        W(f0, `around eye height (y ${fit.rows[0]} to ${fit.rows[1]} from the head's centre) no pixel reaches the head's edge on ${sides} (x ${fit.edge[0]} and ${fit.edge[1]}, the ${extra.faceBase || extra.faceTop ? "face's" : "eyes'"} outermost pixels there), so the ear cups don't sit on the ears`,
+          `draw the ear cups at eye height reaching at least x ${fit.edge[0]} and ${fit.edge[1]} (sprite columns ${col(fit.edge[0])} and ${col(fit.edge[1])}, rows ${row(fit.rows[0])}-${row(fit.rows[1])}), just outside the face`);
+      }
+      if (fit.colours.length < 3) W(["sprites", o, "keys"], `the headphones use only ${fit.colours.length} ${fit.colours.length === 1 ? "colour" : "colours"} (${quoted(fit.colours).join(", ")}), so they'll look flat`,
+        "shade each material with 3 tones (shadow, base, highlight) and give every shape a 1-2 px dark outline");
     }
     for (const slot of ["faceBase", "faceTop", "headphones"]) if (extra[slot]) {
       const sp = resolve(extra[slot]), fs_ = Object.keys(sp.frames);
@@ -429,6 +477,33 @@ function pretty(v) {
 }
 
 // ---------------------------------------------------------------- the chatbot prompt, built from the pack
+// design/headphones.js as the chatbot needs it, read now so it stays in sync: without its first two lines, usage,
+// "Fit:" line (the prompt gives the numbers), pack-only palette note, --write branch or alignment padding
+function phonesSource() {
+  let s = fs.readFileSync(path.join(__dirname, "..", "design", "headphones.js"), "utf8");
+  const cut = s.indexOf('\nif (process.argv.includes("--write"))');
+  if (cut >= 0) s = s.slice(0, cut) + "\nconsole.log(rows.join(\"\\n\"));\n";
+  s = s.split("\n").filter((l, i) => i > 1 && !/^\/\/( {3}node |$| Fit: )|require\(/.test(l)).join("\n");
+  return s.replace(/\n\/\/ Palette:[^]*?(?=\n\S*const )/, "").replace(/ {2,}\/\//g, "  //").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// the numbers for a skin's headphones, measured on Chip's own pack so they follow it
+function phonesNumbers() {
+  const style = pack.eyes.styles[pack.eyes.default].sprites, eye = (k) => pack.sprites[style[k]];
+  const hp = pack.sprites.headphones;
+  const fit = phonesFit(hp, { eyeL: eye("eyeL"), eyeR: eye("eyeR"), frontL: eye("frontL"), frontR: eye("frontR") }, []);
+  const ink = inkOf(hp, firstFrame(hp)), cups = ink.filter(([x, y]) => x > 0 && y >= fit.rows[0] && y <= fit.rows[1]);
+  const eyeInk = [...inkOf(eye("eyeL"), "open", rigAt("eyeL")), ...inkOf(eye("frontL"), "open", rigAt("eyeL"))];
+  const [ew, eh] = pack.skinSlots.eye, [lx, ly] = rigAt("eyeL"), [rx] = rigAt("eyeR");
+  const gap = (/"phonesGap":\s*\((-?\d+),\s*(-?\d+)\)/.exec(fs.readFileSync(path.join(__dirname, "bridge.py"), "utf8")) || [0, -16, 24]).slice(1).map(Number);
+  return {
+    eyes: `(${lx}, ${ly}) and (${rx}, ${ly})`, eyeBox: `x ${lx - (ew >> 1)}..${lx + (ew >> 1) - 1} and ${rx - (ew >> 1) + 1}..${rx + (ew >> 1)}, y ${ly - (eh >> 1)}..${ly + (eh >> 1) - 1}`,
+    eyeSize: `${ew}x${eh}`, rows: fit.rows, half: fit.edge[1], cupIn: Math.min(...cups.map((p) => p[0])), cupOut: Math.max(...cups.map((p) => p[0])),
+    band: Math.max(...ink.filter((p) => p[0] === 0).map((p) => p[1])), headTop: Math.min(...eyeInk.map((p) => p[1])),
+    top: Math.min(...ink.map((p) => p[1])), gap, colours: fit.colours.length,
+  };
+}
+
 function prompt() {
   const roles = ROLES.map((r) => {
     const t = pack.palette[r];
@@ -439,6 +514,7 @@ function prompt() {
   const fb = (m) => Object.entries(m).map(([a, b]) => `${a} -> ${b}`).join(", ");
   const [lo, hi] = pack.accentLightness;
   const guide = Array.isArray(pack.skinGuide) ? pack.skinGuide.join("\n") : pack.skinGuide || "";
+  const hp = phonesNumbers();
   const generated = `
 chip-skin/1 is one JSON object. Fields:
 - "format": "chip-skin/1"
@@ -518,6 +594,24 @@ ${generated}
 
 Art guide from Chip's designer:
 ${guide}
+
+Reference: how Chip's own headphones are drawn
+This program draws Chip's pink pair; its comments teach the method. Reuse the method and geometry, but adapt
+the shapes, materials and colour keys to my subject (don't copy the pink style). If you can run code, adapt it,
+run it and emit the rows as the "headphones" sprite (one frame, anchor = [middle column, head-centre row]).
+Numbers, in px from the head's centre:
+- Eyes: anchors ${hp.eyes}, each up to ${hp.eyeSize} (${hp.eyeBox}). Never cover the
+  eyes' inside; resting on their top edge is fine.
+- Ear cups at eye height (y ${hp.rows[0]}..${hp.rows[1]}), reaching the head's edge on both sides: your faceBase/faceTop's
+  outermost pixel at those rows (Chip has none, so its eyes: ${hp.half} px either side; its cups span x ${hp.cupIn}..${hp.cupOut}).
+- Band: underside on the middle column at least ${hp.headTop - hp.band} px above the head's highest pixel (faceTop, else faceBase).
+  Chip's: underside y ${hp.band}, top y ${hp.top}, eyes from y ${hp.headTop}.
+- At least 3 colours (Chip's has ${hp.colours}). The user sets the ear-cup gap from ${hp.gap[0]} to ${hp.gap[1]} px (each cup moves that far
+  out); fit the cups at gap 0.
+The checker warns about covered eyes, cups that miss the ears, and fewer than 3 colours.
+\`\`\`js
+${phonesSource()}
+\`\`\`
 
 Smallest valid example. It only shows the format: its square eyes and missing face are not a style to copy;
 yours has the subject's own head, eyes and headphones:
