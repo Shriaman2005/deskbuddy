@@ -227,6 +227,10 @@ input[type=range]:disabled { cursor: default; }
 .styles .chip { display: block; text-align: left; padding: 10px 12px; border-radius: 12px; }
 .styles .chip b { display: block; font-weight: 600; font-size: 14.5px; }
 .styles .chip small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.phones { padding: 2px 0 8px; }
+.phones .styles .chip { padding: 8px; }
+.phones .styles .chip .look { margin: 0 0 6px; }
+.phones .styles .chip[aria-pressed="true"] .look { border-color: var(--eye); }
 .look { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; margin: 10px 0 6px; border-radius: 10px; background: #000; border: 1px solid var(--line2); }
 .look iframe { position: absolute; left: 0; top: 0; width: 640px; height: 360px; border: 0; transform-origin: 0 0; pointer-events: none; background: #000; }
 .mk .step { padding: 12px 0 10px; border-top: 1px solid var(--line); }
@@ -408,6 +412,8 @@ footer code { color: var(--soft); }
     `Use “Back to Chip's own look” in Make your own Chip to switch them on again.</p><div class="styles" id="eye-styles"></div>` +
     `<div class="row choice" id="pupil-row" hidden><span class="txt"><b>Pupil size</b><small>The dark centre that follows your cursor</small></span>` +
     `<div class="pick" id="pupil-pick"></div></div><div class="look" id="eye-look"><iframe id="eye-frame" title="Eye style preview" tabindex="-1"></iframe></div></div>`;
+  const PHONES_HTML = `<div class="phones" id="phones"><div class="row"><span class="txt"><b>Default headphones</b>` +
+    `<small>Worn when following is off, or when the skin has no headphones of its own.</small></span></div><div class="styles" id="phones-pick"></div></div>`;
   const SKINS_HTML = `<div class="mk" id="mk"><p class="note">Turn your pet, yourself, a character or your own art into Chip. An AI chat does the drawing; Chip checks the result before using it.</p>` +
     `<div class="step"><h3><i>1</i>Make your own face for any character</h3>` +
     `<ol class="howto"><li>Click <b>Copy prompt</b> below.</li>` +
@@ -508,6 +514,8 @@ footer code { color: var(--soft); }
     { icon: "👀", title: "Eyes follow the cursor", eyes: true, rows: [
       range("eyeGap", "Gap between the eyes", -14, 24, 1, "px"),
       range("phonesGap", "Gap between the ear cups", -16, 24, 1, "px"),
+      sw("phonesFollowSkin", "Headphones follow the skin", "A skin that has its own headphones wears them"),
+      { phonesPick: true },   // the default headphones: Chip's own or another skin's
       sw("showPupils", "Pupils", "The dark centre of each eye. Off, the eyes are plain whites with no centre"),
       sw("gazeFollow", "Eyes follow the mouse", "Chip looks at your cursor on any monitor", "showPupils"),
       { gazeMap: true },   // the monitor setup: shown with the mouse-follow toggle on, frozen while pupils are off
@@ -632,7 +640,7 @@ footer code { color: var(--soft); }
     if (c.place) body += PLACE_HTML;
     if (c.eyes) body += EYES_HTML;
     if (c.skins) body += SKINS_HTML;
-    body += (c.rows || []).map((r) => (r.gazeMap ? GAZE_HTML : rowHTML(r))).join("");
+    body += (c.rows || []).map((r) => (r.gazeMap ? GAZE_HTML : r.phonesPick ? PHONES_HTML : rowHTML(r))).join("");
     if (c.attention) {
       body += `<div class="attn" data-needs="torch"><button class="chip" id="torch-test">🔔 Test the alert</button>` +
         `<ul id="attn-log"><li class="none">No alerts yet</li></ul></div>`;
@@ -1259,7 +1267,7 @@ footer code { color: var(--soft); }
 
   async function loadSkins() {
     const r = await fetch("/skins", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
-    if (r) { skinList = r; renderSkins(); }
+    if (r) { skinList = r; renderSkins(); renderPhones(); }
   }
   function renderSkins() {
     const box = $("#mk-list");
@@ -1290,7 +1298,7 @@ footer code { color: var(--soft); }
           const res = await fetch(`/skins/${encodeURIComponent(k.id)}/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: n }) }).catch(() => null);
           const body = res && res.ok ? await res.json().catch(() => null) : null;
           if (!Array.isArray(body)) return toast("Couldn't rename it", true);
-          skinList = body; skinRename = ""; renderSkins(); toast("Renamed ✓");
+          skinList = body; skinRename = ""; renderSkins(); renderPhones(); toast("Renamed ✓");
         };
         ok.addEventListener("click", send);
         inp.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); if (e.key === "Escape") { skinRename = ""; renderSkins(); } });
@@ -1308,7 +1316,34 @@ footer code { color: var(--soft); }
     }));
   }
   $("#mk-own").addEventListener("click", () => save({ skin: "" }));
-  function renderLook() { renderEyes(); renderSkins(); }
+  // the default-headphones picker: one card for Chip's own, one per installed skin that has a pair. Each card previews the
+  // real combination with the active skin. Rebuilt only when the list, a name or the active skin changes (so the previews
+  // don't reload); the chosen card is just re-marked. Names come from users: textContent only.
+  let phonesSig = "", phonesLooks = [];
+  function renderPhones() {
+    const box = $("#phones-pick");
+    if (!box || !S) return;
+    const list = skinList.filter((k) => k.hasHeadphones), sig = JSON.stringify([S.skin, list.map((k) => [k.id, k.name])]);
+    if (sig !== phonesSig) {
+      phonesSig = sig;
+      for (const l of phonesLooks) looks.splice(looks.indexOf(l), 1);
+      phonesLooks = [];
+      const q = (who) => `/preview/index.html?screen=0&mood=neutral&music&gaze=0,0&skin=${encodeURIComponent(S.skin || "")}&phones=${encodeURIComponent(who)}`;
+      box.replaceChildren(...[["", "Chip's own"], ...list.map((k) => [k.id, k.name || k.id])].map(([id, label]) => {
+        const b = mk("button", "chip"), wrap = mk("div", "look");
+        wrap.append(mk("iframe"));
+        wrap.firstChild.title = label + " headphones preview"; wrap.firstChild.tabIndex = -1;
+        b.dataset.phones = id;
+        b.append(wrap, mk("b", "", label));
+        b.addEventListener("click", () => save({ phonesDefault: id }));
+        const l = addLook(wrap); l.url = q(id || "chip"); phonesLooks.push(l);
+        return b;
+      }));
+    }
+    const cur = list.some((k) => k.id === S.phonesDefault) ? S.phonesDefault : "";
+    for (const b of $$("#phones-pick .chip")) b.setAttribute("aria-pressed", String(b.dataset.phones === cur));
+  }
+  function renderLook() { renderEyes(); renderSkins(); renderPhones(); }
   loadSkins();
 
   // ---------------------------------------------------------------- connections (the link to the phone, pairing a new one)

@@ -131,6 +131,11 @@ Animation, moods and timing stay Chip's. You make it with any AI chat (ChatGPT, 
    wrong and how to fix it. **Copy message for your AI** copies a ready reply: paste it into the same chat, and it
    fixes exactly those problems and sends the whole file again. A skin that passes shows a live preview, and
    **Use on Chip** installs it and switches it on. The phone picks it up within a minute.
+- **Headphones.** The ear cups are a skin slot too, so a skin can bring its own pair. In the Eyes card, **Headphones follow
+  the skin** (on by default) wears a skin's own pair when it has one; **Default headphones** picks what Chip wears otherwise:
+  Chip's own, or the pair of any installed skin that has headphones (each card previews it on your current look). The phone
+  borrows a pair from the laptop (`/skins/<id>/headphones.json`, `chip-phones/1`), keeps a copy, and falls back to Chip's
+  own if it can't get it. Deleting a skin resets the default if it pointed there.
 - Your skins are listed below, with **Use** and **Delete** (Delete asks first, inside the card). **Back to Chip's
   own look** switches the skin off.
 - A skin is one JSON file under 600 KB (`chip-skin/1`). Only that file reaches the laptop, never the pictures.

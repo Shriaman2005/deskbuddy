@@ -233,5 +233,37 @@ class SkinTests(unittest.TestCase):
         self.assertTrue(check(block)["ok"])                    # the example inside the prompt passes
 
 
+class DeleteResetTests(unittest.TestCase):
+    """Deleting an installed skin puts "skin" and "phonesDefault" back when they pointed at it (bridge.Skins.delete,
+    against a temp skins folder and a stand-in settings object; nothing real is touched)."""
+
+    def test_delete_resets_settings_that_point_at_it(self):
+        import tempfile
+        sys.path.insert(0, HERE)
+        import bridge
+
+        class Fake:
+            def __init__(self, **v): self.v = {"skin": "", "phonesDefault": "", **v}
+            def get(self): return dict(self.v)
+            def update(self, ch): self.v.update(ch)
+
+        real = (bridge.SKINS_DIR, bridge.settings)
+        with tempfile.TemporaryDirectory() as d:
+            bridge.SKINS_DIR = d
+            try:
+                for sid in ("aa-one", "bb-two"):
+                    with open(os.path.join(d, sid + ".json"), "w") as f:
+                        f.write("{}")
+                bridge.settings = Fake(skin="aa-one", phonesDefault="bb-two")
+                self.assertTrue(bridge.skins.delete("bb-two"))
+                self.assertEqual(bridge.settings.v, {"skin": "aa-one", "phonesDefault": ""})   # only what pointed at it
+                bridge.settings = Fake(skin="bb-two", phonesDefault="aa-one")
+                self.assertTrue(bridge.skins.delete("aa-one"))
+                self.assertEqual(bridge.settings.v, {"skin": "bb-two", "phonesDefault": ""})
+                self.assertFalse(bridge.skins.delete("aa-one"))                                 # already gone
+            finally:
+                bridge.SKINS_DIR, bridge.settings = real
+
+
 if __name__ == "__main__":
     sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 1)

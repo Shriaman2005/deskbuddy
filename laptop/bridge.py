@@ -147,7 +147,7 @@ DEFAULTS = dict.fromkeys(TOGGLES, True) | {
     "torchSeconds": 3, "soundSeconds": 2, "soundVolume": 80, "soundStyle": "chime", "remindEvery": 20, "remindMinutes": 3,
     "pomoFocus": 25, "pomoShort": 5, "pomoLong": 15, "pomoLongEvery": 4, "pomoGoal": 8, "typingAfter": 10,
     "accent": "cyan", "accentColor": "#2ee6f2", "chipGlow": 100, "eyeGap": 0, "phonesGap": 0, "idleRate": "normal", "idleOff": [],
-    "eyeStyle": pack_eyes()[0], "pupilSize": "M", "showPupils": True, "skin": "",  # eye style (a style id of the pack), pupil size, pupils on/off, installed skin id ("" = none)
+    "eyeStyle": pack_eyes()[0], "pupilSize": "M", "showPupils": True, "skin": "", "phonesFollowSkin": True, "phonesDefault": "",  # eye style (a style id of the pack), pupil size, pupils on/off, installed skin id ("" = none)
     "locName": "", "locLat": 0.0, "locLon": 0.0,  # weather place picked on the dashboard; "" = the one in phone/www/config.js
     "apps": {},  # app name -> APP_RULES choice; apps not listed follow the switches above
     # dictation: engine, one language for all engines (stt.LANGS), cloud provider/model/URL, laptop whisper model
@@ -239,6 +239,10 @@ class Settings:
             return value if isinstance(value, str) and value in pack_eyes()[1] else None
         if key == "skin":  # "" or the id of an installed skin
             if value == "" or (isinstance(value, str) and SKIN_ID.fullmatch(value) and os.path.isfile(skin_path(value))):
+                return value
+            return None
+        if key == "phonesDefault":  # "" (Chip's own) or an installed skin that has headphones
+            if value == "" or (isinstance(value, str) and SKIN_ID.fullmatch(value) and skins.headphones(value) is not None):
                 return value
             return None
         if isinstance(default, str):  # a time of day, HH:MM
@@ -1794,6 +1798,8 @@ class Skins:
                 return False
         if settings.get()["skin"] == skin_id:
             settings.update({"skin": ""})
+        if settings.get()["phonesDefault"] == skin_id:
+            settings.update({"phonesDefault": ""})
         return True
 
 
@@ -2198,8 +2204,8 @@ phone_link = PhoneLink()
 pairing = Pairing()
 visualizer = Visualizer()
 gaze = Gaze()
+skins = Skins()  # before settings: loading them checks phonesDefault against the installed skins
 settings = Settings()
-skins = Skins()
 phone = {}  # what the buddy said about itself on its last /stats poll
 apps = Apps()
 attention = Attention()
