@@ -1193,35 +1193,39 @@ footer code { color: var(--soft); }
     if (!r) { out.replaceChildren(mk("p", "res-head bad", res ? "The check didn't run (" + res.status + "). Try again." : "Couldn't reach the bridge. Is it running?")); return; }
     showReport(r);
   }
+  // a failed check, the way the skin maker and the headphones maker both show it: each problem with its path and fix,
+  // and the message to paste back to the AI
+  function showProblems(out, r) {
+    const n = r.errors.length + (r.omitted || 0);
+    out.append(mk("p", "res-head bad", `Chip can't use this yet: ${n} problem${n === 1 ? "" : "s"} to fix`));
+    const ol = mk("ol", "errs");
+    for (const e of r.errors) {
+      const li = mk("li");
+      li.append(mk("code", "", e.path), mk("span", "", " " + e.problem), mk("small", "", "Fix: " + e.fix));
+      ol.append(li);
+    }
+    out.append(ol);
+    if (r.omitted) out.append(mk("p", "hint", `${r.omitted} more will show up after you fix these.`));
+    const acts = mk("div", "acts"), copy = mk("button", "chip go", "Copy message for your AI");
+    copy.addEventListener("click", () => copyText(r.message, "Message"));
+    acts.append(copy);
+    out.append(acts, mk("p", "hint", "Paste it into the same AI chat. It fixes exactly these and sends the whole file again; upload that here."));
+  }
+  function showNotes(out, r) {   // the optional notes of a passing check
+    if (!r.warnings || !r.warnings.length) return;
+    const d = mk("details"), ul = mk("ul");
+    d.append(mk("summary", "", `${r.warnings.length} optional note${r.warnings.length === 1 ? "" : "s"}: fine to leave`));
+    for (const w of r.warnings) ul.append(mk("li", "", `${w.path}: ${w.problem}. ${w.fix}`));
+    d.append(ul); out.append(d);
+  }
   function showReport(r) {
     lastReport = r;
     const out = $("#mk-out");
     out.replaceChildren();
-    if (!r.ok) {
-      const n = r.errors.length + (r.omitted || 0);
-      out.append(mk("p", "res-head bad", `Chip can't use this yet: ${n} problem${n === 1 ? "" : "s"} to fix`));
-      const ol = mk("ol", "errs");
-      for (const e of r.errors) {
-        const li = mk("li");
-        li.append(mk("code", "", e.path), mk("span", "", " " + e.problem), mk("small", "", "Fix: " + e.fix));
-        ol.append(li);
-      }
-      out.append(ol);
-      if (r.omitted) out.append(mk("p", "hint", `${r.omitted} more will show up after you fix these.`));
-      const acts = mk("div", "acts"), copy = mk("button", "chip go", "Copy message for your AI");
-      copy.addEventListener("click", () => copyText(r.message, "Message"));
-      acts.append(copy);
-      out.append(acts, mk("p", "hint", "Paste it into the same AI chat. It fixes exactly these and sends the whole file again; upload that here."));
-      return;
-    }
+    if (!r.ok) return showProblems(out, r);
     const sk = r.skin || {};
     out.append(mk("p", "res-head good", `✓ “${sk.name || sk.id}”${sk.author ? " by " + sk.author : ""} passes the check`));
-    if (r.warnings && r.warnings.length) {
-      const d = mk("details"), ul = mk("ul");
-      d.append(mk("summary", "", `${r.warnings.length} optional note${r.warnings.length === 1 ? "" : "s"}: fine to leave`));
-      for (const w of r.warnings) ul.append(mk("li", "", `${w.path}: ${w.problem}. ${w.fix}`));
-      d.append(ul); out.append(d);
-    }
+    showNotes(out, r);
     const wrap = mk("div", "look"); wrap.append(mk("iframe")); wrap.firstChild.title = "Skin preview"; wrap.firstChild.tabIndex = -1;
     out.append(wrap);
     if (skinLook) looks.splice(looks.indexOf(skinLook), 1);
@@ -1269,13 +1273,104 @@ footer code { color: var(--soft); }
     const r = await fetch("/skins", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
     if (r) { skinList = r; renderSkins(); renderPhones(); }
   }
+  // ---- "Make headphones" / "Redo headphones" on a skin row: a prompt fitted to that skin, an upload, the check, a preview of the
+  // skin wearing the pair (the unsaved draft), and Save. One panel is open at a time; it sits under its row and is kept
+  // across re-renders (rebuilding it would reload the preview). Every text goes in with textContent.
+  let hpFor = "", hp = null, skinsSig = "";
+  function hpClose() {
+    if (hp && hp.look) looks.splice(looks.indexOf(hp.look), 1);
+    hp = null; hpFor = "";
+  }
+  function hpOpen(k) {
+    hpClose();
+    hpFor = k.id; hp = hpBuild(k);
+  }
+  function hpBuild(k) {
+    const id = encodeURIComponent(k.id), title = k.name || k.id;
+    const replace = () => skinList.some((x) => x.id === k.id && x.hasHeadphones);   // asked each time: saving a pair makes the next one a replacement
+    const st = { el: mk("div", "hp-maker"), look: null };
+    const step = (...kids) => { const d = mk("div", "step"); d.append(...kids); return d; };
+    const prompt = mk("textarea"), copy = mk("button", "chip", "Copy prompt");
+    prompt.readOnly = true; prompt.rows = 5; prompt.value = "Loading the prompt…"; prompt.setAttribute("aria-label", "Headphones prompt for your AI chat");
+    copy.disabled = true;
+    fetch(`/skins/${id}/phones-prompt`, { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null).then((t) => {
+      prompt.value = t === null ? "Couldn't load the prompt. Is the desk buddy bridge running?" : t; prompt.scrollTop = 0; copy.disabled = t === null;
+    });
+    copy.addEventListener("click", () => copyText(prompt.value, "Prompt"));
+    const how = mk("ol", "howto");
+    for (const t of ["Click Copy prompt and paste it into an AI chat (any that can read long messages).",
+      `The prompt already describes the colours and face of “${title}”, so the AI draws a pair that fits. Add what you want: foam, metal, a colour.`,
+      "Download the JSON file it makes (or copy its code block) and upload it below."]) how.append(mk("li", "", t));
+    const file = mk("input"), paste = mk("textarea"), checkBtn = mk("button", "chip", "Check it"), out = mk("div");
+    file.type = "file"; file.accept = ".json,application/json,text/plain"; file.setAttribute("aria-label", "Headphones JSON file");
+    paste.rows = 3; paste.spellcheck = false; paste.placeholder = "…or paste the JSON your AI sent"; paste.setAttribute("aria-label", "Paste the headphones JSON");
+    const result = step(mk("h3", "", "Result"), out);
+    result.hidden = true;
+
+    async function run(text) {
+      result.hidden = false;
+      if (st.look) { looks.splice(looks.indexOf(st.look), 1); st.look = null; }
+      out.replaceChildren(mk("p", "hint", "Checking…"));
+      const res = await fetch(`/skins/${id}/headphones/check${replace() ? "?replace=1" : ""}`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: text }).catch(() => null);
+      const r = res && res.ok ? await res.json().catch(() => null) : null;
+      if (!r) return out.replaceChildren(mk("p", "res-head bad", res ? "The check didn't run (" + res.status + "). Try again." : "Couldn't reach the bridge. Is it running?"));
+      out.replaceChildren();
+      if (!r.ok) return showProblems(out, r);
+      out.append(mk("p", "res-head good", `✓ These headphones fit “${title}” and pass the check`));
+      showNotes(out, r);
+      const wrap = mk("div", "look"); wrap.append(mk("iframe")); wrap.firstChild.title = "Headphones preview"; wrap.firstChild.tabIndex = -1;
+      out.append(wrap);
+      st.look = addLook(wrap);
+      st.look.url = `/preview/index.html?screen=0&mood=neutral&gaze=0,0&music&skin=${id}&phones=skin&hpdraft=1&_=${Date.now()}`;
+      const acts = mk("div", "acts"), save = mk("button", "chip go", replace() ? "Replace headphones" : "Save headphones");
+      save.addEventListener("click", async () => {
+        save.disabled = true;
+        const sres = await fetch(`/skins/${id}/headphones/install`, { method: "POST" }).catch(() => null);
+        const body = sres ? await sres.json().catch(() => null) : null;
+        if (!sres || !sres.ok || !Array.isArray(body)) {
+          save.disabled = false;
+          if (body && body.report) { out.replaceChildren(); return showProblems(out, body.report); }
+          return toast(body && body.error ? body.error : "Couldn't save it. Is the bridge running?", true);
+        }
+        skinList = body;
+        if (st.look) { looks.splice(looks.indexOf(st.look), 1); st.look = null; }
+        out.replaceChildren(mk("p", "res-head good", `✓ ${title} has its headphones. The phone picks them up within a minute.`));
+        renderSkins(); renderPhones();
+      });
+      acts.append(save);
+      out.append(acts);
+    }
+    file.addEventListener("change", async (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      paste.value = "";
+      run(await f.text());
+    });
+    checkBtn.addEventListener("click", () => {
+      if (!paste.value.trim()) return toast("Paste the JSON first, or pick a file", true);
+      run(paste.value);
+    });
+    const close = mk("button", "chip", "Close"), acts1 = mk("div", "acts"), acts2 = mk("div", "acts");
+    close.addEventListener("click", () => { hpClose(); renderSkins(); });
+    acts1.append(copy); acts2.append(checkBtn, close);
+    st.look = null;
+    st.el.append(step(mk("h3", "", `${replace() ? "Redo" : "Make"} headphones for “${title}”`), how, prompt, acts1,
+      mk("p", "hint", replace() ? "Saving replaces the pair this skin has now." : "The pair belongs to this skin: it is worn while music plays.")),
+      step(file, paste, acts2), result);
+    return st;
+  }
   function renderSkins() {
     const box = $("#mk-list");
     if (!box) return;
     if (skinRename && document.activeElement && document.activeElement.tagName === "INPUT" && box.contains(document.activeElement)) return;  // don't wipe a name being typed
+    if (hpFor && !skinList.some((k) => k.id === hpFor)) hpClose();   // the skin was deleted
+    const sig = JSON.stringify([skinList, S && S.skin, skinConfirm, skinRename, hpFor]);
+    if (hp && sig === skinsSig && box.contains(hp.el)) return;   // nothing to redraw: keep the open panel (and its preview) as it is
+    skinsSig = sig;
     $("#mk-own").disabled = !(S && S.skin);
     if (!skinList.length) return box.replaceChildren(mk("p", "empty", "No skins yet. Make one above."));
-    box.replaceChildren(...skinList.map((k) => {
+    box.replaceChildren(...skinList.flatMap((k) => {
       const row = mk("div", "skin-row"), txt = mk("div", "txt"), active = !!(S && S.skin === k.id);
       txt.append(mk("b", "", k.name || k.id), mk("small", "", [k.author, (k.bytes / 1024).toFixed(1) + " KB"].filter(Boolean).join(" · ")));
       row.append(txt);
@@ -1308,11 +1403,14 @@ footer code { color: var(--soft); }
       } else {
         if (!active) { const use = mk("button", "chip", "Use"); use.addEventListener("click", () => save({ skin: k.id })); row.append(use); }
         const ren = mk("button", "chip", "Rename"), del = mk("button", "chip", "Delete");
+        const phones = mk("button", "chip", k.hasHeadphones ? "Redo headphones" : "Make headphones");
+        phones.setAttribute("aria-expanded", String(hpFor === k.id));
+        phones.addEventListener("click", () => { if (hpFor === k.id) hpClose(); else hpOpen(k); skinConfirm = ""; skinRename = ""; renderSkins(); });
         ren.addEventListener("click", () => { skinRename = k.id; skinConfirm = ""; renderSkins(); });
         del.addEventListener("click", () => { skinConfirm = k.id; skinRename = ""; renderSkins(); });
-        row.append(ren, del);
+        row.append(phones, ren, del);
       }
-      return row;
+      return hp && hpFor === k.id ? [row, hp.el] : [row];
     }));
   }
   $("#mk-own").addEventListener("click", () => save({ skin: "" }));

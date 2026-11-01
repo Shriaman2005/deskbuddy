@@ -136,6 +136,10 @@ Animation, moods and timing stay Chip's. You make it with any AI chat (ChatGPT, 
   Chip's own, or the pair of any installed skin that has headphones (each card previews it on your current look). The phone
   borrows a pair from the laptop (`/skins/<id>/headphones.json`, `chip-phones/1`), keeps a copy, and falls back to Chip's
   own if it can't get it. Deleting a skin resets the default if it pointed there.
+- **Make headphones for a skin that has none.** Every row in "Your skins" has **Make headphones** (**Redo headphones** if it
+  already has a pair): it gives you a prompt fitted to that skin (its colours and face plate), you upload what the AI draws
+  (`chip-phones/1`), Chip checks it on that skin's head and previews it, and **Save** adds the pair to the skin
+  (`laptop/skin.js prompt-phones` / `check-phones`).
 - Your skins are listed below, with **Use** and **Delete** (Delete asks first, inside the card). **Back to Chip's
   own look** switches the skin off.
 - A skin is one JSON file under 600 KB (`chip-skin/1`). Only that file reaches the laptop, never the pictures.

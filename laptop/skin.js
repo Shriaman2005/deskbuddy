@@ -5,6 +5,9 @@
 //                                                  (--clean adds the skin as minified JSON; the bridge stores that)
 //   node laptop/skin.js prompt                     the master prompt for the chatbot (one for every subject and screen)
 //   node laptop/skin.js example
+//   node laptop/skin.js prompt-phones <skinfile>   the chatbot prompt for headphones only, fitted to that skin
+//   node laptop/skin.js check-phones <skinfile> -|<file> [--replace] [--clean]
+//                                                  merges a chip-phones/1 reply into a copy of the skin, runs check() on it
 const fs = require("fs"), path = require("path");
 const www = path.join(__dirname, "..", "phone", "www");
 const P = require(path.join(www, "pack.js"));
@@ -65,47 +68,59 @@ function phonesFit(hp, eyes, face) {
   return { covered, eyePx, coversEyes: covered.length > EYE_COVER * eyePx, rows: [y0, y1], edge, reach, colours };
 }
 
+// ---------------------------------------------------------------- reports and text, shared by check() and checkPhones()
+// the report both checks print; `what` / `again` word the message the user pastes back to the chatbot
+function buildReport(errors, warnings, skin, what = "Your Chip skin", again = "the complete JSON") {
+  const shown = errors.slice(0, MAX_ENTRIES), more = errors.length - shown.length;
+  const entries = shown.map((e, i) => `${i + 1}. ${e.path}: ${e.problem.replace(/\.$/, "")}. Fix: ${e.fix.replace(/\.$/, "")}.`);
+  if (more > 0) entries.push(`(${more} more problems will show after you fix these.)`);
+  const ok = errors.length === 0;
+  const message = ok
+    ? `${what} passed the check.` + (warnings.length ? ` ${warnings.length} optional ${warnings.length === 1 ? "note" : "notes"}: it is fine to leave them.` : "")
+    : `${what} didn't pass the check. Fix exactly these problems, keep everything else, and send ${again} again:\n` + entries.join("\n");
+  return { ok, errors: shown, omitted: more > 0 ? more : 0, warnings: warnings.slice(0, MAX_ENTRIES), message, skin: ok ? skin : null };
+}
+
+// a chatbot reply pasted whole: keep only the first ``` block, with the other lines blanked so line numbers stay true
+function unfence(text) {
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  const lines = text.split("\n"), open = lines.findIndex((l) => /^\s*```/.test(l));
+  if (open < 0) return text;
+  let close = lines.findIndex((l, i) => i > open && /^\s*```\s*$/.test(l));
+  if (close < 0) close = lines.length;
+  return lines.map((l, i) => (i > open && i < close ? l : "")).join("\n");
+}
+
+// {value} or {problem, fix} in the checks' words
+function parseJson(text) {
+  try {
+    return { value: JSON.parse(text) };
+  } catch (e) {
+    const pos = Number((/position (\d+)/.exec(e.message) || [])[1]);
+    let where = "";
+    if (Number.isFinite(pos)) { const before = text.slice(0, pos).split("\n"); where = ` at line ${before.length}, column ${before[before.length - 1].length + 1}`; }
+    return {
+      problem: text.trim() ? `not valid JSON${where}: ${e.message.replace(/ in JSON at position.*$/, "").replace(/ \(line.*$/, "")}` : "the file is empty",
+      fix: "fix the syntax at that spot (a missing comma, quote or bracket) and send plain JSON: no comments, no trailing commas, nothing before or after it",
+    };
+  }
+}
+
 // ---------------------------------------------------------------- check
 function check(buf, opts = {}) {
   const errors = [], warnings = [];
   const E = (p, problem, fix) => { errors.push({ path: jp(p), problem, fix }); };
   const W = (p, problem, fix) => { warnings.push({ path: jp(p), problem, fix }); };
-  const report = (skin) => {
-    const shown = errors.slice(0, MAX_ENTRIES), more = errors.length - shown.length;
-    const entries = shown.map((e, i) => `${i + 1}. ${e.path}: ${e.problem.replace(/\.$/, "")}. Fix: ${e.fix.replace(/\.$/, "")}.`);
-    if (more > 0) entries.push(`(${more} more problems will show after you fix these.)`);
-    const ok = errors.length === 0;
-    const message = ok
-      ? "Your Chip skin passed the check." + (warnings.length ? ` ${warnings.length} optional ${warnings.length === 1 ? "note" : "notes"}: it is fine to leave them.` : "")
-      : "Your Chip skin didn't pass the check. Fix exactly these problems, keep everything else, and send the complete JSON again:\n" + entries.join("\n");
-    return { ok, errors: shown, omitted: more > 0 ? more : 0, warnings: warnings.slice(0, MAX_ENTRIES), message, skin: ok ? skin : null };
-  };
+  const report = (skin) => buildReport(errors, warnings, skin);
 
   // --- size and text
   if (buf.length > MAX_BYTES) {
     E([], `the file is ${Math.round(buf.length / 1024)} KB, over the ${MAX_BYTES / 1024} KB limit`, "shrink it: fewer or smaller sprites, fewer frames, no extra spaces or blank lines");
     return report();
   }
-  let text = buf.toString("utf8");
-  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-  // a chatbot reply pasted whole: keep only the first ``` block, with the other lines blanked so line numbers stay true
-  const lines = text.split("\n"), open = lines.findIndex((l) => /^\s*```/.test(l));
-  if (open >= 0) {
-    let close = lines.findIndex((l, i) => i > open && /^\s*```\s*$/.test(l));
-    if (close < 0) close = lines.length;
-    text = lines.map((l, i) => (i > open && i < close ? l : "")).join("\n");
-  }
-  let skin;
-  try {
-    skin = JSON.parse(text);
-  } catch (e) {
-    const pos = Number((/position (\d+)/.exec(e.message) || [])[1]);
-    let where = "";
-    if (Number.isFinite(pos)) { const before = text.slice(0, pos).split("\n"); where = ` at line ${before.length}, column ${before[before.length - 1].length + 1}`; }
-    E([], text.trim() ? `not valid JSON${where}: ${e.message.replace(/ in JSON at position.*$/, "").replace(/ \(line.*$/, "")}` : "the file is empty",
-      "fix the syntax at that spot (a missing comma, quote or bracket) and send plain JSON: no comments, no trailing commas, nothing before or after it");
-    return report();
-  }
+  const parsed = parseJson(unfence(buf.toString("utf8")));
+  if (parsed.problem) { E([], parsed.problem, parsed.fix); return report(); }
+  const skin = parsed.value;
   if (!isObj(skin)) { E([], "the top level must be one JSON object { ... }", "wrap everything in a single object starting with {\"format\": \"chip-skin/1\", ...}"); return report(); }
 
   // --- keys that must never appear, and nesting
@@ -504,11 +519,53 @@ function phonesNumbers() {
   };
 }
 
-function prompt() {
-  const roles = ROLES.map((r) => {
+// the roles list in the prompts: Chip's built-in colour names, as the palette defines them
+function builtinColours() {
+  return ROLES.map((r) => {
     const t = pack.palette[r];
     return `${r}${t === "accent" ? " (the accent itself)" : t.fixed ? ` (fixed ${t.fixed})` : ""}`;
   });
+}
+
+// the sprite format, shared by the skin prompt and the headphones prompt
+function spriteRules(roles) {
+  return `- "sprites": up to ${MAX_SPRITES}. Each is {"keys": {"<one character>": "<colour>"}, "anchor": [x, y], "glow": 0-1 (optional), "frames": {"<frame>": ["row", "row"]}} or {"mirror": "<other sprite>"} (flips it left-right; use it for the right eye).
+  - A row is text, one character per pixel. "." is transparent; every other character must be a key. All rows of a frame have exactly the same length. In error messages the first row is row 0.
+  - A key's colour is one of Chip's built-in colours or one of your "colors". Built-in colours: ${roles.join(", ")}. Most follow the accent, so a skin with an accent recolours itself.
+  - "anchor" is the pixel of the sprite that sits on the spot where Chip places it; it must be inside the sprite.`;
+}
+
+// the headphones rules: where the pair sits, symmetry, the ear-cup gap (shared by the skin prompt and the headphones prompt)
+function phonesRules() {
+  return `Headphones, "headphones" (optional, but make them: they're part of the character): Chip wears them while music plays. Draw a pair that belongs to this character: their colours, materials and style (armour plates for an armoured hero, a dark matte set for a dark caped one, fur muffs for an animal, a patterned band for a patterned costume, ...), not generic ones.
+- At most 128x72 px. The anchor is the head's centre, on the exact middle column of the sprite, at the height of the head's centre; the band arches over the top of faceBase/faceTop and the ear cups sit on the sides of the head at about eye height, just outside the face's edge.
+- Left-right symmetric in shape. The middle column holds only the headband: the user's "gap between the ear cups" setting repeats or removes that column to move both cups out or in.
+`;
+}
+
+// the reference section: how Chip's own pair is drawn, with its code and the numbers to meet (shared likewise)
+function phonesReference(hp) {
+  return `Reference: how Chip's own headphones are drawn
+This program draws Chip's pink pair; its comments teach the method. Reuse the method and geometry, but adapt
+the shapes, materials and colour keys to my subject (don't copy the pink style). If you can run code, adapt it,
+run it and emit the rows as the "headphones" sprite (one frame, anchor = [middle column, head-centre row]).
+Numbers, in px from the head's centre:
+- Eyes: anchors ${hp.eyes}, each up to ${hp.eyeSize} (${hp.eyeBox}). Never cover the
+  eyes' inside; resting on their top edge is fine.
+- Ear cups at eye height (y ${hp.rows[0]}..${hp.rows[1]}), reaching the head's edge on both sides: your faceBase/faceTop's
+  outermost pixel at those rows (Chip has none, so its eyes: ${hp.half} px either side; its cups span x ${hp.cupIn}..${hp.cupOut}).
+- Band: underside on the middle column at least ${hp.headTop - hp.band} px above the head's highest pixel (faceTop, else faceBase).
+  Chip's: underside y ${hp.band}, top y ${hp.top}, eyes from y ${hp.headTop}.
+- At least 3 colours (Chip's has ${hp.colours}). The user sets the ear-cup gap from ${hp.gap[0]} to ${hp.gap[1]} px (each cup moves that far
+  out); fit the cups at gap 0.
+The checker warns about covered eyes, cups that miss the ears, and fewer than 3 colours.
+\`\`\`js
+${phonesSource()}
+\`\`\``;
+}
+
+function prompt() {
+  const roles = builtinColours();
   const slotLine = Object.entries(pack.skinSlots).map(([k, [w, h]]) => `${k} ${w}x${h}`).join(", ");
   const eyeFrames = Object.keys(pack.sprites.eyeL.frames), mouthFrames = Object.keys(pack.sprites.mouth.frames);
   const fb = (m) => Object.entries(m).map(([a, b]) => `${a} -> ${b}`).join(", ");
@@ -521,10 +578,7 @@ chip-skin/1 is one JSON object. Fields:
 - "id": 1-32 lowercase letters, digits or "-" (not "draft"). "name": 1-40 characters. "author": optional, at most 40.
 - "accent": "#rrggbb" or null. Chip's main colour; every colour derived from it follows. Its lightness is kept between ${lo} and ${hi} (anything else is clamped, and the check warns).
 - "colors": up to ${MAX_COLORS} colours of your own, {"name": "#rrggbb"}. A name must not be one of Chip's built-in colours.
-- "sprites": up to ${MAX_SPRITES}. Each is {"keys": {"<one character>": "<colour>"}, "anchor": [x, y], "glow": 0-1 (optional), "frames": {"<frame>": ["row", "row"]}} or {"mirror": "<other sprite>"} (flips it left-right; use it for the right eye).
-  - A row is text, one character per pixel. "." is transparent; every other character must be a key. All rows of a frame have exactly the same length. In error messages the first row is row 0.
-  - A key's colour is one of Chip's built-in colours or one of your "colors". Built-in colours: ${roles.join(", ")}. Most follow the accent, so a skin with an accent recolours itself.
-  - "anchor" is the pixel of the sprite that sits on the spot where Chip places it; it must be inside the sprite.
+${spriteRules(roles)}
 - "eyes": one eye style (below). Required.
 - "mouth", "faceBase", "faceTop", "headphones": the name of one of your sprites. Optional; Chip keeps its own mouth and headphones and shows no faceBase/faceTop without them. faceBase, faceTop and headphones are drawn from their first frame.
 - "name" is the character's name: the phone greets with "Hi! I'm <name>", so use the character's own name (the user can change it when installing).
@@ -534,10 +588,7 @@ Where things go (all relative to the head's centre, in pixels; x grows to the ri
 - The eyes are placed with their anchors at (-33, -7) and (33, -7), the mouth's anchor (its top centre) at (0, 21). The user can move each eye up to 12 px inward or 24 px outward, so leave some face around them.
 - So draw faceBase with its anchor at the point between the eyes, 7 px below eye level, and leave the eye spots for the eye sprites (they draw on top of it).
 
-Headphones, "headphones" (optional, but make them: they're part of the character): Chip wears them while music plays. Draw a pair that belongs to this character: their colours, materials and style (armour plates for an armoured hero, a dark matte set for a dark caped one, fur muffs for an animal, a patterned band for a patterned costume, ...), not generic ones.
-- At most 128x72 px. The anchor is the head's centre, on the exact middle column of the sprite, at the height of the head's centre; the band arches over the top of faceBase/faceTop and the ear cups sit on the sides of the head at about eye height, just outside the face's edge.
-- Left-right symmetric in shape. The middle column holds only the headband: the user's "gap between the ear cups" setting repeats or removes that column to move both cups out or in.
-
+${phonesRules()}
 Maximum sprite sizes in pixels: ${slotLine}. No sprite may exceed 128x96. The file must stay under ${MAX_BYTES / 1024} KB.
 
 The eye style, "eyes": {"label": 1-40 characters, "blurb": optional, "sprites": {...}, "shift": [x, y], "converge": number, "pupils": [...], "pupilDefault": "M", "frames": {...}}
@@ -595,23 +646,7 @@ ${generated}
 Art guide from Chip's designer:
 ${guide}
 
-Reference: how Chip's own headphones are drawn
-This program draws Chip's pink pair; its comments teach the method. Reuse the method and geometry, but adapt
-the shapes, materials and colour keys to my subject (don't copy the pink style). If you can run code, adapt it,
-run it and emit the rows as the "headphones" sprite (one frame, anchor = [middle column, head-centre row]).
-Numbers, in px from the head's centre:
-- Eyes: anchors ${hp.eyes}, each up to ${hp.eyeSize} (${hp.eyeBox}). Never cover the
-  eyes' inside; resting on their top edge is fine.
-- Ear cups at eye height (y ${hp.rows[0]}..${hp.rows[1]}), reaching the head's edge on both sides: your faceBase/faceTop's
-  outermost pixel at those rows (Chip has none, so its eyes: ${hp.half} px either side; its cups span x ${hp.cupIn}..${hp.cupOut}).
-- Band: underside on the middle column at least ${hp.headTop - hp.band} px above the head's highest pixel (faceTop, else faceBase).
-  Chip's: underside y ${hp.band}, top y ${hp.top}, eyes from y ${hp.headTop}.
-- At least 3 colours (Chip's has ${hp.colours}). The user sets the ear-cup gap from ${hp.gap[0]} to ${hp.gap[1]} px (each cup moves that far
-  out); fit the cups at gap 0.
-The checker warns about covered eyes, cups that miss the ears, and fewer than 3 colours.
-\`\`\`js
-${phonesSource()}
-\`\`\`
+${phonesReference(hp)}
 
 Smallest valid example. It only shows the format: its square eyes and missing face are not a style to copy;
 yours has the subject's own head, eyes and headphones:
@@ -621,15 +656,183 @@ ${pretty(example())}
 `;
 }
 
+// ---------------------------------------------------------------- headphones for an installed skin (chip-phones/1)
+// {"format": "chip-phones/1", "from": "<skin id>", "colors": {...}, "sprites": {...}, "headphones": "<sprite>"}: the same
+// shape GET /skins/<id>/headphones.json serves. The chatbot draws one to fit an installed skin's head; check-phones merges
+// it into a copy of the skin and runs the full check() on the result.
+const PHONES_FORMAT = "chip-phones/1", PHONES_KEYS = ["format", "from", "colors", "sprites", "headphones"];
+const cap = (n) => n.charAt(0).toUpperCase() + n.slice(1);
+
+// the sprite called `name` as the phone sees it (mirrors flipped), or undefined
+function spriteOf(skin, name, depth = 0) {
+  const sp = isObj(skin.sprites) && own(skin.sprites, name) ? skin.sprites[name] : null;
+  if (!isObj(sp) || depth > 9) return undefined;
+  if (typeof sp.mirror === "string") { const t = spriteOf(skin, sp.mirror, depth + 1); return t && P.mirrored(t); }
+  return sp;
+}
+// a sprite and the sprites its mirror chain reaches
+function chainOf(skin, name) {
+  const out = [];
+  while (typeof name === "string" && isObj(skin.sprites) && isObj(skin.sprites[name]) && !out.includes(name) && out.length < 10) { out.push(name); name = skin.sprites[name].mirror; }
+  return out;
+}
+const keyColours = (sp) => (isObj(sp) && isObj(sp.keys) ? Object.values(sp.keys).filter((c) => typeof c === "string") : []);
+
+// the skin without its headphones: the pair's sprites (unless another slot draws with them) and the colours only they used
+function withoutPhones(skin) {
+  const out = { ...skin, colors: { ...(isObj(skin.colors) ? skin.colors : {}) }, sprites: { ...(isObj(skin.sprites) ? skin.sprites : {}) } };
+  delete out.headphones;
+  const mine = chainOf(skin, skin.headphones);
+  const others = new Set([...Object.values(isObj(skin.eyes) && isObj(skin.eyes.sprites) ? skin.eyes.sprites : {}), skin.mouth, skin.faceBase, skin.faceTop].filter((n) => typeof n === "string").flatMap((n) => chainOf(skin, n)));
+  for (const [n, sp] of Object.entries(skin.sprites || {})) if (!mine.includes(n) && isObj(sp) && typeof sp.mirror === "string") chainOf(skin, sp.mirror).forEach((m) => others.add(m));
+  const removed = mine.filter((n) => !others.has(n)), dropped = new Set(removed.flatMap((n) => keyColours(skin.sprites[n])));
+  removed.forEach((n) => delete out.sprites[n]);
+  const kept = new Set(Object.values(out.sprites).flatMap(keyColours));
+  for (const c of dropped) if (!kept.has(c)) delete out.colors[c];
+  return out;
+}
+
+// {errors, warnings, merged, phones}: the skin with this pair put on, or what stops it. paths are those of the chip-phones
+// file, which are also the merged skin's ($.colors.x, $.sprites.x, $.headphones)
+function mergePhones(skin, ph, replace) {
+  const errors = [], warnings = [], E = (p, problem, fix) => errors.push({ path: jp(p), problem, fix });
+  if (!isObj(ph)) { E([], "the top level must be one JSON object { ... }", `wrap everything in a single object starting with {"format": "${PHONES_FORMAT}", ...}`); return { errors, warnings }; }
+  if (ph.format !== PHONES_FORMAT) E(["format"], `is ${JSON.stringify(ph.format)}`, `set "format": "${PHONES_FORMAT}"`);
+  const extra = Object.keys(ph).filter((k) => !PHONES_KEYS.includes(k));
+  if (extra.length) warnings.push({ path: jp([]), problem: `unknown ${extra.length === 1 ? "field" : "fields"} ${quoted(extra).join(", ")} will be ignored`, fix: `remove ${extra.length === 1 ? "it" : "them"} (allowed here: ${PHONES_KEYS.join(", ")})` });
+  const colors = ph.colors === undefined ? {} : ph.colors;
+  if (!isObj(colors)) E(["colors"], "must be an object {\"name\": \"#rrggbb\"}", `use {} if you add no colours, or e.g. {"hpMetal": "#8a8f98"}`);
+  if (!isObj(ph.sprites) || !Object.keys(ph.sprites).length) E(["sprites"], "must be an object with the headphones sprite and the sprites it mirrors", `add "sprites": {"<name>": {"keys": {...}, "anchor": [x, y], "frames": {"on": [rows]}}}`);
+  if (typeof ph.headphones !== "string" || !isObj(ph.sprites) || !own(ph.sprites, ph.headphones))
+    E(["headphones"], `${typeof ph.headphones === "string" ? JSON.stringify(ph.headphones) + " isn't" : "isn't"} the name of a sprite in this file`, `set "headphones" to the name of the pair's sprite, one of ${isObj(ph.sprites) ? quoted(Object.keys(ph.sprites)).join(", ") : "your sprites"}`);
+  if (errors.length) return { errors, warnings };
+  for (const [n, sp] of Object.entries(ph.sprites)) if (isObj(sp) && typeof sp.mirror === "string" && !own(ph.sprites, sp.mirror))
+    E(["sprites", n, "mirror"], `mirrors ${JSON.stringify(sp.mirror)}, which isn't in this file (the pair must be self-contained)`, `mirror one of your own sprites, or draw ${JSON.stringify(n)} out in full`);
+
+  const hasPair = typeof skin.headphones === "string";
+  if (hasPair && !replace) {
+    E(["headphones"], `this skin already has headphones (the sprite ${JSON.stringify(skin.headphones)})`, "choose Redo headphones to replace them (on the command line: --replace)");
+    return { errors, warnings };
+  }
+  const base = hasPair && replace ? withoutPhones(skin) : skin;
+  const baseColors = isObj(base.colors) ? base.colors : {}, baseSprites = isObj(base.sprites) ? base.sprites : {};
+  const free = (taken, name) => { let n = "hp" + cap(name.replace(/^hp(?=[A-Z])/, "")), i = 2; const stem = n; while (own(taken, n) || own(colors, n) || own(ph.sprites, n)) n = stem + i++; return n; };
+  if (isObj(colors)) for (const n of Object.keys(colors)) if (own(baseColors, n))
+    E(["colors", n], `the colour name ${JSON.stringify(n)} is already one of this skin's colours (${JSON.stringify(baseColors[n])})`,
+      `rename it, e.g. to ${JSON.stringify(free(baseColors, n))}, in "colors" and in every sprite key that uses it; or delete it here and use the skin's ${JSON.stringify(n)} by name`);
+  for (const n of Object.keys(ph.sprites)) if (own(baseSprites, n))
+    E(["sprites", n], `the sprite name ${JSON.stringify(n)} is already one of this skin's sprites`,
+      `rename it, e.g. to ${JSON.stringify(free(baseSprites, n))}, here and wherever "headphones" or a "mirror" names it`);
+  const nc = isObj(colors) ? Object.keys(colors).length : 0, ns = Object.keys(ph.sprites).length, bc = Object.keys(baseColors).length, bs = Object.keys(baseSprites).length;
+  if (bc + nc > MAX_COLORS) E(["colors"], `adds ${nc} ${nc === 1 ? "colour" : "colours"} to the skin's ${bc}, over the ${MAX_COLORS}-colour limit`,
+    `add at most ${Math.max(0, MAX_COLORS - bc)} new ${MAX_COLORS - bc === 1 ? "colour" : "colours"}: draw with the skin's own colours by name (shade with them) instead of new ones`);
+  if (bs + ns > MAX_SPRITES) E(["sprites"], `adds ${ns} ${ns === 1 ? "sprite" : "sprites"} to the skin's ${bs}, over the ${MAX_SPRITES}-sprite limit`,
+    `add at most ${Math.max(0, MAX_SPRITES - bs)}: one sprite for the pair, plus its mirror if you need one`);
+  if (errors.length) return { errors, warnings };
+  const merged = { ...base, colors: { ...baseColors, ...colors }, sprites: { ...baseSprites, ...ph.sprites }, headphones: ph.headphones };
+  return { errors, warnings, merged, phones: { format: PHONES_FORMAT, from: skin.id, colors, sprites: ph.sprites, headphones: ph.headphones } };
+}
+
+// the report for a chip-phones/1 reply against an installed skin (skinBuf = its file). A pass carries the merged skin as
+// `clean` (minified, for the bridge to store) and the normalised pair as `phones` when opts.clean is set.
+function checkPhones(skinBuf, phonesBuf, opts = {}) {
+  const errors = [], E = (p, problem, fix) => errors.push({ path: jp(p), problem, fix });
+  const done = (warnings = [], skin = null) => buildReport(errors, warnings, skin, "Your headphones", "the complete chip-phones/1 JSON");
+  let skin;
+  try { skin = JSON.parse(skinBuf.toString("utf8")); } catch (e) { skin = null; }
+  if (!isObj(skin)) { E([], "the skin file to put the headphones on isn't valid JSON", "check that the skin is installed"); return done(); }
+  if (phonesBuf.length > MAX_BYTES) { E([], `the file is ${Math.round(phonesBuf.length / 1024)} KB, over the ${MAX_BYTES / 1024} KB limit`, "shrink it: fewer or smaller sprites, no extra spaces or blank lines"); return done(); }
+  const parsed = parseJson(unfence(phonesBuf.toString("utf8")));
+  if (parsed.problem) { E([], parsed.problem, parsed.fix); return done(); }
+  const m = mergePhones(skin, parsed.value, !!opts.replace);
+  errors.push(...m.errors);
+  if (errors.length) return done(m.warnings);
+  const r = check(Buffer.from(JSON.stringify(m.merged)), { clean: true });
+  // the merged skin's own notes (eye looks it doesn't draw, ...) aren't about the pair: keep what names its sprites or colours
+  const paths = Object.keys(m.phones.sprites).map((n) => jp(["sprites", n])), names = [...Object.keys(m.phones.sprites), ...Object.keys(m.phones.colors)].map((n) => JSON.stringify(n));
+  const mine = (w) => paths.some((q) => w.path === q || w.path.startsWith(q + ".") || w.path.startsWith(q + "[")) || w.path === "$.headphones" || names.some((n) => w.problem.includes(n));
+  if (!r.ok) { errors.push(...r.errors.map((e) => ({ ...e }))); const out = done(m.warnings.concat(r.warnings.filter(mine))); out.omitted += r.omitted; return out; }
+  const out = done(m.warnings.concat(r.warnings.filter(mine)), r.skin);
+  if (opts.clean && out.ok) { out.clean = r.clean; out.phones = m.phones; }
+  return out;
+}
+
+// ---------------------------------------------------------------- prompt-phones: the chatbot prompt for headphones only
+// what the prompt tells about one skin: its colours, the face plate rows and how its head measures
+function promptPhones(skin) {
+  const resolve = (n) => (typeof n === "string" ? spriteOf(skin, n) : undefined);
+  const sprites = isObj(skin.sprites) ? skin.sprites : {}, colors = isObj(skin.colors) ? skin.colors : {};
+  const es = isObj(skin.eyes) && isObj(skin.eyes.sprites) ? skin.eyes.sprites : {};
+  const faces = ["faceBase", "faceTop"].filter((k) => resolve(skin[k]));
+  const fit = phonesFit({ keys: {}, anchor: [0, 0], frames: { on: [] } }, { eyeL: resolve(es.eyeL), eyeR: resolve(es.eyeR), frontL: resolve(es.frontL), frontR: resolve(es.frontR) }, faces.map((k) => resolve(skin[k])));
+  const pts = (sp, at = [0, 0]) => inkOf(sp, firstFrame(sp), at);
+  const faceInk = faces.flatMap((k) => pts(resolve(skin[k])));
+  const eyeInk = ["L", "R"].flatMap((side) => ["eye", "front"].flatMap((l) => (resolve(es[l + side]) ? inkOf(resolve(es[l + side]), "open", rigAt("eye" + side)) : [])));
+  const top = Math.min(...(faceInk.length ? faceInk : eyeInk).map((p) => p[1]));
+  const eyeOut = Math.max(0, ...eyeInk.map((p) => Math.abs(p[0])));   // how far out the eyes reach
+  const cupFrom = Math.max(fit.edge ? Math.max(Math.abs(fit.edge[0]), fit.edge[1]) : 0, eyeOut + 1);
+  const box = (ink, sign) => { const q = ink.filter((p) => Math.sign(p[0]) === sign); return q.length ? `x ${Math.min(...q.map((p) => p[0]))}..${Math.max(...q.map((p) => p[0]))}, y ${Math.min(...q.map((p) => p[1]))}..${Math.max(...q.map((p) => p[1]))}` : "none"; };
+  const rows = (k) => {
+    const sp = resolve(skin[k]), name = skin[k], fr = firstFrame(sp), legend = Object.entries(sp.keys || {}).map(([c, v]) => `${c} = ${v}`).join(", ");
+    return `${k}: sprite ${JSON.stringify(name)}, ${P.spriteSize(sp).join("x")} px, anchor [${sp.anchor}] (a pixel at row r, column c lies at x ${"c"} - ${sp.anchor[0]}, y r - ${sp.anchor[1]} from the head's centre), keys: ${legend}\n` +
+      sp.frames[fr].map((r, i) => `${String(i).padStart(3)} ${r}`).join("\n");
+  };
+  const used = Object.keys(colors).length, roles = builtinColours(), hp = phonesNumbers();
+  const left = (n, max) => Math.max(0, max - n);
+  const colorLines = Object.entries(colors).map(([k, v]) => `  ${k}: ${v}`).join("\n") || "  (none: the skin only uses Chip's built-in colours)";
+  return `You are drawing headphones for an existing character on Chip, my desk buddy: a small animated pixel-art face on an old
+phone next to my monitors. The character is already made: "${skin.name}" (id ${JSON.stringify(skin.id)}). Make ONLY its headphones,
+so they fit its head, and reply with ONE chip-phones/1 JSON file. Don't change or resend the skin.
+
+How to work
+1. Reply with at most three short lines of notes, then the complete JSON in one \`\`\`json code block, or as a downloadable
+   file named ${skin.id}-headphones.json. Nothing else. Don't ask questions: choose sensible defaults and say so in one line.
+2. If you can run code, build the sprite with code and check every rule below before you reply.
+3. If I paste validation errors back, fix exactly those, keep everything else, and send the whole JSON again.
+
+The reply, chip-phones/1:
+{"format": "${PHONES_FORMAT}", "from": ${JSON.stringify(skin.id)}, "colors": {"<new colour>": "#rrggbb"}, "sprites": {"<name>": <sprite>}, "headphones": "<name of the pair's sprite>"}
+${spriteRules(roles)}
+  - "colors" holds only NEW colours. A key may also name one of the skin's colours (below) or a built-in one, without listing it.
+  - Names must be new: they get merged into the skin, so a colour or sprite name the skin already has is refused. Start every new name with "hp" (hpBand, hpFoam, hpPair, ...).
+  - Self-contained: "headphones" names a sprite in this file, and a "mirror" may only name another sprite of this file. At most 1 frame is drawn (the first).
+
+${phonesRules()}
+This character
+- Accent: ${skin.accent ? skin.accent : "none (it follows the accent I pick, so built-in colours that follow the accent change with it)"}.
+- The skin's own colours (use them by name to match the character; add new ones only for what it lacks):
+${colorLines}
+- Room left: ${left(used, MAX_COLORS)} new colours (the skin has ${used} of ${MAX_COLORS}) and ${left(Object.keys(sprites).length, MAX_SPRITES)} new sprites (${Object.keys(sprites).length} of ${MAX_SPRITES} used).
+- Sprites already in the skin (don't reuse these names): ${quoted(Object.keys(sprites)).join(", ")}.
+- Measured on this head (px from its centre, x right, y down; the checker uses the same numbers):
+  - eyes: left ${box(eyeInk, -1)}; right ${box(eyeInk, 1)} (open look, anchored at (${rigAt("eyeL")}) and (${rigAt("eyeR")})).
+  - the head ${faces.length ? `is the ${faces.join(" and ")} plate: its highest pixel is at y ${top}` : `has no face plate: the eyes are the face, their highest pixel is at y ${top}`}.
+  - at eye height (y ${fit.rows[0]}..${fit.rows[1]}) the head's edge is at x ${fit.edge ? fit.edge[0] + " and " + fit.edge[1] : "?"} and the eyes reach out to x ${-eyeOut} and ${eyeOut}: the ear cups sit outside both, so their inner side starts at |x| ${cupFrom} or more (never on the eyes), on both sides.
+  - the band's underside on the middle column goes at least 5 px above y ${top}. The whole pair must fit in 72 rows: with a band about 9 px thick, keep it within y ${top - 14} to y ${top - 14 + 71}.
+${faces.length ? "\n" + faces.map(rows).join("\n\n") + "\n" : ""}
+${phonesReference(hp)}
+`;
+}
+
 // ---------------------------------------------------------------- main
 const [cmd, arg, ...rest] = process.argv.slice(2);
 if (cmd === "check" && arg) {
   process.stdout.write(JSON.stringify(check(arg === "-" ? fs.readFileSync(0) : fs.readFileSync(arg), { clean: rest.includes("--clean") })));
 } else if (cmd === "prompt") {
   process.stdout.write(prompt());
+} else if (cmd === "prompt-phones" && arg) {
+  let skin;
+  try { skin = JSON.parse(fs.readFileSync(arg, "utf8")); } catch (e) { console.error(`can't read the skin ${arg}: ${e.message}`); process.exit(1); }
+  if (!isObj(skin) || typeof skin.id !== "string") { console.error(`${arg} isn't a skin file`); process.exit(1); }
+  process.stdout.write(promptPhones(skin));
+} else if (cmd === "check-phones" && arg && rest.some((a) => !a.startsWith("--"))) {
+  const src = rest.find((a) => !a.startsWith("--"));
+  let skinBuf;
+  try { skinBuf = fs.readFileSync(arg); } catch (e) { console.error(`can't read the skin ${arg}: ${e.message}`); process.exit(1); }
+  process.stdout.write(JSON.stringify(checkPhones(skinBuf, src === "-" ? fs.readFileSync(0) : fs.readFileSync(src), { replace: rest.includes("--replace"), clean: rest.includes("--clean") })));
 } else if (cmd === "example") {
   process.stdout.write(pretty(example()) + "\n");
 } else {
-  console.error("usage: node laptop/skin.js check -|<file> [--clean] | prompt | example");
+  console.error("usage: node laptop/skin.js check -|<file> [--clean] | prompt | example | prompt-phones <skin> | check-phones <skin> -|<file> [--replace] [--clean]");
   process.exit(2);
 }

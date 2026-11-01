@@ -1652,6 +1652,7 @@ class Skins:
 
     def __init__(self):
         self.lock = threading.Lock()
+        self.rev = 0  # bumped whenever an installed skin's file changes; /stats carries it, so a phone re-reads the skin it wears
 
     @staticmethod
     def run(*args, stdin=b""):
@@ -1717,6 +1718,7 @@ class Skins:
             if not os.path.isfile(skin_path(skin_id)) and len(self.listing()) >= SKIN_LIMIT:
                 return None, (409, {"error": f"at most {SKIN_LIMIT} skins: delete one first"})
             self.write(skin_path(skin_id), self.named(report["clean"], name))
+            self.rev += 1
             try:
                 os.remove(os.path.join(SKINS_DIR, "_draft.json"))
             except OSError:
@@ -1780,6 +1782,70 @@ class Skins:
         except OSError:
             return None
 
+    # -- headphones made for an installed skin (chip-phones/1): prompt, check, draft, install
+    @staticmethod
+    def phones_draft_path(skin_id):
+        return os.path.join(SKINS_DIR, f"_phones-{skin_id}.json")  # the underscore keeps listing() from taking it for a skin
+
+    def phones_prompt(self, skin_id):
+        """The chatbot prompt for this skin's headphones, or None if it isn't installed."""
+        if not os.path.isfile(skin_path(skin_id)):
+            return None
+        return self.run("prompt-phones", skin_path(skin_id)).decode()
+
+    def check_phones(self, skin_id, body, replace):
+        """The report for a chip-phones/1 reply against the installed skin (None if it isn't installed); a passing one is
+        kept as that skin's phones draft, with whether it replaces a pair."""
+        if not os.path.isfile(skin_path(skin_id)):
+            return None
+        args = ["check-phones", skin_path(skin_id), "-", "--clean"] + (["--replace"] if replace else [])
+        report = json.loads(self.run(*args, stdin=body))
+        report.pop("clean", None)
+        phones = report.pop("phones", None)
+        if report.get("ok") and phones:
+            with self.lock:
+                self.write(self.phones_draft_path(skin_id), json.dumps({"replace": bool(replace), "phones": phones}, separators=(",", ":")))
+        return report
+
+    def phones_draft(self, skin_id):
+        """{"replace", "phones"} of the kept draft, or None."""
+        try:
+            with open(self.phones_draft_path(skin_id)) as f:
+                draft = json.load(f)
+            return draft if isinstance(draft, dict) and isinstance(draft.get("phones"), dict) else None
+        except (OSError, ValueError):
+            return None
+
+    def with_phones_draft(self, skin_id):
+        """The installed skin with its phones draft put on (text), for the dashboard's preview; None without a draft."""
+        draft = self.phones_draft(skin_id)
+        if draft is None or not os.path.isfile(skin_path(skin_id)):
+            return None
+        args = ["check-phones", skin_path(skin_id), "-", "--clean"] + (["--replace"] if draft.get("replace") else [])
+        report = json.loads(self.run(*args, stdin=json.dumps(draft["phones"]).encode()))
+        return report.get("clean") if report.get("ok") else None
+
+    def install_phones(self, skin_id):
+        """(list, None) after merging the phones draft into the installed skin file, else (None, (status, error body)).
+        Reads, re-checks and writes under the lock, with the same atomic write as every other skin change."""
+        with self.lock:
+            draft = self.phones_draft(skin_id)
+            if not os.path.isfile(skin_path(skin_id)):
+                return None, (404, {"error": "not found"})
+            if draft is None:
+                return None, (404, {"error": "no headphones draft: check a pair first"})
+            args = ["check-phones", skin_path(skin_id), "-", "--clean"] + (["--replace"] if draft.get("replace") else [])
+            report = json.loads(self.run(*args, stdin=json.dumps(draft["phones"]).encode()))  # the skin or the pack may have changed since
+            if not report.get("ok") or not report.get("clean"):
+                return None, (409, {"error": "the headphones no longer pass the check", "report": {k: v for k, v in report.items() if k not in ("clean", "phones")}})
+            self.write(skin_path(skin_id), report["clean"])
+            self.rev += 1
+            try:
+                os.remove(self.phones_draft_path(skin_id))
+            except OSError:
+                pass
+        return self.listing(), None
+
     def rename(self, skin_id, name):
         """True if the installed skin exists and now has this display name."""
         with self.lock:
@@ -1787,6 +1853,7 @@ class Skins:
             if text is None:
                 return False
             self.write(skin_path(skin_id), self.named(text, name))
+            self.rev += 1
         return True
 
     def delete(self, skin_id):
@@ -1796,6 +1863,10 @@ class Skins:
                 os.remove(skin_path(skin_id))
             except OSError:
                 return False
+            try:
+                os.remove(self.phones_draft_path(skin_id))
+            except OSError:
+                pass
         if settings.get()["skin"] == skin_id:
             settings.update({"skin": ""})
         if settings.get()["phonesDefault"] == skin_id:
@@ -1913,7 +1984,7 @@ class Handler(BaseHTTPRequestHandler):
                                     "freq": number(q.get("freq")),
                                     "ip": q.get("pip", "") if re.fullmatch(r"[\d.]{7,15}", q.get("pip", "")) else None}
                                    if q.get("ssid") else None))  # the phone's own Wi-Fi: names and numbers only
-            return self.send_json(dict(stats.snapshot(), **typing.snapshot(), settingsRev=settings.rev,
+            return self.send_json(dict(stats.snapshot(), **typing.snapshot(), settingsRev=settings.rev, skinsRev=skins.rev,
                                        attention=attention.pending()))
         if url.path == "/viz":
             self.send_response(200)
@@ -1969,6 +2040,18 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/skins/draft.json":
             text = skins.draft()
             return self.send_json({"error": "no draft"}, 404) if text is None else self.send_raw_json(text)
+        m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/(phones-prompt|with-headphones\.json)", url.path)
+        if m:  # making headphones for an installed skin: dashboard only (the phone's page never needs these)
+            if not self.dashboard_only(reading=True):
+                return
+            try:
+                if m.group(2) == "phones-prompt":
+                    text = skins.phones_prompt(m.group(1))
+                    return self.send_text(text) if text is not None else self.send_json({"error": "not found"}, 404)
+                text = skins.with_phones_draft(m.group(1))   # the preview: the skin with the checked pair on
+            except (OSError, ValueError, subprocess.SubprocessError) as e:
+                return self.skin_failed(e)
+            return self.send_raw_json(text) if text else self.send_json({"error": "no headphones draft"}, 404)
         m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/headphones\.json", url.path)
         if m:  # another skin's headphones, for Chip to borrow (chip-phones/1)
             part = skins.headphones(m.group(1))
@@ -2005,6 +2088,22 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"error": "expected {\"name\": 1-40 characters} or nothing"}, 400)
             try:
                 listing, failed = skins.install(name)
+            except (OSError, ValueError, KeyError, subprocess.SubprocessError) as e:
+                return self.skin_failed(e)
+            return self.send_json(listing) if failed is None else self.send_json(failed[1], failed[0])
+        m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/headphones/(check|install)", path)
+        if m:  # headphones made for an installed skin: dashboard only, like /link/*
+            if not self.dashboard_only():
+                return
+            skin_id = m.group(1)
+            try:
+                if m.group(2) == "check":  # the body is the chip-phones/1 text; ?replace=1 when the skin has a pair
+                    body = self.read_body(SKIN_MAX)
+                    if body is None:
+                        return
+                    report = skins.check_phones(skin_id, body, parse_qs(urlsplit(self.path).query).get("replace") == ["1"])
+                    return self.send_json(report) if report is not None else self.send_json({"error": "not found"}, 404)
+                listing, failed = skins.install_phones(skin_id)
             except (OSError, ValueError, KeyError, subprocess.SubprocessError) as e:
                 return self.skin_failed(e)
             return self.send_json(listing) if failed is None else self.send_json(failed[1], failed[0])

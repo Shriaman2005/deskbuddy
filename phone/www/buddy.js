@@ -615,6 +615,10 @@
     state.laptop = d;
     if (Object.keys(pendingPrefs).length) pushPrefs();
     else if (d.settingsRev != null && d.settingsRev !== prefsRev) syncPrefs();
+    if (d.skinsRev != null) {   // an installed skin's file changed on the laptop (renamed, new headphones): read the one in use again
+      if (skinsRev !== null && d.skinsRev !== skinsRev) skinsReload();
+      skinsRev = d.skinsRev;
+    }
     if (alerts && !wasOnline && t - bootAt > 8000 && !state.night) say("Laptop connected 💻", 2500);
 
     if (d.cpu != null && d.cpu >= 85) { if (!state.busySince) state.busySince = t; } else state.busySince = 0;
@@ -1334,19 +1338,25 @@
     if (performance.now() > 8000 && name !== skinGreeted && !state.night) setTimeout(() => { if (buddyName() === name) { express("joy", 1500); say(`Hi! I'm ${name} 👋`, 2500); } }, 1200);
     skinGreeted = name;
   }
+  let skinsRev = null;   // the laptop's skin-files counter, as last seen (null until the first /stats)
+  function skinsReload() {
+    if (skinWant) loadSkin(skinWant);   // unchanged text is ignored in skinShow
+    if (phonesWant && phonesWant !== "skin" && phonesWant !== "chip") loadPhones(phonesWant);   // a borrowed pair
+  }
   async function loadSkin(id) {
     skinWant = id;
     if (!id) { skinShow(null, ""); app.dataset.skinErr = ""; return; }
     const fail = (why) => { skinShow(null, ""); app.dataset.skinErr = why; };
     if (!SKIN_ID.test(id)) return fail("bad skin id");
-    const cacheable = id !== "draft", key = "skin." + id;
+    const phonesDraft = preview.has("hpdraft") && id !== "draft";   // dashboard preview: this skin with its unsaved headphones on
+    const cacheable = id !== "draft" && !phonesDraft, key = "skin." + id;
     const cached = cacheable ? store.get(key, null) : null;
     if (cached && cached.id === id) skinShow(cached, JSON.stringify(cached));  // at once, and without the laptop
     const retry = () => setTimeout(() => { if (skinWant === id) loadSkin(id); }, 30000);
     let res, text;
     try {
       const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 5000);
-      res = await fetch(C.laptop + (id === "draft" ? "/skins/draft.json" : "/skins/" + id + ".json"), { signal: ctl.signal, cache: "no-store" });
+      res = await fetch(C.laptop + (id === "draft" ? "/skins/draft.json" : "/skins/" + id + (phonesDraft ? "/with-headphones.json" : ".json")), { signal: ctl.signal, cache: "no-store" });
       text = res.ok ? await res.text() : "";
       clearTimeout(t);
     } catch (e) {  // the laptop is away: keep the cached skin, try again later
