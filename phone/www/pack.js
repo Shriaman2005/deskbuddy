@@ -168,42 +168,40 @@
   const num = (v, lo, hi) => typeof v === "number" && isFinite(v) && v >= lo && v <= hi;
   const bad = (msg) => { throw new Error(msg); };
 
-  function mergeSkin(base, skin) {
-    if (!base.eyes) bad("the pack has no eye styles");
-    if (!isObj(skin) || skin.format !== "chip-skin/1") bad("not a chip-skin/1 file");
-    const id = skin.id;
-    if (typeof id !== "string" || !SKIN_ID.test(id)) bad("bad skin id");
-    const ns = (n) => "skin:" + id + ":" + n;
-    const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
-    const palette = Object.assign(Object.create(null), base.palette), roles = Object.keys(base.palette).map((r) => r.toLowerCase());
-    if (skin.colors !== undefined) {
-      if (!isObj(skin.colors)) bad("colors must be an object");
-      const names = Object.keys(skin.colors);
-      if (names.length > 12) bad("more than 12 colours");
-      for (const n of names) {
-        if (!SKIN_NAME.test(n) || roles.includes(n.toLowerCase()) || typeof skin.colors[n] !== "string" || !HEX.test(skin.colors[n])) bad("bad colour " + n.slice(0, 32));
-        palette[n] = { fixed: skin.colors[n].toLowerCase() };
-      }
-    }
-
-    const sprites = Object.assign(Object.create(null), base.sprites);
-    if (!isObj(skin.sprites)) bad("sprites must be an object");
-    const names = Object.keys(skin.sprites);
-    if (names.length > 40) bad("more than 40 sprites");
+  // The hostile-file checks a skin and borrowed headphones share. Colours: {name: "#rrggbb"}, at most `max`, none named
+  // like a base palette role; each is stored in `palette` (prototype-less) as cname(name). Sprites: at most `max`
+  // drawn or mirrored sprites, keys naming a colour of `palette` through key(name) (null = unknown), stored in
+  // `sprites` as sname(name); every mirror chain must end at a drawn sprite.
+  function parseColors(colors, base, palette, max, cname) {
+    if (colors === undefined) return;
+    if (!isObj(colors)) bad("colors must be an object");
+    const names = Object.keys(colors), roles = Object.keys(base.palette).map((r) => r.toLowerCase());
+    if (names.length > max) bad("more than " + max + " colours");
     for (const n of names) {
-      const sp = skin.sprites[n];
+      if (!SKIN_NAME.test(n) || roles.includes(n.toLowerCase()) || typeof colors[n] !== "string" || !HEX.test(colors[n])) bad("bad colour " + n.slice(0, 32));
+      palette[cname(n)] = { fixed: colors[n].toLowerCase() };
+    }
+  }
+  function parseSprites(src, sprites, max, sname, key) {
+    if (!isObj(src)) bad("sprites must be an object");
+    const names = Object.keys(src);
+    if (names.length > max) bad("more than " + max + " sprites");
+    for (const n of names) {
+      const sp = src[n];
       if (!SKIN_NAME.test(n) || !isObj(sp)) bad("bad sprite " + n.slice(0, 32));
       if (own(sp, "mirror")) {
         if (typeof sp.mirror !== "string" || !SKIN_NAME.test(sp.mirror)) bad(n + ": bad mirror");
-        sprites[ns(n)] = { mirror: ns(sp.mirror) };
+        sprites[sname(n)] = { mirror: sname(sp.mirror) };
         continue;
       }
       const keys = Object.create(null);
       if (!isObj(sp.keys)) bad(n + ": no keys");
       for (const k of Object.keys(sp.keys)) {
-        if ([...k].length !== 1 || k === "." || typeof sp.keys[k] !== "string" || !own(palette, sp.keys[k])) bad(n + ": bad key " + k.slice(0, 4));
-        keys[k] = sp.keys[k];
+        const c = typeof sp.keys[k] === "string" ? key(sp.keys[k]) : null;
+        if ([...k].length !== 1 || k === "." || c === null) bad(n + ": bad key " + k.slice(0, 4));
+        keys[k] = c;
       }
       if (!Array.isArray(sp.anchor) || sp.anchor.length !== 2 || !sp.anchor.every(Number.isInteger)) bad(n + ": bad anchor");
       if (sp.glow !== undefined && !num(sp.glow, 0, 1)) bad(n + ": bad glow");
@@ -214,14 +212,28 @@
         if (!FRAME_NAME.test(f) || !Array.isArray(rows) || rows.length > 96 || !rows.every((r) => typeof r === "string" && r.length <= 128)) bad(n + ": bad frame " + f.slice(0, 32));
         frames[f] = rows.slice();
       }
-      sprites[ns(n)] = { keys, anchor: sp.anchor.slice(), glow: sp.glow || 0, frames };
+      sprites[sname(n)] = { keys, anchor: sp.anchor.slice(), glow: sp.glow || 0, frames };
     }
     // a mirror needs a drawn sprite at the end of its chain
     for (const n of names) {
-      let t = ns(n), hops = 0;
+      let t = sname(n), hops = 0;
       while (sprites[t] && sprites[t].mirror && hops++ < 8) t = sprites[t].mirror;
       if (!sprites[t] || sprites[t].mirror) bad(n + ": cannot mirror");
     }
+    return names;
+  }
+
+  function mergeSkin(base, skin) {
+    if (!base.eyes) bad("the pack has no eye styles");
+    if (!isObj(skin) || skin.format !== "chip-skin/1") bad("not a chip-skin/1 file");
+    const id = skin.id;
+    if (typeof id !== "string" || !SKIN_ID.test(id)) bad("bad skin id");
+    const ns = (n) => "skin:" + id + ":" + n;
+
+    const palette = Object.assign(Object.create(null), base.palette);
+    parseColors(skin.colors, base, palette, 12, (n) => n);
+    const sprites = Object.assign(Object.create(null), base.sprites);
+    parseSprites(skin.sprites, sprites, 40, ns, (c) => (own(palette, c) ? c : null));
 
     // the eye style, rebuilt
     const e = skin.eyes;
@@ -271,8 +283,37 @@
     return { pack: merged, id, layers, accent: skin.accent ? skin.accent.toLowerCase() : null };
   }
 
+  // ---------------------------------------------------------------- borrowed headphones (chip-phones/1)
+  // Another installed skin's headphones, as the bridge's /skins/<id>/headphones.json cuts them out: the sprite, the
+  // sprites its mirror chain reaches and the skin colours their keys name. Checked like a skin, against the base
+  // pack only, and kept under "phones:<from>:" so they cannot clash with the base palette or the active skin's colours.
+  // -> {from, name (the sprite to draw), palette, sprites}: additions laid over base + skin.
+  function parsePhones(base, part) {
+    if (!isObj(part) || part.format !== "chip-phones/1") bad("not a chip-phones/1 file");
+    const from = part.from;
+    if (typeof from !== "string" || !SKIN_ID.test(from)) bad("bad phones source");
+    const ns = (n) => "phones:" + from + ":" + n, colors = isObj(part.colors) ? part.colors : part.colors === undefined ? {} : bad("colors must be an object");
+    const palette = Object.create(null), sprites = Object.create(null);
+    parseColors(colors, base, palette, 12, ns);
+    parseSprites(part.sprites, sprites, 9, ns, (c) => (own(colors, c) ? ns(c) : own(base.palette, c) ? c : null));
+    if (typeof part.headphones !== "string" || !own(part.sprites, part.headphones)) bad("headphones: not a sprite of the file");
+    const name = ns(part.headphones), sp = source({ sprites }, name), [w, h] = spriteSize(sp);
+    if (w > 128 || h > 72) bad("headphones: larger than 128x72");
+    return { from, name, palette, sprites };
+  }
+
+  // the pack the player draws: base, then the skin, then the borrowed headphones
+  function compose() {
+    const p = state.skinPack || state.base, ph = state.phones;
+    state.pack = ph ? Object.assign(Object.create(null), p, {
+      palette: Object.assign(Object.create(null), p.palette, ph.palette),
+      sprites: Object.assign(Object.create(null), p.sprites, ph.sprites) }) : p;
+    state.baked = null;
+    if (state.style && state.pack.eyes && !state.pack.eyes.styles[state.style]) state.style = state.pack.eyes.default;
+  }
+
   // ---------------------------------------------------------------- player-facing cache
-  const state = { pack: null, base: null, skin: null, skinRev: 0, accent: null, glow: 1, palette: null, baked: null, style: null };
+  const state = { pack: null, base: null, skinPack: null, skin: null, skinRev: 0, phones: null, phonesRev: 0, accent: null, glow: 1, palette: null, baked: null, style: null };
 
   function bake(pack, name, pal, glowScale) {
     const sp = source(pack, name), size = spriteSize(sp), frames = {};
@@ -377,20 +418,31 @@
       if (!/^chip-pack\/[12]$/.test(state.pack.format)) throw new Error("unsupported pack format " + state.pack.format);
       return state.pack;
     },
-    use(pack) { state.pack = state.base = pack; },
-    // Merge a skin over the base pack (null = back to the base pack). Throws, with nothing changed, if the skin is bad.
-    // Nothing is baked until the next setAccent, which the caller makes (the palette may change with the skin).
+    use(pack) { state.pack = state.base = pack; state.skinPack = state.skin = state.phones = null; },
+    // Merge a skin over the base pack (null = back to the base pack); borrowed headphones stay on top. Throws, with
+    // nothing changed, if the skin is bad. Nothing is baked until the next setAccent, which the caller makes (the
+    // palette may change with the skin).
     setSkin(skin) {
       const m = skin ? mergeSkin(state.base, skin) : null;
       state.skin = m && { id: m.id, layers: m.layers, accent: m.accent };
       state.skinRev++;
-      state.pack = m ? m.pack : state.base;
-      state.baked = null;
-      if (state.style && !state.pack.eyes.styles[state.style]) state.style = state.pack.eyes.default;
+      state.skinPack = m ? m.pack : null;
+      compose();
     },
     get skin() { return state.skin; },
     get skinRev() { return state.skinRev; },
     get skinLayers() { return state.skin ? state.skin.layers : {}; },
+    // Lay another skin's headphones (chip-phones/1) over base + skin (null = none borrowed); the skin stays. Throws,
+    // with nothing changed, if the file is bad. Like setSkin, the bake waits for the next setAccent.
+    setPhones(part) {
+      const ph = part ? parsePhones(state.base, part) : null;
+      state.phones = ph;
+      state.phonesRev++;
+      compose();
+    },
+    get phones() { return state.phones ? state.phones.from : null; },
+    get phonesRev() { return state.phonesRev; },
+    get phonesLayer() { return state.phones ? state.phones.name : null; },   // the borrowed sprite's name, or null
     // the eye style whose sprites get baked (unknown ids mean the pack's default); bakes now if the palette exists
     setStyle(id) {
       const eyes = state.pack.eyes;

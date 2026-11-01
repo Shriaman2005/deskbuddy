@@ -40,27 +40,33 @@
       onStep: null, onEvent: null, shouldDraw: null,
       stats: { moving: 0, tilted: 0, peakMoving: 0, peakTilted: 0 }, pos: {}, camPos: "",
       // eyes: style, pupil size, sprite per layer id, resolved frames; gaze target, gaze shown, the saccade's landing
-      style: null, pupil: "M", noPupil: false, skinRev: -1, spr: {}, env: null, looks: {}, eyeNow: {},
+      style: null, pupil: "M", noPupil: false, skinRev: -1, phonesRev: -1, skinPhones: true, spr: {}, env: null, looks: {}, eyeNow: {},
       gap: 0, gapWant: 0, gapFloor: -Infinity, hpGap: 0, gazeT: [0, 0, false], gazeAt: 0, gz: [0, 0], conv: false, land: null, hold: 0,
     };
 
     // ---------------------------------------------------------------- eyes
     // until setEyes: the rig's own eye sprites, no pupils
     S.env = { style: null, names: { eyeL: byId.eyeL.sprite, eyeR: byId.eyeR.sprite }, fb: pack.fallbacks && pack.fallbacks.eye, spr: ChipPack.source };
-    function setEyes(styleId, pupilSize, showPupils = true) {
+    // skinPhones: false = Chip's own headphones even when the skin has a pair; a borrowed pair (ChipPack.setPhones) wins over both
+    function setEyes(styleId, pupilSize, showPupils = true, skinPhones = true) {
       const eyes = ChipPack.pack.eyes;   // the base pack's, or the base pack's with a skin's style added
       if (!eyes) return;
       const id = typeof styleId === "string" && Object.prototype.hasOwnProperty.call(eyes.styles, styleId) ? styleId : eyes.default, st = eyes.styles[id];
       const size = st.pupils.includes(pupilSize) ? pupilSize : st.pupilDefault, noPupil = !showPupils;
-      if (S.style === st && S.pupil === size && S.noPupil === noPupil && S.skinRev === ChipPack.skinRev) return;
-      S.skinRev = ChipPack.skinRev;
+      skinPhones = !!skinPhones;
+      if (S.style === st && S.pupil === size && S.noPupil === noPupil && S.skinRev === ChipPack.skinRev &&
+        S.phonesRev === ChipPack.phonesRev && S.skinPhones === skinPhones) return;
+      S.skinRev = ChipPack.skinRev; S.phonesRev = ChipPack.phonesRev; S.skinPhones = skinPhones;
       ChipPack.setStyle(id);
       // a layer the style leaves out is null (drawn as nothing), not the rig's default sprite
       S.style = st; S.pupil = size; S.noPupil = noPupil; S.looks = {};
       S.gapFloor = touchFloor(st); applyGap();   // a new style may have wider eyes: the gap stops where they touch
       S.spr = Object.fromEntries(["eyeL", "eyeR", "pupilL", "pupilR", "frontL", "frontR"].map((l) => [l, st.sprites[l] || null]));
       const skinLayers = ChipPack.skinLayers;   // the skin's own mouth, faceBase, faceTop, headphones
-      for (const l of ["mouth", "faceBase", "faceTop", "headphones"]) if (skinLayers[l]) S.spr[l] = skinLayers[l];
+      for (const l of ["mouth", "faceBase", "faceTop"]) if (skinLayers[l]) S.spr[l] = skinLayers[l];
+      // headphones: the borrowed pair, else the skin's own (unless Chip's own are asked for), else the rig's
+      const hp = ChipPack.phonesLayer || (skinPhones && skinLayers.headphones);
+      if (hp) S.spr.headphones = hp;
       S.env = { style: st, names: S.spr, fb: pack.fallbacks && pack.fallbacks.eye, spr: ChipPack.source };
       S.dirty = true;
     }

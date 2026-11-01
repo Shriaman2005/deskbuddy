@@ -44,6 +44,7 @@
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoLongEvery: 4, pomoAutoBreak: true, pomoAutoFocus: false, pomoGoal: 8,
     workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", chipGlow: 100, eyeGap: 0, phonesGap: 0, idleRate: "normal", idleOff: [],
+    phonesFollowSkin: true, phonesDefault: "",  // a skin's own headphones when it has a pair; else "" = Chip's own, or an installed skin id to borrow from
     eyeStyle: "", pupilSize: "M", showPupils: true, skin: "", locName: "", locLat: 0, locLon: 0,  // weather place from the dashboard ("" = config.js); eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
     brightnessDay: C.brightness.day,
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
@@ -1327,6 +1328,7 @@
     window.ChipSkin = skin;
     app.dataset.skin = skin ? skin.id + "@" + ++skinSeq : "";
     paintAccent();
+    phonesPick();  // the rule depends on the skin's own headphones
     // a new look after start-up (installed, picked or renamed on the dashboard) introduces itself by its name
     const name = buddyName();
     if (performance.now() > 8000 && name !== skinGreeted && !state.night) setTimeout(() => { if (buddyName() === name) { express("joy", 1500); say(`Hi! I'm ${name} 👋`, 2500); } }, 1200);
@@ -1365,6 +1367,56 @@
     skinShow(null, "");
   });
 
+  // ---------------------------------------------------------------- headphones (chip-phones/1, borrowed from another skin)
+  // Which pair Chip wears: the active skin's own if phonesFollowSkin and it has a pair; else phonesDefault ("" =
+  // Chip's own; the active skin's id = its own pair; another installed skin's id = that skin's pair, borrowed).
+  // &phones=skin|chip|<id> in the preview overrides it. A borrowed pair is fetched from the bridge and kept in
+  // localStorage per id (phones.<id>); chip.js gets it through window.ChipPhones + data-phones ("id:<id>@<seq>").
+  // Anything that fails is Chip's own pair (chip.js drops a file it refuses to "chip" itself).
+  let phonesWant = "", phonesSeq = 0;   // "skin" | "chip" | the id wanted ("" = nothing yet, or retry on the next pick)
+  function phonesRule() {
+    const sk = app.dataset.skin && window.ChipSkin ? window.ChipSkin : null, p = preview.get("phones");
+    if (p === "skin" || p === "chip") return p;
+    if (!preview.has("phones") && prefs.phonesFollowSkin && sk && typeof sk.headphones === "string") return "skin";
+    const id = preview.has("phones") ? p : prefs.phonesDefault;
+    return !id ? "chip" : sk && id === sk.id ? "skin" : id;
+  }
+  function phonesShow(mode, part) {
+    window.ChipPhones = part || null;
+    app.dataset.phones = part ? "id:" + part.from + "@" + ++phonesSeq : mode;
+  }
+  function phonesPick() {
+    const want = phonesRule();
+    if (want === phonesWant) return;
+    if (want === "skin" || want === "chip") { phonesWant = want; return phonesShow(want); }
+    loadPhones(want);
+  }
+  async function loadPhones(id) {
+    phonesWant = id;
+    if (!SKIN_ID.test(id)) return phonesShow("chip");
+    const key = "phones." + id, cached = store.get(key, null);
+    phonesShow("chip", cached && cached.from === id ? cached : null);  // at once, and without the laptop
+    const retry = () => setTimeout(() => { if (phonesWant === id) loadPhones(id); }, 30000);
+    let res, text;
+    try {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 5000);
+      res = await fetch(C.laptop + "/skins/" + id + "/headphones.json", { signal: ctl.signal, cache: "no-store" });
+      text = res.ok ? await res.text() : "";
+      clearTimeout(t);
+    } catch (e) {  // the laptop is away: keep the cached pair (or Chip's own), try again later
+      return retry();
+    }
+    if (phonesWant !== id) return;  // something else was wanted meanwhile
+    const fail = () => { phonesWant = ""; phonesShow("chip"); };  // "" = the next pick asks again
+    if (res.status === 404) { store.set(key, null); return fail(); }
+    if (!res.ok || text.length > SKIN_MAX) return retry();
+    let part;
+    try { part = JSON.parse(text); } catch (e) { return fail(); }
+    if (!part || part.from !== id) return fail();
+    store.set(key, part);
+    if (!cached || JSON.stringify(cached) !== JSON.stringify(part)) phonesShow("chip", part);
+  }
+
   function applyPrefs(p) {
     const was = brightnessNow(), placeWas = placeKey();
     for (const k in DEFAULT_PREFS) if (typeof p[k] === typeof DEFAULT_PREFS[k]) prefs[k] = p[k];
@@ -1376,6 +1428,7 @@
     app.dataset.chipGlow = prefs.chipGlow;
     app.dataset.eyeGap = prefs.eyeGap;  // px added to each eye's distance from the centre
     app.dataset.phonesGap = preview.has("hpgap") ? preview.get("hpgap") : prefs.phonesGap;  // the same for each headphone ear cup
+    phonesPick();  // whose headphones Chip wears
     app.dataset.eyes = preview.get("eyes") || prefs.eyeStyle;  // chip.js picks them up
     app.dataset.pupil = (preview.get("pupil") || prefs.pupilSize).toUpperCase();
     app.dataset.pupils = prefs.showPupils ? "1" : "0";

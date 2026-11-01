@@ -28,7 +28,10 @@
     // first (it changes the pack, and the accent it brings is already in data-accent-hex), then the eyes (a skin's
     // eye style wins over the chosen one), then one bake. Anything wrong with the skin: back to the base pack, keep
     // running, say why in data-skin-err (buddy.js reports it to the bridge) and tell buddy.js to drop the skin.
-    let skinKey = "";
+    // data-phones picks the headphones: "skin" (the skin's own, if it has a pair), "chip" (Chip's own) or
+    // "id:<id>@<seq>" (another skin's pair, borrowed, with the chip-phones/1 file in window.ChipPhones). They apply
+    // after the skin; borrowed ones that fail drop to "chip", and the skin stays.
+    let skinKey = "", phonesKey = "skin", phonesBad = "";   // phonesBad: the borrowed key that failed (not retried)
     function applySkin() {
       const key = app.dataset.skin && window.ChipSkin ? app.dataset.skin : "";
       if (key === skinKey) return;
@@ -36,9 +39,26 @@
       ChipPack.setSkin(key ? window.ChipSkin : null);
       if (key) app.dataset.skinErr = "";
     }
+    function applyPhones() {
+      const want = app.dataset.phones || "skin";
+      const key = want.startsWith("id:") ? (window.ChipPhones && want !== phonesBad ? want : "chip") : want === "chip" ? "chip" : "skin";
+      if (key === phonesKey) return;
+      try {
+        ChipPack.setPhones(key.startsWith("id:") ? window.ChipPhones : null);
+        phonesKey = key;
+      } catch (e) {
+        phonesFailed(want, e);
+      }
+    }
+    function phonesFailed(want, e) {
+      console.warn("[chip] borrowed headphones " + want + " failed, using Chip's own:", e);
+      phonesBad = want;
+      phonesKey = "chip";
+      ChipPack.setPhones(null);
+    }
     function applyEyes() {
       const sk = ChipPack.skin;
-      player.setEyes(sk ? "skin:" + sk.id : app.dataset.eyes, app.dataset.pupil, app.dataset.pupils !== "0");
+      player.setEyes(sk ? "skin:" + sk.id : app.dataset.eyes, app.dataset.pupil, app.dataset.pupils !== "0", phonesKey === "skin");
       player.setEyeGap(+app.dataset.eyeGap || 0);
       player.setPhonesGap(+app.dataset.phonesGap || 0);
     }
@@ -49,8 +69,11 @@
     }
     function applyLook() {
       try {
-        applySkin(); applyEyes(); applyAccent();
+        applySkin(); applyPhones(); applyEyes(); applyAccent();
       } catch (e) {
+        if (ChipPack.phones) {   // drop the borrowed headphones first: the skin may be fine
+          try { phonesFailed(phonesKey, e); applyEyes(); applyAccent(); return; } catch (e2) { e = e2; }
+        }
         if (!ChipPack.skin && !skinKey) throw e;   // not the skin's fault
         const id = ChipPack.skin ? ChipPack.skin.id : (window.ChipSkin || {}).id;
         app.dataset.skinErr = String(e && e.message || e).slice(0, 100);
@@ -62,7 +85,7 @@
       }
     }
     applyLook();
-    new MutationObserver(applyLook).observe(app, { attributes: true, attributeFilter: ["data-skin", "data-eyes", "data-pupil", "data-pupils", "data-eye-gap", "data-phones-gap", "data-accent-hex", "data-chip-glow"] });
+    new MutationObserver(applyLook).observe(app, { attributes: true, attributeFilter: ["data-skin", "data-phones", "data-eyes", "data-pupil", "data-pupils", "data-eye-gap", "data-phones-gap", "data-accent-hex", "data-chip-glow"] });
 
     // ---------------------------------------------------------------- signals
     const sig = () => ({

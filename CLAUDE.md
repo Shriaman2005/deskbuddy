@@ -25,6 +25,10 @@ bridge. README.md has the full feature list: read only the section you need.
   Skins live in ~/.config/deskbuddy/skins/ (<id>.json, _draft.json). Settings eyeStyle, pupilSize, skin.
   A skin's "name" is what Chip calls itself ("Hi! I'm …"), set at install / renamed on the dashboard
   (/skins/install {name}, /skins/<id>/rename). Optional "headphones" slot (128x72, symmetric, anchor on the middle column).
+- Borrowed headphones: GET /skins/<id>/headphones.json = chip-phones/1 (that skin's headphones sprite + its mirror chain + the
+  colours they use); ChipPack.setPhones lays it over base + skin under "phones:<id>:"; chip.js reads #app data-phones
+  ("skin" | "chip" | "id:<id>@<seq>", file in window.ChipPhones); buddy.js picks it from phonesFollowSkin/phonesDefault
+  (cached as phones.<id>), preview `&phones=skin|chip|<id>`.
 - `design/headphones.js` draws the default headphones sprite (`--write` puts it in pack.json). Setting phonesGap
   (ear-cup gap) is applied in player.js by repeating/cutting the headphones' anchor column, so it works for skins too.
 - `design/` — design deltas from Claude Design (e.g. pack-v2-delta.json) and their changelog; merged into

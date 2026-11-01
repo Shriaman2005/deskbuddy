@@ -1734,10 +1734,39 @@ class Skins:
                 with open(os.path.join(SKINS_DIR, n)) as f:
                     skin = json.load(f)
                 out.append({"id": m.group(1), "name": str(skin.get("name", ""))[:40], "author": str(skin.get("author", ""))[:40],
-                            "bytes": os.path.getsize(os.path.join(SKINS_DIR, n))})
-            except (OSError, ValueError, AttributeError):
+                            "bytes": os.path.getsize(os.path.join(SKINS_DIR, n)), "hasHeadphones": Skins.phones_of(skin) is not None})
+            except (OSError, ValueError, AttributeError, TypeError):
                 continue
         return out
+
+    @staticmethod
+    def phones_of(skin):
+        """chip-phones/1, a skin's headphones on their own for another skin to borrow: the headphones sprite, every
+        sprite its mirror chain reaches, and only the skin colours those sprites' keys name. None if it has none."""
+        sprites = skin.get("sprites") if isinstance(skin, dict) else None
+        name = skin.get("headphones") if isinstance(skin, dict) else None
+        if not isinstance(sprites, dict) or not isinstance(name, str) or not isinstance(sprites.get(name), dict):
+            return None
+        out, n = {}, name
+        while isinstance(sprites.get(n), dict) and n not in out and len(out) < 9:
+            out[n] = sprites[n]
+            n = sprites[n].get("mirror")
+            if not isinstance(n, str):
+                break
+        colors = skin.get("colors") if isinstance(skin.get("colors"), dict) else {}
+        used = {c for sp in out.values() if isinstance(sp.get("keys"), dict) for c in sp["keys"].values() if isinstance(c, str)}
+        return {"format": "chip-phones/1", "from": skin.get("id"), "colors": {k: v for k, v in colors.items() if k in used},
+                "sprites": out, "headphones": name}
+
+    def headphones(self, skin_id):
+        text = self.get(skin_id)
+        try:
+            part = self.phones_of(json.loads(text)) if text is not None else None
+        except ValueError:
+            return None
+        if part:
+            part["from"] = skin_id  # the file name is the id the phone asked for
+        return part
 
     @staticmethod
     def get(skin_id):
@@ -1934,6 +1963,10 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/skins/draft.json":
             text = skins.draft()
             return self.send_json({"error": "no draft"}, 404) if text is None else self.send_raw_json(text)
+        m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/headphones\.json", url.path)
+        if m:  # another skin's headphones, for Chip to borrow (chip-phones/1)
+            part = skins.headphones(m.group(1))
+            return self.send_json(part) if part else self.send_json({"error": "no headphones"}, 404)
         m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})\.json", url.path)
         text = skins.get(m.group(1)) if m else None
         if text is None:
