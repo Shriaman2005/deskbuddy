@@ -29,6 +29,7 @@ APPS = {
 }
 
 battery = {}
+wifi = {}  # this phone's own connection only (no scan of other networks)
 dictation = Dictation()
 
 
@@ -41,6 +42,22 @@ def battery_loop():
         try:
             out = subprocess.run(["termux-battery-status"], capture_output=True, text=True, timeout=20).stdout
             battery.update(json.loads(out))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+        time.sleep(60)
+
+
+def wifi_loop():
+    """termux-wifi-connectioninfo is slow on this CPU: once a minute here, never per request."""
+    while True:
+        try:
+            out = subprocess.run(["termux-wifi-connectioninfo"], capture_output=True, text=True, timeout=20).stdout
+            info = json.loads(out)
+            ssid = str(info.get("ssid") or "").strip('"')[:32]
+            wifi.clear()
+            if info.get("supplicant_state") == "COMPLETED" and ssid:
+                wifi.update(ssid=ssid, rssi=info.get("rssi"), speed=info.get("link_speed_mbps"),
+                            freq=info.get("frequency_mhz"), ip=info.get("ip"))
         except (OSError, ValueError, subprocess.TimeoutExpired):
             pass
         time.sleep(60)
@@ -72,6 +89,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "charging": battery.get("status") in ("CHARGING", "FULL"),
                 "temp": battery.get("temperature"),
                 "flashlight": alert.flashlight,
+                "wifi": dict(wifi) or None,
             })
         if urlsplit(self.path).path == "/api/dictate/status":
             return self.send_json(dictation.status())
@@ -112,7 +130,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif url.path in ("/api/dictate/start", "/api/dictate/stop", "/api/dictate/cancel"):
             action = url.path.rsplit("/", 1)[1]
             try:
-                kwargs = {"fast": q.get("fast") == "1", "laptop": q.get("on") == "laptop"} if action == "stop" else {}
+                kwargs = {"fast": q.get("fast") == "1", "engine": q.get("on", "phone"), "lang": q.get("lang", "hinglish")} if action == "stop" else {}
                 return self.send_json(getattr(dictation, action)(**kwargs))
             except (OSError, subprocess.SubprocessError) as e:
                 dictation.cancel()
@@ -124,4 +142,5 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     threading.Thread(target=battery_loop, daemon=True).start()
+    threading.Thread(target=wifi_loop, daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

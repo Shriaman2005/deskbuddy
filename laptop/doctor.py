@@ -58,6 +58,12 @@ link = get("/link")
 if not check(link is not None, "bridge answers on 127.0.0.1:8765", "start the bridge (see above)"):
     sys.exit(1)
 check(link["pinned"], "phone's ssh key pinned", "open Termux on the phone once; the bridge pins its key when it connects")
+why = link.get("reason")  # why the tunnel is down (None when it's up), see PhoneLink.reason()
+check(why != "paused", "link not paused", "dashboard: Connections, turn off “Pause the link”")
+check(why != "not home network", "laptop on a home network" + (f" ({link['laptop']['ssid']})" if link.get("laptop", {}).get("ssid") else ""),
+      "join a network listed in linkNetworks, or turn off “Only on home networks” in the dashboard")
+check(why != "key mismatch", "something at the phone's address presents the pinned key",
+      "a different device answers there, or the phone was reset: dashboard, Connections, “Replace phone”")
 check(link["tunnel"], f"ssh tunnel up to {link['ip']}",
       "phone and laptop on the same Wi-Fi? Termux open (or Termux:Boot installed)? The bridge rescans the network by itself")
 phone = get("/phone") or {}
@@ -75,7 +81,8 @@ pactl info >/dev/null 2>&1 && echo pulse=1
 [ -x ~/.termux/boot/deskbuddy ] && echo boot=1
 [ -f ~/stt/whisper-cli ] && echo stt=1
 """
-out = run("ssh", "-p", "8022", "-o", "BatchMode=yes", "-o", "ConnectTimeout=6", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
+out = run("ssh", "-p", str(link.get("port", 8022)), "-o", "BatchMode=yes", "-o", "UpdateHostKeys=no",
+          "-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "ClearAllForwardings=yes", "-o", "ConnectTimeout=6", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
           "-o", "GlobalKnownHostsFile=/dev/null", "-o", "HostKeyAlias=chip-phone", "-o", "StrictHostKeyChecking=yes",
           ip or "", script) if ip else ""
 f = dict(l.split("=") for l in out.split() if "=" in l)

@@ -11,6 +11,7 @@ const XML = `
     <method name="Pointer"><arg type="i" direction="out"/><arg type="i" direction="out"/></method>
     <method name="Monitors"><arg type="s" direction="out"/></method>
     <method name="Start"/>
+    <method name="FocusedApp"><arg type="s" direction="out"/></method>
     <signal name="Moved"><arg type="i"/><arg type="i"/></signal>
   </interface>
 </node>`;
@@ -50,6 +51,12 @@ export default class ChipGaze extends Extension {
         const primary = Main.layoutManager.primaryIndex;
         return JSON.stringify(Main.layoutManager.monitors.map((m, i) =>
             ({x: m.x, y: m.y, w: m.width, h: m.height, primary: i === primary})));
+    }
+
+    // The focused window's app class only (e.g. "org.gnome.Terminal"), so the bridge picks the paste shortcut.
+    FocusedApp() {
+        const w = global.display.focus_window;
+        return w ? (w.get_wm_class() || w.get_gtk_application_id() || '') : '';
     }
 
     Start() {

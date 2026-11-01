@@ -1,6 +1,6 @@
 {
   "uuid": "chip-gaze@deskbuddy",
   "name": "Chip gaze",
-  "description": "Tells the desk buddy bridge where the mouse pointer is (session bus org.deskbuddy.Gaze), so Chip's eyes can follow it. No UI, no network, positions are never logged.",
+  "description": "Tells the desk buddy bridge where the mouse pointer is (session bus org.deskbuddy.Gaze), so Chip's eyes can follow it, and the focused app's class (to pick the paste shortcut for dictation). No UI, no network, nothing is logged.",
   "shell-version": ["46"]
 }

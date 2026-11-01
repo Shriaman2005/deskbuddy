@@ -38,7 +38,7 @@
     clockNow: true, clockHours: true, clockAir: true, ringCpu: true, ringRam: true, ringGpu: true, ringBattery: true, mediaCard: true,
     sounds: C.sounds, talk: C.talk, idle: true, greetings: true, hourly: true, trackToasts: true, laptopAlerts: true, phoneAlerts: true,
     shake: true, stretch: true, stretchMin: C.stretchEveryMin, dictation: true, fastDictation: C.fastDictation ?? false,
-    dictateOnLaptop: false, burnGuard: false, gazeFollow: false,
+    dictEngine: "phone", dictLang: "hinglish", burnGuard: false, gazeFollow: false,
     torch: true, torchAsk: true, torchDone: true, torchApps: true, notifyAllApps: false, alertTorch: true, alertSound: true,
     torchAway: false, torchRepeat: true, torchNight: false, behaviourTorch: true, torchSeconds: 3, soundSeconds: 2,
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
@@ -52,6 +52,8 @@
     { sounds: store.get("sounds", C.sounds), talk: store.get("talk", C.talk),
       fastDictation: store.get("fastDictation", C.fastDictation ?? false) },  // drawer toggles from before the dashboard
     store.get("prefs", {}));
+  { const old = store.get("prefs", {}).dictateOnLaptop;  // before dictEngine: a yes/no for "dictate on the laptop"
+    if (typeof old === "boolean" && !("dictEngine" in store.get("prefs", {}))) prefs.dictEngine = old ? "laptop" : "phone"; }
 
   const state = {
     night: false, wakeUntil: 0, lastTouch: now(), lastHour: -1,
@@ -432,7 +434,25 @@
   });
 
   // ---------------------------------------------------------------- dictation: hold the face with two fingers, speak, let go
-  // The phone records and transcribes offline (dictation.py in Termux); the laptop types the text.
+  // The phone records (dictation.py in Termux) and transcribes with the engine from the dashboard: whisper on the phone,
+  // whisper on the laptop or a cloud API (both through the bridge). The laptop types the text. No fallback between engines.
+  const ENGINES = ["phone", "laptop", "cloud"];
+  const ENGINE_ICON = { phone: "📱", laptop: "💻", cloud: "☁️" };
+  const ENGINE_NAME = { phone: "Phone", laptop: "Laptop", cloud: "Cloud" };
+  // error code (laptop/stt.py ERRORS) -> [mood, what Chip says]; the codes are the same on the phone and the bridge
+  const DICT_ERRORS = {
+    silence: ["sad", "🤔 Didn't hear anything. Hold me with two fingers, speak, then let go"],
+    too_short: ["sad", "🤔 That was too short. Hold a little longer"],
+    no_words: ["sad", "🤔 Couldn't make out any words"],
+    key_missing: ["worried", "☁️ No cloud key yet — add it on the dashboard"],
+    key_rejected: ["worried", "☁️ Cloud key was rejected — check the dashboard"],
+    quota: ["worried", "☁️ Cloud limit reached — try again later"],
+    offline: ["worried", "📡 Can't reach the speech engine — is the laptop connected?"],
+    timeout: ["worried", "⏳ The speech engine took too long"],
+    lang_unsupported: ["worried", "🌐 This engine doesn't do that language — change it on the dashboard"],
+    provider_error: ["worried", "😵 The speech engine failed"],
+    locked: ["worried", "🔒 Unlock the laptop first"],
+  };
   const dict = { phase: "idle", cancelArmed: false, level: 0, elapsed: 0, poll: 0, dots: 0 };
   const BARS = "▁▂▃▄▅▆▇█";
   function dictateBubble() {
@@ -469,17 +489,18 @@
       return bubbleNow("Cancelled", 1500);
     }
     dict.phase = "thinking"; sfx.heard(); refreshMood(); look(-0.6, -0.8);
-    const where = prefs.dictateOnLaptop ? "laptop" : "phone";
-    const think = setInterval(() => bubbleNow(`💭 ${".".repeat(1 + (dict.dots++ % 3))} ${where === "laptop" ? "💻" : ""}`), 400);
-    const r = await fetch(`/api/dictate/stop?on=${where}${prefs.fastDictation ? "&fast=1" : ""}`, { method: "POST" }).then((x) => x.json()).catch(() => null);
+    const where = ENGINES.includes(prefs.dictEngine) ? prefs.dictEngine : "phone";
+    const think = setInterval(() => bubbleNow(`💭 ${".".repeat(1 + (dict.dots++ % 3))} ${where === "phone" ? "" : ENGINE_ICON[where]}`), 400);
+    const r = await fetch(`/api/dictate/stop?on=${where}&lang=${encodeURIComponent(prefs.dictLang)}${prefs.fastDictation ? "&fast=1" : ""}`, { method: "POST" }).then((x) => x.json()).catch(() => null);
     clearInterval(think); dict.phase = "idle"; look(0, 0); refreshMood();
-    if (!r || r.error === "silence" || r.error === "too short" || (r.text === "" && !r.error)) {
-      express("sad", 2000); return bubbleNow("🤔 Didn't catch that. Hold me with two fingers, speak, then let go", 3500);
+    if (!r) { express("worried", 2500); return bubbleNow(DICT_ERRORS.provider_error[1], 4000); }  // the phone server itself didn't answer
+    if (r.error) {
+      const [mood, line] = DICT_ERRORS[r.error] || ["worried", "😵 Something went wrong: " + r.error];
+      express(mood, 2500); return bubbleNow(line, 4500);
     }
-    if (r.error) return bubbleNow("😵 Something went wrong: " + r.error, 4000);
     const text = r.text;
     if (!state.laptopOnline) { express("worried", 2500); return bubbleNow(`💻 Laptop not connected. Heard: “${text}”`, 9000, true); }
-    const res = await fetch(C.laptop + "/type", { method: "POST", body: text }).then((x) => x.status).catch(() => 0);
+    const res = await fetch(C.laptop + "/type", { method: "POST", body: text }).then((x) => x.status).catch(() => 0);  // any language: the bridge pastes non-ASCII text
     if (res === 200) { express("happy", 1800); anim("hop", 550); bubbleNow(`✓ Typed: “${text}”`, 6000, true); }
     else if (res === 423) { express("worried", 2500); bubbleNow(`🔒 Unlock the laptop first. Heard: “${text}”`, 9000, true); }
     else { express("worried", 2500); bubbleNow(`💻 Couldn't type it. Heard: “${text}”`, 9000, true); }
@@ -575,7 +596,8 @@
     // the phone tells the laptop how it's doing, for the dashboard's status line
     const P = state.phone || {};
     const report = onPhone ? "?" + new URLSearchParams({ who: "phone", rev: prefsRev, mood, screen: screenIdx,
-      bat: P.battery ?? "", chg: P.charging ? 1 : 0, temp: P.temp ?? "", skinErr: app.dataset.skinErr || "" }) : "";
+      bat: P.battery ?? "", chg: P.charging ? 1 : 0, temp: P.temp ?? "", skinErr: app.dataset.skinErr || "",
+      ...(P.wifi ? { ssid: P.wifi.ssid, rssi: P.wifi.rssi ?? "", speed: P.wifi.speed ?? "", freq: P.wifi.freq ?? "", pip: P.wifi.ip ?? "" } : {}) }) : "";
     const d = await getJSON(C.laptop + "/stats" + report, 2500);
     if (d) {
       const was = state.laptopOnline;
@@ -1199,7 +1221,7 @@
     set("sounds", prefs.sounds, prefs.sounds ? "🔊 Sounds on" : "🔈 Sounds off");
     set("talk", prefs.talk, prefs.talk ? "🗣️ Talking on" : "🤐 Talking off");
     set("fastDictation", prefs.fastDictation, prefs.fastDictation ? "⚡ Fast dictation" : "🎙 Best dictation");
-    set("dictateOnLaptop", prefs.dictateOnLaptop, prefs.dictateOnLaptop ? "💻 Dictation on laptop" : "📱 Dictation on phone");
+    set("dictEngine", prefs.dictEngine !== "phone", `${ENGINE_ICON[prefs.dictEngine] || "📱"} Dictation: ${ENGINE_NAME[prefs.dictEngine] || "Phone"}`);
     set("flashlight", !!state.flashlight, state.flashlight ? "🔦 Torch on" : "🔦 Torch off");
   }
   function openDrawer() { renderToggles(); $("#drawer").classList.add("open"); }
@@ -1208,7 +1230,8 @@
     if (!b) return;
     if (b.dataset.app) { $("#drawer").classList.remove("open"); return phone.launch(b.dataset.app); }
     const k = b.dataset.toggle;
-    if (["sounds", "talk", "fastDictation", "dictateOnLaptop"].includes(k)) setPrefs({ [k]: !prefs[k] });
+    if (["sounds", "talk", "fastDictation"].includes(k)) setPrefs({ [k]: !prefs[k] });
+    if (k === "dictEngine") setPrefs({ dictEngine: ENGINES[(ENGINES.indexOf(prefs.dictEngine) + 1) % ENGINES.length] });  // phone -> laptop -> cloud
     if (k === "flashlight") { state.flashlight = !state.flashlight; post(`/api/torch?on=${state.flashlight ? 1 : 0}`); }
     if (k === "reload") return location.reload();
     if (k === "viz") { $("#drawer").classList.remove("open"); return go(VIZ); }

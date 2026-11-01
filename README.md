@@ -46,17 +46,25 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
   - Rotates with the phone (kiFOSSk orientation: Auto-rotate); every screen has a portrait layout.
   - swipe up: apps (Brave, Termux, Files, Settings, All apps) and toggles (sounds, talking,
     dictation speed, visualizer, reload)
-  - **Dictation:** hold Chip's face with two fingers, speak (English or Hinglish), let go: the text is typed
-    wherever the cursor is on the laptop. Slide a finger away before letting go to cancel. Fully offline:
-    the phone records and runs whisper.cpp itself (`phone/dictation.py`, binary and models in `~/stt` in
-    Termux), the laptop only types (`laptop/typer.py`, GNOME's remote-desktop D-Bus API). Never presses
-    Enter, won't type while the laptop is locked, and the mic is only open while you hold.
-    A 4 s sentence takes ~6 s with the default model (base, better Hinglish) or ~3 s with
-    "⚡ Fast dictation" (tiny) from the swipe-up drawer. One finger can't be used: kiFOSSk grabs that long-press.
-    **Phone or laptop:** "Speech model runs on" in the dashboard (or "📱/💻 Dictation on …" in the drawer) moves
-    the transcription to the laptop: the phone still records, sends the clip through the ssh tunnel to the
-    bridge's `POST /transcribe`, and the laptop's whisper.cpp answers in ~2 s (small model) or under 1 s in fast
-    mode (base). The clip only touches RAM on the laptop. If the laptop doesn't answer, the phone transcribes it.
+  - **Dictation:** hold Chip's face with two fingers, speak, let go: the text is typed wherever the cursor is on
+    the laptop (`laptop/typer.py`, GNOME's remote-desktop D-Bus API). Slide a finger away before letting go to
+    cancel. Never presses Enter, won't type while the laptop is locked, and the mic is only open while you hold.
+    One finger can't be used: kiFOSSk grabs that long-press.
+    - **Engine** ("Speech model runs on" on the dashboard, or 📱/💻/☁️ in the swipe-up drawer), `dictEngine`:
+      **Phone** runs whisper.cpp on the phone, fully offline (`phone/dictation.py`, binary and models in `~/stt`
+      in Termux). **Laptop** sends the clip through the ssh tunnel to the bridge's `POST /transcribe`, which runs
+      whisper.cpp (`laptop/stt.py`, models in `~/.local/share/deskbuddy/stt`; the clip only touches RAM).
+      **Cloud** does the same through a provider API: `dictProvider` (Groq by default, or OpenAI, Deepgram,
+      ElevenLabs, AssemblyAI, Google, Azure, Gemini, or a custom URL), with `dictCloudModel`, `dictCloudUrl`
+      and `dictAzureRegion` for the details.
+    - **Language** (`dictLang`): one setting for every engine: Hinglish (romanised, the default), auto-detect,
+      or a Whisper language code. An engine that doesn't support the language is flagged on the dashboard.
+    - **Fast mode** (drawer "⚡ Fast dictation", `fastDictation`): a smaller model. Phone ~3 s, laptop under 1 s
+      for a 4 s sentence, but weaker with Hinglish. The default is ~6 s on the phone.
+    - **No fallback:** if the chosen engine fails, nothing is typed and Chip's bubble says why (for example
+      "can't reach the speech engine", "no cloud key yet", "timeout").
+    - **Cloud keys** are entered on the dashboard and stored only in `~/.config/deskbuddy/secrets.json` (owner-only).
+      They are never sent to the phone, never returned or logged; the dashboard shows just the last 4 characters.
   - swipe down on the face: quick summary
 - It sleeps 11 PM–6:30 AM (screen dims; change it on the dashboard), greets you, says the hour, nudges you to stretch after
   50 min at the laptop, warns when the laptop battery is low, bobs to music playing on the laptop.
@@ -135,13 +143,13 @@ Animation, moods and timing stay Chip's. You make it with any AI chat (ChatGPT, 
 |---|---|
 | `phone/www/` | the face and screens (HTML/CSS/JS) |
 | `phone/server.py` | Termux server on the phone's 127.0.0.1:8080: page, brightness, speech, app launching, dictation |
-| `phone/dictation.py` | records the mic (PulseAudio's Android source) and transcribes with `~/stt/whisper-cli` |
-| `laptop/typer.py` | types text into the focused window (used by the bridge's `POST /type`) |
+| `phone/dictation.py` | records the mic (PulseAudio's Android source); transcribes on the phone (`~/stt/whisper-cli`) or sends the clip to the bridge, per the dashboard's engine; no fallback |
+| `laptop/typer.py` | types text into the focused window (used by the bridge's `POST /type`); non-ASCII goes through the clipboard, never Enter |
 | `phone/alert.py` | torch blinking, the flashlight and the alert sounds (`/api/alert`, `/api/torch` on the phone server) |
 | `laptop/attention.py` | agent hooks call it when an AI agent needs you; tells the bridge (`POST /attention`) |
 | `phone/services.sh`, `phone/supervisor.sh` | Termux:Boot (or any new Termux session) starts them; the supervisor restarts sshd and the server within 10 s if they die |
 | `laptop/doctor.py`, `laptop/install.sh` | link health check; (re)installs the bridge as a boot-time systemd user service |
-| `laptop/bridge.py` | `deskbuddy-bridge.service`: stats/media API, Wi-Fi ssh tunnel (finds the phone again if its IP changes), settings and the dashboard |
+| `laptop/bridge.py` | `deskbuddy-bridge.service`: stats/media API, Wi-Fi ssh tunnel (finds the phone again if its IP changes), settings and the dashboard, dictation transcription (`POST /transcribe`, `/stt/*`, via `laptop/stt.py`) |
 | `laptop/dashboard.html` | the dashboard page (its preview is `phone/www` served by the bridge) |
 
 Phone apps: kiFOSSk, Termux, Termux:API (F-Droid); Brave (official GitHub release).
@@ -160,9 +168,23 @@ afterwards; `~/stt/whisper-cli` needs only Termux's libc++. Models: `~/stt/model
 Everything runs over the home Wi-Fi: the laptop keeps one `ssh -R 8765` tunnel open to Termux (port 8022); the
 phone's face page (served from Termux on 127.0.0.1:8080) reaches the bridge through it. Stats, music, typing,
 settings, alerts and dictation all use that one tunnel. The face page itself, timers and clock work without it.
-- **Phone key pinning:** the bridge pins the phone's ssh host key in `~/.config/deskbuddy/known_hosts` (alias
-  `chip-phone`). If the phone's IP changes, the bridge scans the /24 for port 8022 and accepts only the host with
-  that key, then saves the new IP. If Termux is ever reinstalled, delete that file so the key is pinned again.
+- **Connections card (dashboard):** shows whether the tunnel is up, the phone's address, why it's down, and
+  buttons: Reconnect, Find phone, Replace phone (pairing wizard), Forget this phone, and Doctor (runs doctor.py).
+- **Link settings:** `linkPaused` (close the tunnel and stop looking), `linkAutoFind` (scan the Wi-Fi /24 when the
+  saved address stops answering), `linkHomeOnly` + `linkNetworks` (only scan or connect on the listed network
+  names; "wired" = a cable), `linkKeepAlive` and `linkRetry` (seconds), and `sshPort` (sshd's port in Termux, 8022).
+  They are set on the dashboard only: `/link/*` writes are refused unless the request's Origin is exactly
+  `http://127.0.0.1:8765`, and link keys sent from any other origin are ignored. So the phone's page and other
+  sites can't pause or redirect the link.
+- **Phone key pinning:** the bridge pins the phone's ssh host key under the alias `chip-phone` in
+  `~/.config/deskbuddy/known_hosts`. If the phone's IP changes, the bridge scans the /24 for `sshPort` and accepts
+  only the host that presents that key, then saves the new IP.
+- **Pairing a new phone** (or after Termux is reinstalled): dashboard, Connections, Replace phone. The laptop shows a
+  one-time download for 10 minutes; the new phone runs the pairing script from Termux and shows a code, and you
+  type that code on the laptop. Nothing is trusted before that. Don't edit known_hosts by hand.
+- **Reason field:** `curl 127.0.0.1:8765/link` gives `reason`: `paused`, `not home network`, `no key pinned`,
+  `key mismatch` (something answers at the phone's address with another key), `connecting`, `not found`, or null
+  when up. `doctor.py` checks the first three of these.
 - **After a laptop reboot:** nothing to do. `deskbuddy-bridge` is a systemd user service with linger (set up by
   `laptop/install.sh`), so it starts at boot and the tunnel comes back within a minute.
 - **After a phone reboot:** Termux:Boot starts sshd and the server, the tunnel reconnects by itself; open the Chip

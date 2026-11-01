@@ -1,10 +1,12 @@
 """Hold-to-talk dictation for the desk buddy (runs in Termux on the phone).
 
 Records the phone mic through PulseAudio's Android (OpenSL ES) source only while you hold
-Chip's face, then turns the audio into text offline with whisper.cpp, on the phone or (if chosen on the
-dashboard) on the laptop. On the phone nothing leaves it except the final text, which the page sends to the
-laptop to be typed. On the laptop the clip goes through the ssh tunnel to the bridge, which transcribes it
-in memory and keeps nothing; if the laptop can't do it, the phone does.
+Chip's face, then turns the audio into text with the engine chosen on the dashboard: whisper.cpp on the phone
+(offline, nothing leaves it except the final text, which the page sends to the laptop to be typed), or the
+laptop's whisper.cpp / a cloud API, for which the clip goes through the ssh tunnel to the bridge's /transcribe.
+There is no fallback: if the chosen engine fails the result is {"error": <code>} and the audio goes nowhere else.
+Error codes (the same as the bridge's, laptop/stt.py): silence, too_short, no_words, key_missing, key_rejected,
+quota, offline, timeout, lang_unsupported, provider_error, locked.
 """
 import array
 import glob
@@ -12,6 +14,7 @@ import json
 import math
 import os
 import re
+import socket
 import subprocess
 import threading
 import time
@@ -41,8 +44,11 @@ def start_pulseaudio():
                         "--exit-idle-time=-1"], timeout=15)
 
 
+ENGINES = ("phone", "laptop", "cloud")
+LANG_RE = re.compile(r"auto|hinglish|[a-z]{2,3}")  # "auto", "hinglish" or a Whisper language code
 PROMPT = "Haan, main kal office aaunga. Meeting is at 5 PM, okay? Thik hai, send kar do."
 LAPTOP = "http://127.0.0.1:8765"  # the laptop bridge, through the ssh tunnel
+BRIDGE_WAIT = 70  # s: laptop whisper may take up to 60 s, a cloud request 20
 
 
 class Dictation:
@@ -106,7 +112,7 @@ class Dictation:
             self.state = "idle"
             return {"ok": True}
 
-    def stop(self, fast=False, laptop=False):
+    def stop(self, fast=False, engine="phone", lang="hinglish"):
         with self.lock:
             if self.state != "listening":
                 return {"error": "not listening"}
@@ -114,11 +120,13 @@ class Dictation:
             audio, peak = bytes(self.buf), self.peak
             self.state = "thinking"
         try:
+            if engine not in ENGINES or not LANG_RE.fullmatch(lang):
+                return {"error": "lang_unsupported" if engine in ENGINES else "provider_error"}
             seconds = len(audio) / 2 / RATE
             if seconds < 0.5:
-                return {"text": "", "error": "too short"}
+                return {"error": "too_short"}
             if peak < 0.04:  # silence: Whisper would make something up
-                return {"text": "", "error": "silence"}
+                return {"error": "silence"}
             path = os.path.join(os.environ.get("TMPDIR", "/tmp"), "deskbuddy-dictation.wav")
             with wave.open(path, "wb") as w:
                 w.setnchannels(1)
@@ -126,47 +134,68 @@ class Dictation:
                 w.setframerate(RATE)
                 w.writeframes(audio)
             try:
-                return self.transcribe(path, fast, laptop)
+                return self.transcribe(path, fast, engine, lang)
             finally:
                 os.remove(path)
         finally:
             self.state = "idle"
 
-    def transcribe(self, path, fast=False, laptop=False):
+    def transcribe(self, path, fast, engine, lang):
         t0 = time.time()
-        out = self._on_laptop(path, fast) if laptop else None
-        engine = "laptop" if out is not None else "phone"
-        if out is None:
-            out = self._on_phone(path, fast)
-        text = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", out)  # drop [BLANK_AUDIO], (music) and the like
-        with wave.open(path) as w:
-            seconds = w.getnframes() / w.getframerate()
-        return {"text": " ".join(text.split()), "seconds": round(seconds, 1), "ms": int((time.time() - t0) * 1000),
-                "engine": engine, "fallback": laptop and engine == "phone"}
+        if engine == "phone":
+            try:
+                out = self._on_phone(path, fast, lang)
+            except subprocess.TimeoutExpired:
+                return {"error": "timeout"}
+            except (OSError, subprocess.SubprocessError):
+                return {"error": "provider_error"}
+        else:
+            out = self._on_bridge(path, fast, engine, lang)
+            if isinstance(out, dict):  # {"error": code, "message": ...}
+                return out
+        text = " ".join(re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", out).split())  # drop [BLANK_AUDIO], (music) and the like
+        if not text:
+            return {"error": "no_words"}
+        return {"text": text, "engine": engine, "lang": lang, "ms": int((time.time() - t0) * 1000)}
 
     @staticmethod
-    def _on_phone(path, fast):
+    def _on_phone(path, fast, lang):
         with wave.open(path) as w:
             seconds = w.getnframes() / w.getframerate()
         # -ac shrinks Whisper's fixed 30 s window to the clip's length, which is most of the speed-up
         audio_ctx = min(1500, int(seconds * 50) + 128)
+        # the Hinglish prompt is only sent for "hinglish" (English with romanised Hindi)
+        lang_args = ["-l", "en", "--prompt", PROMPT] if lang == "hinglish" else ["-l", lang]
         # -bs 1 -bo 1: greedy decoding, much faster than the default beam search for the same text
-        return subprocess.run([WHISPER, "-m", MODELS[fast], "-f", path, "-l", "en", "-t", "4", "-nt", "-np",
-                               "-bs", "1", "-bo", "1", "-ac", str(audio_ctx), "--prompt", PROMPT],
-                              capture_output=True, text=True, timeout=180).stdout
+        return subprocess.run([WHISPER, "-m", MODELS[fast], "-f", path, "-t", "4", "-nt", "-np",
+                               "-bs", "1", "-bo", "1", "-ac", str(audio_ctx), *lang_args],
+                              capture_output=True, text=True, timeout=180, check=True).stdout
 
     @staticmethod
-    def _on_laptop(path, fast):
-        """The laptop's raw transcript, or None if it couldn't do it (tunnel down, bridge busy or broken)."""
-        query = urllib.parse.urlencode({"fast": int(fast), "prompt": PROMPT})
+    def _on_bridge(path, fast, engine, lang):
+        """The bridge's text, or {"error": code} (also when the tunnel is down: "offline"). Never falls back."""
+        query = urllib.parse.urlencode({"engine": engine, "lang": lang, "fast": int(fast)})
         with open(path, "rb") as f:
             req = urllib.request.Request(f"{LAPTOP}/transcribe?{query}", data=f.read(), method="POST",
                                          headers={"Content-Type": "audio/wav"})
         try:
-            with urllib.request.urlopen(req, timeout=25) as r:
-                return json.load(r)["text"]
-        except (OSError, ValueError, KeyError):  # URLError and timeouts are OSErrors
-            return None
+            with urllib.request.urlopen(req, timeout=BRIDGE_WAIT) as r:
+                data = json.load(r)
+        except urllib.error.HTTPError as e:  # the bridge answered with an error code
+            try:
+                data = json.load(e)
+            except (OSError, ValueError):
+                return {"error": "provider_error"}
+            return {"error": str(data.get("error") or "provider_error"), "message": str(data.get("message") or "")}
+        except (socket.timeout, TimeoutError):
+            return {"error": "timeout"}
+        except urllib.error.URLError as e:  # tunnel down or bridge not running
+            return {"error": "timeout" if isinstance(e.reason, (socket.timeout, TimeoutError)) else "offline"}
+        except (OSError, ValueError):
+            return {"error": "offline"}
+        if not isinstance(data, dict) or not data.get("ok") or not isinstance(data.get("text"), str):
+            return {"error": "provider_error"}
+        return data["text"]
 
     def status(self):
         listening = self.state == "listening"

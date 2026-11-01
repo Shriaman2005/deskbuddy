@@ -76,6 +76,7 @@ main { padding: 24px clamp(16px, 4vw, 40px) 40px; max-width: 1480px; margin: 0 a
 .row .txt small { display: block; color: var(--muted); font-size: 12.5px; }
 .row.sub { padding-left: 18px; }
 .row.dim { opacity: .4; cursor: default; }
+.row[hidden] { display: none; }
 .row.range { cursor: default; flex-wrap: wrap; }
 .row.range .txt { flex: 0 0 auto; }
 .row.range input { flex: 1; min-width: 90px; }
@@ -200,6 +201,24 @@ input[type=range]:disabled { cursor: default; }
 .place li button { width: 100%; text-align: left; }
 .place li small { color: var(--muted); margin-left: 6px; }
 .place .none { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+/* ---------- voice dictation */
+.stt .grp { padding: 10px 0 4px; border-top: 1px solid var(--line); }
+.stt .grp > b { display: block; font-weight: 550; font-size: 14.5px; }
+.stt .grp > small, .stt .cur, .stt .priv, .stt .res { display: block; color: var(--muted); font-size: 12.5px; margin: 2px 0 6px; }
+.stt input[type=search] { width: 100%; box-sizing: border-box; }
+.stt input[type=search], .stt input[type=text], .stt input[type=password] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--fg); font: inherit; font-size: 13.5px; }
+.stt .line { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+.stt .line label { flex: none; width: 74px; color: var(--soft); font-size: 13px; }
+.stt .langs { max-height: 190px; overflow: auto; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; padding: 2px; }
+.stt .langs button { font-size: 12.5px; padding: 5px 9px; }
+.stt .langs button.off { opacity: .45; }
+.stt .warn { margin: 8px 0 4px; padding: 7px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08); border: 1px solid rgba(255, 179, 71, .25); color: #ffcf8a; font-size: 12.5px; }
+.stt .missing { display: flex; gap: 8px; align-items: baseline; opacity: .5; font-size: 12.5px; margin: 3px 0; flex-wrap: wrap; }
+.stt .missing b { font-weight: 550; flex: none; min-width: 120px; }
+.stt code { font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--soft); word-break: break-all; user-select: all; }
+.stt .res.ok { color: var(--good); }
+.stt .res.bad { color: #ff8a8a; }
+.stt [hidden] { display: none !important; }
 .eyes { padding: 2px 0 8px; }
 .eyes .skinnote, .mk .note { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 .eyes .skinnote { padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08); border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); }
@@ -222,6 +241,53 @@ input[type=range]:disabled { cursor: default; }
 .mk .hint { margin: 8px 0 2px; color: var(--muted); font-size: 12.5px; }
 .mk input[type=file] { max-width: 100%; margin-bottom: 8px; color: var(--soft); font-size: 13px; }
 .mk input[type=file]::file-selector-button { padding: 6px 12px; margin-right: 10px; border-radius: 9px; background: #101d26; border: 1px solid var(--line2); color: var(--soft); font: inherit; cursor: pointer; }
+/* ---------- connections */
+.conn.mask dd.sens, .conn.mask #conn-why, .conn.mask #conn-msg, .conn.mask #conn-nets, .conn.mask #conn-ip, .conn.mask #conn-pre, .conn.mask #conn-origin { filter: blur(6px); user-select: none; transition: filter .15s; }
+.conn.mask #conn-ip::placeholder { color: transparent; }
+.eye { flex: none; width: 34px; height: 34px; padding: 0; border-radius: 10px; border: 1px solid var(--line2); background: transparent; color: var(--soft); font-size: 17px; cursor: pointer; }
+.eye:hover { color: var(--fg); border-color: var(--soft); }
+.conn .st { margin: 4px 0 10px; padding: 11px 12px; border-radius: 12px; background: #0b161e; border: 1px solid var(--line2); }
+.conn .st-head { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; }
+.conn .st-head i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+.conn .st.up .st-head i { background: var(--good); box-shadow: 0 0 8px var(--good); }
+.conn .st.wait .st-head i { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.conn .st-why { margin: 5px 0 0; color: var(--soft); font-size: 13px; overflow-wrap: anywhere; }
+.conn dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 10px 0 0; font-size: 13px; }
+.conn dt { color: var(--muted); }
+.conn dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
+.conn dd small { color: var(--muted); font-size: 12px; }
+.conn dd code, .conn .cmd { font: 12px/1.4 ui-monospace, "Ubuntu Mono", monospace; color: var(--eye); }
+.conn dd.good { color: var(--good); } .conn dd.warn { color: var(--warn); } .conn dd.bad { color: #ff8a8a; }
+.conn .acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.conn .acts .chip { min-width: 0; }
+.conn .chip:disabled { opacity: .4; cursor: default; }
+.conn .chip.go { background: #12303e; border-color: var(--good); color: var(--fg); }
+.conn .chip.danger { border-color: #7a2f38; color: #ff9aa4; }
+.conn pre { margin: 0 0 10px; padding: 9px 11px; border-radius: 10px; background: #060d12; border: 1px solid var(--line); color: var(--soft);
+  font: 12px/1.45 ui-monospace, "Ubuntu Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.conn pre[hidden], .conn [hidden] { display: none; }
+.conn .line { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }
+.conn input[type=text], .conn input[type=number] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2);
+  color: var(--fg); font: inherit; font-size: 13.5px; }
+.conn input[type=number] { flex: none; width: 110px; }
+.conn .nets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.conn .nets .chip { display: inline-flex; align-items: center; gap: 6px; }
+.conn .nets .chip b { font-weight: 400; color: var(--muted); }
+.conn .nets .none { color: var(--muted); font-size: 12.5px; }
+.conn .row.netrow { flex-direction: column; align-items: stretch; gap: 0; cursor: default; }
+.conn details { margin: 0 0 10px; border-top: 1px solid var(--line); padding-top: 9px; }
+.conn details > summary { cursor: pointer; color: var(--soft); font-size: 14px; font-weight: 550; padding: 3px 0; }
+.conn details[open] > summary { margin-bottom: 8px; }
+.conn .warnbox { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08);
+  border: 1px solid rgba(255, 179, 71, .25); color: #ffcf8a; font-size: 12.5px; }
+.conn .hint { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+.conn .ask { margin: 0 0 10px; padding: 9px 10px; border-radius: 10px; background: rgba(255, 93, 108, .08); border: 1px solid rgba(255, 93, 108, .3);
+  color: var(--soft); font-size: 13px; }
+.conn .ask .acts { margin: 8px 0 0; }
+.conn .count { font-family: var(--pixel); font-size: 22px; color: var(--eye); }
+.conn .code { letter-spacing: .12em; font-family: ui-monospace, "Ubuntu Mono", monospace; }
+.conn .step { margin: 0 0 10px; color: var(--soft); font-size: 13px; }
+.conn .cmdbox { margin: 0 0 8px; padding: 9px 11px; border-radius: 10px; background: #060d12; border: 1px solid var(--line2); overflow-wrap: anywhere; user-select: all; }
 .mk .chip:disabled { opacity: .4; cursor: default; }
 .mk .chip.go { background: #12303e; border-color: var(--good); color: var(--fg); }
 .mk .res-head { margin: 0 0 8px; font-weight: 600; }
@@ -361,6 +427,43 @@ footer code { color: var(--soft); }
     `<input type="search" id="place-q" placeholder="Search a city, e.g. Mumbai" autocomplete="off" aria-label="Search for a city"> ` +
     `<button class="chip" id="place-go">Search</button></form><ul id="place-res"></ul><p class="none" id="place-none" hidden></p>` +
     `<div class="acts"><button class="chip" id="place-reset">Use the default place</button></div></div>`;
+  const STT_HTML = `<div class="stt" data-needs="dictation">` +
+    `<div class="grp"><small>📱 Phone: offline, ~6 s a sentence, the laptop stays free. 💻 Laptop: offline, ~2 s, bigger model. ☁️ Cloud API: fastest, but your audio goes to the provider.</small><b>Language</b><small class="cur" id="stt-cur"></small>` +
+    `<input type="search" id="stt-q" placeholder="Search languages, e.g. Hindi or ja" autocomplete="off" aria-label="Search languages">` +
+    `<div class="langs" id="stt-langs"></div><div class="warn" id="stt-warn" hidden></div></div>` +
+    `<div class="grp" data-stt-show="laptop"><b>Laptop model</b><small>Bigger models understand more but are slower. Automatic uses small, or base in fast mode.</small>` +
+    `<div class="seg" id="stt-models"></div><div id="stt-missing"></div></div>` +
+    `<div class="grp" data-stt-show="cloud"><b>Cloud provider</b><div class="seg" id="stt-providers"></div>` +
+    `<div id="stt-model-pick" class="seg" style="margin-top:8px"></div>` +
+    `<div class="line" id="stt-model-free" hidden><label for="stt-model">Model</label><input type="text" id="stt-model" placeholder="e.g. whisper-1" autocomplete="off" spellcheck="false"></div>` +
+    `<div class="line" id="stt-url-row" hidden><label for="stt-url">Base URL</label><input type="text" id="stt-url" placeholder="https://my-server.example/v1" autocomplete="off" spellcheck="false"></div>` +
+    `<small class="res bad" id="stt-url-bad" hidden>The URL must start with https://</small>` +
+    `<div class="line" id="stt-region-row" hidden><label for="stt-region">Region</label><input type="text" id="stt-region" placeholder="e.g. westeurope" autocomplete="off" spellcheck="false"></div>` +
+    `<div class="line"><label for="stt-key">API key</label><input type="password" id="stt-key" placeholder="Paste a key to replace it" autocomplete="new-password" spellcheck="false">` +
+    `<button class="chip" id="stt-save">Save</button><button class="chip" id="stt-clear">Clear</button></div>` +
+    `<small class="res" id="stt-keystate"></small>` +
+    `<small>Keys are kept only on this laptop (~/.config/deskbuddy/secrets.json, owner-only) and are never sent to the phone or shown again.</small></div>` +
+    `<div class="grp"><small class="priv" id="stt-priv"></small>` +
+    `<div class="line"><button class="chip" id="stt-test">Test</button><span class="res" id="stt-res"></span></div></div></div>`;
+  // the Connections card: link status, actions, the pairing wizard (all dynamic text goes through esc() or textContent)
+  const CONN_TOP = `<p class="note" id="conn-origin" hidden></p><div class="st" id="conn-st"><div class="st-head"><i></i><span id="conn-main">Checking…</span></div>` +
+    `<p class="st-why" id="conn-why"></p><dl id="conn-dl"></dl></div>` +
+    `<div class="acts"><button class="chip" id="conn-reconnect">🔄 Reconnect</button><button class="chip" id="conn-find">📡 Find phone</button>` +
+    `<button class="chip" id="conn-checks">🩺 Run checks</button></div>` +
+    `<pre id="conn-pre" hidden></pre>` +
+    `<div class="line"><input type="text" id="conn-ip" inputmode="decimal" placeholder="Phone IP, e.g. 192.168.1.9" autocomplete="off" spellcheck="false" aria-label="Phone IP address">` +
+    `<button class="chip" id="conn-setip">Set IP</button></div><p class="hint" id="conn-msg" hidden></p>`;
+  const CONN_NETS = `<div class="row netrow" data-needs="linkHomeOnly"><span class="txt"><b>Home networks</b>` +
+    `<small>Chip only connects (and only scans) on these. “wired” means a cable. Up to 10.</small></span>` +
+    `<div class="nets" id="conn-nets"></div></div>`;
+  const CONN_END = `<details id="conn-adv"><summary>Advanced</summary>` +
+    `<div class="warnbox">⚠️ A wrong port stops the tunnel, and nothing here can fix it from the phone. Only change it if you moved sshd in Termux (<code>sshd -p</code>). Range 1024–65535.</div>` +
+    `<div class="line"><label for="conn-port" style="flex:1;color:var(--soft);font-size:13.5px">Phone's ssh port</label>` +
+    `<input type="number" id="conn-port" min="1024" max="65535" step="1" inputmode="numeric"><button class="chip" id="conn-port-save">Save</button></div></details>` +
+    `<details id="conn-rep"><summary>Replace phone</summary>` +
+    `<p class="hint">Pairs a different phone. The new phone is trusted only after you type the code it shows. Do this on your home Wi-Fi.</p>` +
+    `<div id="conn-forget"><button class="chip danger" id="conn-forget-btn">Forget this phone…</button></div><div id="conn-ask" hidden></div>` +
+    `<div id="conn-wiz"></div></details>`;
   const CARDS = [
     { icon: "🔔", title: "Attention alerts", master: "torch", attention: true,
       note: "When an AI agent or an app needs you, Chip blinks the phone's torch and/or plays a sound, and says who.", rows: [
@@ -452,12 +555,19 @@ footer code { color: var(--soft); }
       sw("stretch", "Stretch reminders", "Nudges you after a long time at the laptop"),
       range("stretchMin", "Every", 10, 180, 5, "min", "stretch"),
     ] },
-    { icon: "🎙️", title: "Voice dictation", rows: [
-      sw("dictation", "Hold with two fingers to dictate", "Your speech is turned into text offline and typed on the laptop"),
-      choice("dictateOnLaptop", "Speech model runs on",
-        "Phone: ~6 s for a short sentence and the laptop's CPU stays free. Laptop: ~2 s with a bigger model " +
-        "that's better at Hinglish; if the laptop can't, the phone takes over.",
-        [[false, "📱 Phone"], [true, "💻 Laptop"]], "dictation"),
+    { icon: "🔌", title: "Connections", conn: true, rows: [
+      sw("linkPaused", "Pause the link", "Closes the tunnel and stops looking for the phone"),
+      sw("linkAutoFind", "Find the phone when it moves", "Scans this Wi-Fi's /24 for the phone's key if its address stops answering"),
+      sw("linkHomeOnly", "Only on home networks", "Never scan or connect elsewhere (cafés, hotspots)"),
+      { raw: CONN_NETS },
+      range("linkKeepAlive", "Keep-alive", 5, 60, 5, "sec"),
+      range("linkRetry", "Retry every", 5, 60, 5, "sec"),
+    ] },
+    { icon: "🎙️", title: "Voice dictation", stt: true, rows: [
+      sw("dictation", "Hold with two fingers to dictate", "Your speech is turned into text and typed on the laptop, in any language"),
+      choice("dictEngine", "Speech model runs on",
+        "No fallback: if the chosen engine fails, nothing is typed",
+        [["phone", "📱 Phone"], ["laptop", "💻 Laptop"], ["cloud", "☁️ Cloud API"]], "dictation"),
       sw("fastDictation", "Fast mode", "A smaller model: phone ~3 s, laptop under 1 s, but weaker with Hinglish", "dictation"),
     ] },
     { icon: "🎨", title: "Look", rows: [
@@ -484,6 +594,7 @@ footer code { color: var(--soft); }
     `<p class="hint">Arrange your screens in Settings → Displays the way they sit on your desk, then drag Chip to where the phone really is.</p></div>`;
   function rowHTML(r) {
     if (r.section) return `<div class="sec">${esc(r.section)}</div>`;
+    if (r.raw) return r.raw;
     const needs = r.needs ? ` data-needs="${r.needs}"` : "";
     if (r.multi) {  // a chip per option, lit when it is on (S[k] lists the ones that are off)
       return `<div class="row multi sub" data-needs="${r.needs}"><span class="txt"><b>${esc(r.label)}</b>` +
@@ -510,6 +621,7 @@ footer code { color: var(--soft); }
   }
   $("#grid").innerHTML = CARDS.map((c) => {
     let body = c.note ? `<p class="note">${esc(c.note)}</p>` : "";
+    if (c.conn) body += CONN_TOP;
     if (c.needs) body += `<div class="needs">The ${TAB_NAMES[c.needs]} tab is hidden. Turn it on under Screens to see these.</div>`;
     if (c.dock) {
       body += `<div class="dockmock" data-needs="dock">` + DOCK.map(([name, items]) =>
@@ -525,10 +637,13 @@ footer code { color: var(--soft); }
       body += `<div class="attn" data-needs="torch"><button class="chip" id="torch-test">🔔 Test the alert</button>` +
         `<ul id="attn-log"><li class="none">No alerts yet</li></ul></div>`;
     }
+    if (c.stt) body += STT_HTML;
+    if (c.conn) body += CONN_END;
     if (c.appList) body += `<div class="applist" id="applist"></div>`;
+    const eye = c.conn ? `<button class="eye" id="conn-eye" aria-pressed="true" aria-label="Show connection details" title="Show connection details">🙈</button>` : "";
     const master = c.master ? `<input type="checkbox" class="sw" data-k="${c.master}" aria-label="${esc(c.title)}">` : "";
-    return `<div class="card"${c.needs ? ` data-card-needs="${c.needs}"` : ""}><div class="card-head"><span class="ic">${c.icon}</span>` +
-      `<h2>${esc(c.title)}</h2>${master}</div>${body}</div>`;
+    return `<div class="card${c.conn ? " conn" : ""}"${c.needs ? ` data-card-needs="${c.needs}"` : ""}><div class="card-head"><span class="ic">${c.icon}</span>` +
+      `<h2>${esc(c.title)}</h2>${eye}${master}</div>${body}</div>`;
   }).join("");
 
   const PRESETS = [["22:00", "06:00"], ["23:00", "06:30"], ["00:00", "07:00"], ["01:00", "08:00"]];
@@ -567,6 +682,7 @@ footer code { color: var(--soft); }
       else if (el.tagName === "BUTTON") el.setAttribute("aria-pressed", String(el.dataset.v ? String(S[k]) === el.dataset.v : !!S[k]));
     }
     for (const b of $$("[data-multi]")) b.setAttribute("aria-pressed", String(!S[b.dataset.multi].includes(b.dataset.v)));
+    renderStt();   // before the data-needs pass below, so its fresh buttons get disabled with the master switch
     for (const el of $$("[data-needs]")) {
       const on = el.dataset.needs.split(" ").every((k) => S[k]);
       el.classList.toggle("dim", !on);
@@ -581,6 +697,7 @@ footer code { color: var(--soft); }
     document.documentElement.style.setProperty("--eye", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);  // the page follows Chip's accent
     renderSleep();
     renderStatus();
+    renderConn();
     renderLook();
   }
   const ACCENTS = { cyan: "#2ee6f2", terracotta: "#ee9358", sage: "#b4d38c", violet: "#a78bfa", rose: "#f472b6", amber: "#f5c04a", sky: "#6cb8ff" };
@@ -652,6 +769,120 @@ footer code { color: var(--soft); }
     S = r;
     if (changed) { render(); toPreview({ prefs: S }); }  // e.g. a drawer toggle on the phone
   }
+  // ---------------------------------------------------------------- voice dictation (engine, language, laptop model, cloud)
+  // /stt/status says which languages, models and providers exist and whether a key is set (never the key itself).
+  const MODELS_DIR = "~/.local/share/deskbuddy/stt/models";
+  const MORE_MODELS = ["tiny-q8_0", "small-q5_1", "medium-q5_0", "large-v3-turbo-q5_0"];  // offered when not installed
+  const hfUrl = (m) => `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${m}.bin`;
+  let stt = null, sttSig = "", sttQuery = "", sttTested = "";
+  async function loadStt() {
+    const r = await fetch("/stt/status", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (r) { stt = r; renderStt(); }
+  }
+  function langName(code) { return stt && stt.languageNames[code] ? stt.languageNames[code] : code; }
+  function langsOf(engine) { return stt && stt.engines[engine] ? stt.engines[engine].languages : []; }
+  function renderStt() {
+    if (!S || !$("#stt-langs")) return;
+    const eng = S.dictEngine;
+    const sig = [eng, S.dictProvider, S.dictModelLaptop].join("|");
+    if (sig !== sttSig) { sttSig = sig; loadStt(); $("#stt-res").textContent = ""; }   // an old test result no longer applies   // the languages a laptop model or provider supports come from the bridge
+    for (const el of $$("[data-stt-show]")) el.hidden = !el.dataset.sttShow.split(" ").includes(eng);
+    const fast = $("[data-k=fastDictation]").closest(".row");
+    fast.hidden = eng === "cloud" || (eng === "laptop" && S.dictModelLaptop !== "auto");   // an explicit laptop model ignores fast mode
+    if (!stt) return;
+    // language
+    const supported = new Set(langsOf(eng));
+    $("#stt-cur").textContent = `Used by every engine: ${langName(S.dictLang)}`;
+    if (document.activeElement !== $("#stt-q")) $("#stt-q").value = sttQuery;
+    const order = ["auto", "hinglish", ...Object.keys(stt.languageNames).filter((c) => c !== "auto" && c !== "hinglish")
+      .sort((a, b) => stt.languageNames[a].localeCompare(stt.languageNames[b]))];
+    const q = sttQuery.trim().toLowerCase();
+    const shown = order.filter((c) => c === S.dictLang || !q || c.includes(q) || langName(c).toLowerCase().includes(q));
+    $("#stt-langs").innerHTML = shown.map((c) =>
+      `<button class="chip${supported.has(c) ? "" : " off"}" data-stt-lang="${esc(c)}" aria-pressed="${c === S.dictLang}"` +
+      `${supported.has(c) ? "" : ` title="Not supported by this engine"`}>${c === "auto" ? "Auto-detect" : c === "hinglish" ? "Hinglish (romanised)" : esc(langName(c))}</button>`).join("") +
+      (shown.length ? "" : `<small class="res">No language matches “${esc(sttQuery)}”</small>`);
+    const warns = [];
+    if (!supported.has(S.dictLang)) {
+      const what = eng === "cloud" ? (stt.providers[S.dictProvider] || {}).label || "This provider" : eng === "laptop" ? `The ${S.dictModelLaptop === "auto" ? "automatic" : S.dictModelLaptop} model` : "The phone";
+      warns.push(`${what} doesn't support ${langName(S.dictLang)}. Dictating will fail with “doesn't do that language” until you change the language or the ${eng === "cloud" ? "provider" : "engine"}.`);
+    }
+    if (eng === "phone" && !["en", "hinglish"].includes(S.dictLang)) {
+      warns.push(`The phone's tiny and base models may be inaccurate for ${S.dictLang === "auto" ? "other languages" : langName(S.dictLang)}. The laptop or a cloud provider is recommended.`);
+    }
+    const w = $("#stt-warn"); w.hidden = !warns.length; w.innerHTML = warns.map(esc).join("<br>");
+    // laptop models
+    const lap = stt.engines.laptop, installed = lap.models.filter((m) => m !== "auto");
+    $("#stt-models").innerHTML = ["auto", ...installed].map((m) =>
+      `<button class="chip" data-stt-model="${esc(m)}" aria-pressed="${S.dictModelLaptop === m}">${m === "auto" ? "Automatic" : esc(m)}</button>`).join("");
+    const missing = MORE_MODELS.filter((m) => !installed.includes(m));
+    $("#stt-missing").innerHTML = (lap.available ? "" : `<div class="warn">whisper.cpp isn't installed on this laptop (see the README).</div>`) +
+      missing.map((m) => `<div class="missing"><b>${esc(m)}</b><code>curl -L -o ${MODELS_DIR}/ggml-${esc(m)}.bin ${hfUrl(m)}</code></div>`).join("");
+    // cloud
+    const provs = Object.entries(stt.providers), prov = stt.providers[S.dictProvider] || {};
+    $("#stt-providers").innerHTML = provs.map(([id, p]) =>
+      `<button class="chip" data-stt-provider="${esc(id)}" aria-pressed="${S.dictProvider === id}">${esc(p.label)}${p.keySet ? " ✓" : ""}</button>`).join("");
+    const free = S.dictProvider === "custom" || !(prov.models || []).length;
+    $("#stt-model-pick").hidden = free;
+    $("#stt-model-free").hidden = !free;
+    $("#stt-url-row").hidden = !prov.needsUrl;
+    $("#stt-region-row").hidden = S.dictProvider !== "azure";
+    $("#stt-model-pick").innerHTML = free ? "" : prov.models.map((m) => {
+      const cur = S.dictCloudModel || prov.defaultModel;
+      return `<button class="chip" data-stt-cmodel="${esc(m)}" aria-pressed="${cur === m}">${esc(m)}${m === prov.defaultModel ? " (default)" : ""}</button>`;
+    }).join("");
+    for (const [id, k] of [["stt-model", "dictCloudModel"], ["stt-url", "dictCloudUrl"], ["stt-region", "dictAzureRegion"]]) {
+      const el = $("#" + id); if (document.activeElement !== el) el.value = S[k] || "";
+    }
+    const ks = $("#stt-keystate");
+    ks.className = "res" + (prov.keySet ? " ok" : "");
+    ks.textContent = prov.keySet ? `key set ✓ …${prov.last4}` : "no key set";
+    $("#stt-clear").disabled = !prov.keySet;
+    // privacy line
+    const where = prov.needsUrl ? ((() => { try { return new URL(S.dictCloudUrl).host; } catch (e) { return prov.label; } })()) : prov.label;
+    $("#stt-priv").textContent = eng === "cloud" ? `☁️ your audio goes to ${where}` : "🔒 stays on your devices";
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || !S) return;
+    const d = b.dataset;
+    if (d.sttLang) save({ dictLang: d.sttLang });
+    if (d.sttModel) save({ dictModelLaptop: d.sttModel });
+    if (d.sttProvider) save({ dictProvider: d.sttProvider });
+    if (d.sttCmodel && stt) save({ dictCloudModel: d.sttCmodel === stt.providers[S.dictProvider].defaultModel ? "" : d.sttCmodel });
+  });
+  $("#stt-q").addEventListener("input", (e) => { sttQuery = e.target.value; renderStt(); });
+  for (const [id, k] of [["stt-model", "dictCloudModel"], ["stt-region", "dictAzureRegion"]]) {
+    $("#" + id).addEventListener("change", (e) => save({ [k]: e.target.value.trim() }));
+  }
+  $("#stt-url").addEventListener("input", (e) => { $("#stt-url-bad").hidden = !e.target.value.trim() || /^https:\/\//i.test(e.target.value.trim()); });
+  $("#stt-url").addEventListener("change", (e) => {
+    const v = e.target.value.trim();
+    if (v && !/^https:\/\//i.test(v)) return;   // the bridge only takes https; the message under the field says so
+    save({ dictCloudUrl: v });
+  });
+  async function sttKey(key) {
+    const r = await fetch("/stt/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: S.dictProvider, key }) })
+      .then((x) => x.json()).catch(() => null);
+    if (!r || !r.ok) return toast(r && r.message ? r.message : "Couldn't save the key. Is the desk buddy bridge running?", true);
+    $("#stt-key").value = "";   // never kept in the page
+    toast(key === null ? "Key removed ✓" : "Key saved ✓");
+    loadStt();
+  }
+  $("#stt-save").addEventListener("click", () => { const v = $("#stt-key").value.trim(); if (v) sttKey(v); });
+  $("#stt-clear").addEventListener("click", () => sttKey(null));
+  $("#stt-key").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#stt-save").click(); });
+  $("#stt-test").addEventListener("click", async () => {
+    const btn = $("#stt-test"), out = $("#stt-res");
+    btn.disabled = true; out.className = "res"; out.textContent = "Testing…";
+    const r = await fetch("/stt/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then((x) => x.json()).catch(() => null);
+    btn.disabled = false;
+    if (r && r.ok) { out.className = "res ok"; out.textContent = `OK, ${r.ms} ms`; }
+    else { out.className = "res bad"; out.textContent = r ? (r.message || r.error) : "Couldn't reach the desk buddy bridge"; }
+  });
+  loadStt();
+
   // ---------------------------------------------------------------- weather location
   function renderPlace() {
     $("#place-cur").textContent = S.locName ? `Showing weather for ${S.locName}` : "Showing weather for the default place from config.js";
@@ -709,6 +940,8 @@ footer code { color: var(--soft); }
     phoneInfo = await fetch("/phone", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
     linkInfo = await fetch("/link", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
     renderStatus();
+    renderConn();
+    if (($("#conn-rep") && $("#conn-rep").open) || (pair && pair.active)) loadPair();
   }
 
   // ---------------------------------------------------------------- input
@@ -1077,6 +1310,263 @@ footer code { color: var(--soft); }
   $("#mk-own").addEventListener("click", () => save({ skin: "" }));
   function renderLook() { renderEyes(); renderSkins(); }
   loadSkins();
+
+  // ---------------------------------------------------------------- connections (the link to the phone, pairing a new one)
+  // Endpoints: GET /link, /link/pair; POST /link/reconnect|find|ip|forget|doctor and /link/pair/start|confirm|cancel.
+  // The POSTs need Origin http://127.0.0.1:8765 exactly, so the dashboard must be opened at that address.
+  const HOME_ORIGIN = "http://127.0.0.1:8765";
+  let pair = null, pairAt = 0, pairResult = null, wizSig = "", wizMsg = null;
+  const connMsg = (text, kind = "") => {
+    const m = $("#conn-msg");
+    m.hidden = !text; m.textContent = text || "";
+    m.style.color = kind === "bad" ? "#ff8a8a" : kind === "good" ? "var(--good)" : "";
+  };
+  async function linkPost(path, body) {
+    try {
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      return { status: r.status, data: await r.json().catch(() => ({})) };
+    } catch (e) { return { status: 0, data: { error: "the bridge isn't answering" } }; }
+  }
+  const WHY = { "paused": "Paused: turn off “Pause the link” to reconnect.", "not home network": "This network isn't in your home networks",
+    "forbidden": `Open the dashboard at ${HOME_ORIGIN} for this.` };
+  const why = (d) => d.message || (d.error === "not home network" ? "This network isn't in your home networks." : WHY[d.error] || d.error || "failed");
+  async function busy(btn, label, fn) {
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = label;
+    try { await fn(); } finally { btn.disabled = false; btn.textContent = old; }
+  }
+  const fmtDur = (s) => (s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 172800 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} m` : `${Math.floor(s / 86400)} days`);
+  const shortFp = (fp) => (fp ? fp.slice(0, 14) + "…" + fp.slice(-6) : "");
+
+  function connReason(L) {
+    const n = L.laptop && L.laptop.ssid;
+    const text = {
+      "paused": "Paused. Turn off “Pause the link” to connect again.",
+      "not home network": `This network (${n || "unknown"}) isn't in your home networks, so Chip stays disconnected and doesn't scan here.`,
+      "not found": "The phone isn't answering. Is Termux open on it, and is it on this Wi-Fi? " +
+        (S && S.linkAutoFind ? "The bridge keeps looking for it." : "Auto-find is off, so try “Find phone”."),
+      "key mismatch": "Something answers at the phone's address, but its ssh key isn't the pinned one: a different device, or the phone was reset. Nothing is connected. If it is your phone, use Replace phone below.",
+      "no key pinned": "No phone is paired yet. Open “Replace phone” below to pair one.",
+      "connecting": "Connecting to the phone…" }[L.reason];
+    return (text || L.reason || "") + (L.detail && L.reason !== "paused" ? ` (${L.detail})` : "");
+  }
+  // eye toggle: the card's addresses, network names and key are blurred (default) until shown; remembered in this browser
+  let connMask = localStorage.getItem("deskbuddy.connShow") !== "1";
+  function applyMask() {
+    const card = $("#conn-st").closest(".conn"), eye = $("#conn-eye");
+    card.classList.toggle("mask", connMask);
+    eye.textContent = connMask ? "🙈" : "👁";
+    eye.setAttribute("aria-pressed", String(connMask));
+    const t = connMask ? "Show connection details" : "Hide connection details";
+    eye.title = t; eye.setAttribute("aria-label", t);
+  }
+  function renderConn() {
+    if (!$("#conn-st")) return;
+    applyMask();
+    const bad = location.origin !== HOME_ORIGIN, o = $("#conn-origin");
+    o.hidden = !bad;
+    if (bad) o.textContent = `⚠️ You opened this page at ${location.origin}. Link buttons and link settings only work at ${HOME_ORIGIN}; the bridge ignores them from anywhere else.`;
+    if (S) {
+      const port = $("#conn-port");
+      if (document.activeElement !== port) port.value = S.sshPort;
+      const nets = S.linkNetworks || [], here = linkInfo && linkInfo.laptop && linkInfo.laptop.ssid;
+      const list = nets.map((n) => {
+        const b = document.createElement("button");
+        b.className = "chip"; b.dataset.net = n; if (!connMask) b.title = `Remove ${n}`; b.setAttribute("aria-label", connMask ? "Remove network" : `Remove ${n}`);
+        const t = document.createElement("span"); t.textContent = n;
+        const x = document.createElement("b"); x.textContent = "×";
+        b.append(t, x);
+        return b;
+      });
+      const add = document.createElement("button");
+      add.className = "chip go"; add.id = "conn-addnet";
+      add.textContent = here ? `＋ Add this network (${here})` : "＋ Add this network";
+      add.disabled = !here || nets.includes(here) || nets.length >= 10;
+      if (!nets.length) { const none = document.createElement("span"); none.className = "none"; none.textContent = "None yet. "; list.push(none); }
+      $("#conn-nets").replaceChildren(...list, add);
+    }
+    const L = linkInfo, box = $("#conn-st");
+    if (!L) {
+      box.className = "st"; $("#conn-main").textContent = "The bridge isn't answering"; $("#conn-why").textContent = ""; $("#conn-dl").replaceChildren();
+      return;
+    }
+    box.className = "st " + (L.tunnel ? "up" : L.reason === "connecting" ? "wait" : "");
+    $("#conn-main").textContent = L.tunnel ? `Connected · up ${fmtDur(L.up_for)}` : "Not connected";
+    $("#conn-why").textContent = L.tunnel ? "" : connReason(L);
+    const rows = [], row = (k, v, cls = "") => rows.push(`<dt>${k}</dt><dd class="${cls}">${v}</dd>`), sens = (k, v) => row(k, v, "sens");
+    const lap = L.laptop || {}, w = phoneInfo && phoneInfo.wifi;
+    sens("Phone IP", esc(L.ip || "—") + (w && w.ip && w.ip !== L.ip ? ` <small>(phone says ${esc(w.ip)})</small>` : ""));
+    row("Round trip", L.rtt_ms != null ? `${L.rtt_ms} ms` : "—", L.rtt_ms == null ? "" : L.rtt_ms < 25 ? "good" : L.rtt_ms < 100 ? "warn" : "bad");
+    if (w) {
+      const hidden = !w.ssid || /unknown ssid/i.test(w.ssid);
+      sens("Phone Wi-Fi", hidden ? `hidden by Android <small>(Settings → Apps → Termux:API → Permissions → Location)</small>` : esc(w.ssid));
+      if (w.rssi != null) {
+        const q = w.rssi >= -55 ? ["excellent", "good"] : w.rssi >= -67 ? ["good", "good"] : w.rssi >= -75 ? ["fair", "warn"] : ["weak", "bad"];
+        row("Signal", `${Math.round(w.rssi)} dBm · ${q[0]}`, q[1]);
+      }
+      const band = w.freq ? (w.freq < 3000 ? "2.4 GHz" : w.freq < 5900 ? "5 GHz" : "6 GHz") : "";
+      if (w.speed || band) row("Link speed", [w.speed ? `${Math.round(w.speed)} Mbps` : "", band].filter(Boolean).join(" · "));
+    }
+    sens("Laptop", esc([lap.ssid, lap.ip].filter(Boolean).join(" · ") || "—") + (lap.subnet ? ` <small>${esc(lap.iface || "")} ${esc(lap.subnet)}</small>` : ""));
+    sens("Phone's ssh key", L.fingerprint ? `<code${connMask ? "" : ` title="${esc(L.fingerprint)}"`}>${esc(shortFp(L.fingerprint))}</code> <small>${esc(L.key_type || "")}</small>` : "not pinned yet");
+    $("#conn-dl").innerHTML = rows.join("");
+  }
+
+  // ---- buttons
+  $("#conn-eye").addEventListener("click", () => {
+    connMask = !connMask;
+    localStorage.setItem("deskbuddy.connShow", connMask ? "0" : "1");
+    renderConn();
+  });
+  $("#conn-reconnect").addEventListener("click", (e) => busy(e.currentTarget, "Reconnecting…", async () => {
+    const { status, data } = await linkPost("/link/reconnect");
+    connMsg(status === 200 ? "Reconnecting…" : why(data), status === 200 ? "good" : "bad");
+    setTimeout(loadPhone, 2500);
+  }));
+  $("#conn-find").addEventListener("click", (e) => busy(e.currentTarget, "Scanning…", async () => {
+    connMsg("Looking for the phone on this network (about 10 s)…");
+    const { status, data } = await linkPost("/link/find");
+    connMsg(status === 200 ? `Found the phone at ${data.ip}.` : why(data) === data.error ? `Not found on this network (${data.error}).` : why(data), status === 200 ? "good" : "bad");
+    loadPhone();
+  }));
+  $("#conn-checks").addEventListener("click", (e) => busy(e.currentTarget, "Checking…", async () => {
+    const pre = $("#conn-pre");
+    pre.hidden = false; pre.textContent = "Running checks (about 10 s)…";
+    const { data } = await linkPost("/link/doctor");
+    pre.textContent = (data.lines && data.lines.length ? data.lines.join("\n") : why(data)) + (data.lines ? (data.ok ? "\n\n✓ All checks passed" : "\n\n✗ Something needs attention (see →)") : "");
+  }));
+  $("#conn-setip").addEventListener("click", (e) => busy(e.currentTarget, "Checking…", async () => {
+    const ip = $("#conn-ip").value.trim();
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return connMsg("Type an IPv4 address like 192.168.1.9", "bad");
+    const { status, data } = await linkPost("/link/ip", { ip });
+    connMsg(status === 200 ? `Using ${data.ip}: it presented the pinned key.` : data.error === "key mismatch" ? `${ip} answers, but not with the pinned phone key, so it was refused.` : why(data), status === 200 ? "good" : "bad");
+    if (status === 200) $("#conn-ip").value = "";
+    loadPhone();
+  }));
+  $("#conn-ip").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#conn-setip").click(); });
+  $("#conn-port-save").addEventListener("click", () => {
+    const n = Number($("#conn-port").value);
+    if (!Number.isInteger(n) || n < 1024 || n > 65535) return connMsg("The port must be a whole number from 1024 to 65535", "bad");
+    save({ sshPort: n });
+  });
+  $("#conn-nets").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || !S) return;
+    if (b.id === "conn-addnet") {
+      const here = linkInfo && linkInfo.laptop && linkInfo.laptop.ssid;
+      if (here && !S.linkNetworks.includes(here)) save({ linkNetworks: [...S.linkNetworks, here] });
+    } else if (b.dataset.net) save({ linkNetworks: S.linkNetworks.filter((n) => n !== b.dataset.net) });
+  });
+
+  // ---- inline confirm (no alert())
+  function ask(text, yes, onYes, danger = true) {
+    const box = $("#conn-ask");
+    box.hidden = false;
+    box.className = "ask";
+    box.innerHTML = `<div>${esc(text)}</div><div class="acts"><button class="chip ${danger ? "danger" : "go"}" id="ask-yes">${esc(yes)}</button><button class="chip" id="ask-no">Cancel</button></div>`;
+    $("#ask-no").onclick = () => { box.hidden = true; };
+    $("#ask-yes").onclick = async () => { box.hidden = true; await onYes(); };
+  }
+  $("#conn-forget-btn").addEventListener("click", () => ask(
+    "Forget this phone? The pinned ssh key and saved address are deleted and the tunnel stops. Chip shows nothing until a phone is paired again.",
+    "Yes, forget it", async () => {
+      const { status, data } = await linkPost("/link/forget");
+      connMsg(status === 200 ? "Forgotten. Pair a phone below." : why(data), status === 200 ? "good" : "bad");
+      loadPhone();
+    }));
+
+  // ---- pairing wizard
+  async function loadPair() {
+    const r = await fetch("/link/pair", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!r) return;
+    pair = r; pairAt = Date.now();
+    renderWiz();
+  }
+  function renderWiz() {
+    const wiz = $("#conn-wiz"), p = pair || { active: false };
+    const sig = JSON.stringify([pairResult, wizMsg, p.active, p.expired, p.serving, p.script_by, p.fetched_by, p.candidate, p.wrong_codes, p.error, p.command, p.firewall]);
+    if (sig === wizSig) return updateCount();
+    const keep = $("#wiz-code") ? $("#wiz-code").value : "";
+    wizSig = sig;
+    const msg = wizMsg ? `<p class="hint" style="color:${wizMsg.bad ? "#ff8a8a" : "var(--good)"}">${esc(wizMsg.text)}</p>` : "";
+    let h = "";
+    if (pairResult) {
+      const r = pairResult;
+      h = `<p class="step"><b style="color:var(--good)">✓ Paired with ${esc(r.ip)}</b><br><small>Key ${esc(shortFp(r.fingerprint))}</small></p>` +
+        `<p class="step">${r.deploy.ok ? "Chip's files were sent to the new phone. The face loads within a minute." : "The key is pinned, but sending Chip's files failed. Run ./deploy.sh on the laptop:"}</p>` +
+        (r.deploy.ok ? "" : `<pre>${esc((r.deploy.lines || []).join("\n"))}</pre>`) +
+        `<div class="acts"><button class="chip go" id="wiz-done">Done</button></div>`;
+    } else if (!p.active) {
+      h = (p.expired ? `<p class="hint">The last pairing ran out of time.</p>` : "") +
+        `<p class="step">Pairing opens a one-time download on this laptop for 10 minutes, for one phone only. Nothing is trusted until you type the code the phone shows.</p>` +
+        `<div class="acts"><button class="chip go" id="wiz-start">Start pairing</button></div>` + msg;
+    } else {
+      const fw = p.firewall && p.firewall.match(/^(.*?pairing only), (sudo .*?)\s+\(after: (sudo .*)\)$/);
+      h = `<p class="step">Expires in <span class="count" id="conn-count"></span></p>`;
+      if (p.serving) {
+        h += `<p class="step"><b>1.</b> In Termux on the new phone, paste this one line (it checks the script before running it):</p>` +
+          `<div class="cmdbox cmd" id="wiz-cmd">${esc(p.command)}</div><div class="acts"><button class="chip" id="wiz-copy">Copy command</button></div>`;
+        if (p.firewall) h += `<div class="warnbox">🛡 The laptop's firewall blocks the phone from this port. Allow it for this pairing only:` +
+          (fw ? `<div class="cmdbox cmd" style="margin-top:6px">${esc(fw[2])}</div>Then remove it afterwards:<div class="cmdbox cmd" style="margin-top:6px">${esc(fw[3])}</div>` : `<div class="cmdbox cmd">${esc(p.firewall)}</div>`) + `</div>`;
+        h += `<p class="step">${p.script_by ? `⏳ ${esc(p.script_by)} got the script and is fetching the files…` : "⏳ Waiting for the phone to run the command…"}</p>`;
+      } else if (p.fetched_by) {
+        const c = p.candidate;
+        h += `<p class="step">${c && c.ready ? `✓ ${esc(p.fetched_by)} finished setup and its ssh is up.` : `⏳ Setup is running on ${esc(p.fetched_by)} (installing packages, a few minutes)…`}</p>` +
+          `<p class="step"><b>2.</b> When it ends, the phone prints <b>PAIRING CODE</b> (4 groups of 4). Type it here. The laptop doesn't show the phone's key on purpose, so a look-alike device can't be approved by mistake.</p>` +
+          `<div class="line"><input type="text" id="wiz-code" class="code" maxlength="24" placeholder="xxxx xxxx xxxx xxxx" autocomplete="off" spellcheck="false" aria-label="Pairing code from the phone">` +
+          `<button class="chip go" id="wiz-confirm">Pin this phone</button></div>` +
+          (p.wrong_codes ? `<p class="hint" style="color:#ff8a8a">${p.wrong_codes} of 5 wrong codes used. The fifth ends pairing.</p>` : "");
+      }
+      if (p.error) h += `<div class="warnbox">${esc(p.error)}</div>`;
+      h += msg + `<div class="acts"><button class="chip danger" id="wiz-cancel">Cancel pairing</button></div>`;
+    }
+    wiz.innerHTML = h;
+    if (keep && $("#wiz-code")) $("#wiz-code").value = keep;
+    updateCount();
+  }
+  function updateCount() {
+    const el = $("#conn-count");
+    if (!el || !pair || !pair.active) return;
+    const left = Math.max(0, Math.round(pair.expires_in - (Date.now() - pairAt) / 1000));
+    el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    if (left === 0 && Date.now() - pairAt > 1500) loadPair();
+  }
+  async function startPair(replace) {
+    wizMsg = null;
+    const { status, data } = await linkPost("/link/pair/start", replace ? { replace: true } : {});
+    if (status !== 200) wizMsg = { bad: true, text: data.message || WHY[data.error] || data.error || "couldn't start pairing" };
+    pairResult = null; wizSig = ""; await loadPair(); renderWiz();
+  }
+  $("#conn-wiz").addEventListener("click", async (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.id === "wiz-start") {
+      if (linkInfo && linkInfo.pinned && linkInfo.tunnel) {
+        ask("A phone is connected right now. Starting doesn't disconnect it: the new phone replaces it only after you type its code. Start anyway?",
+          "Yes, pair another", () => startPair(true), false);
+      } else startPair(false);
+    } else if (b.id === "wiz-copy") {
+      try { await navigator.clipboard.writeText(pair.command); b.textContent = "Copied ✓"; }
+      catch (err) { const r = document.createRange(); r.selectNodeContents($("#wiz-cmd")); getSelection().removeAllRanges(); getSelection().addRange(r); b.textContent = "Selected: press Ctrl+C"; }
+      setTimeout(() => { if (b.isConnected) b.textContent = "Copy command"; }, 2500);
+    } else if (b.id === "wiz-cancel") {
+      await linkPost("/link/pair/cancel"); wizMsg = null; wizSig = ""; await loadPair(); renderWiz();
+    } else if (b.id === "wiz-done") {
+      pairResult = null; wizMsg = null; wizSig = ""; loadPhone(); loadPair();
+    } else if (b.id === "wiz-confirm") {
+      const code = $("#wiz-code").value.trim();
+      if (code.replace(/\s+/g, "").length < 16) { wizMsg = { bad: true, text: "Type all 16 characters the phone shows." }; wizSig = ""; return renderWiz(); }
+      await busy(b, "Pinning & sending files…", async () => {
+        const { status, data } = await linkPost("/link/pair/confirm", { code });
+        if (status === 200) { pairResult = data; wizMsg = null; }
+        else wizMsg = { bad: true, text: data.error === "code mismatch" ? `That code doesn't match the phone at ${pair.fetched_by}. ${data.tries_left} tries left.`
+          : data.error === "no candidate" ? "The phone isn't ready yet: setup is still running." : data.message || data.error };
+      });
+      wizSig = ""; await loadPair(); renderWiz();
+    }
+  });
+  $("#conn-rep").addEventListener("toggle", () => { if ($("#conn-rep").open) loadPair(); });
+  setInterval(updateCount, 1000);
 
   loadSettings(); loadPhone(); loadAttention();
   setInterval(loadAttention, 4000);

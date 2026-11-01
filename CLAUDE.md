@@ -12,8 +12,13 @@ bridge. README.md has the full feature list: read only the section you need.
     sprites, `player.js` draws the rig (stepped 12 fps), `chip.js` is the state machine fed by #app data-*/classes,
     #face m-* mood classes and chip:react / chip:notify events. Follow the pack; don't invent visuals.
 - `phone/*.py` — Termux side: server.py, alert.py (torch/sounds), dictation.py
-- `laptop/bridge.py` — systemd user service `deskbuddy-bridge`, 127.0.0.1:8765, ssh -R tunnel to the phone.
+- `laptop/bridge.py` — systemd user service `deskbuddy-bridge`, 127.0.0.1:8765, ssh -R tunnel to the phone
+  (PhoneLink: pinned key in ~/.config/deskbuddy/known_hosts under alias chip-phone, `/link` = its state with a `reason`).
   Settings schema = DEFAULTS/RANGES/CHOICES/APP_RULES; stored in ~/.config/deskbuddy/settings.json
+  Link settings: linkPaused, linkAutoFind, linkHomeOnly, linkNetworks, linkKeepAlive, linkRetry, sshPort (LINK_KEYS).
+- Connections card in `laptop/dashboard.html` (Reconnect, Find phone, Replace phone = pairing wizard, Forget, Doctor).
+  README "Connections and reboots" describes it.
+- `laptop/doctor.py` — checks the laptop, the Wi-Fi link (incl. paused, home network, key mismatch from `/link` reason) and Termux.
 - `laptop/skin.js` — chip-skin/1: `check -` (JSON report with path/problem/fix per error), `prompt <basis>`,
   `example`; the bridge runs it as a subprocess for /skins/*. Reuses pack.js (eyeLook, pupilFit), so it checks what
   the phone draws; `python3 -I laptop/test_skins.py` tests it. `laptop/merge_pack.js <delta>` merges a pack delta.
@@ -49,6 +54,9 @@ bridge. README.md has the full feature list: read only the section you need.
 ## Rules
 - Dictation: never press Enter, never type while the laptop is locked, mic on only while holding, only the
   phone through the tunnel can trigger typing. Bridge rejects other origins/hosts.
+- Dictation keys live only in `~/.config/deskbuddy/secrets.json` (stt.SECRETS_FILE): never in settings.json, never returned or logged. Settings: dictEngine, dictLang, dictProvider, dictCloudModel/Url, dictAzureRegion, dictModelLaptop.
+- Link writes are dashboard-only: `/link/*` POSTs are refused (`Handler.dashboard_only`) and `/settings` silently drops LINK_KEYS (incl. sshPort) unless Origin is exactly `http://127.0.0.1:8765`. Never let the phone's page or a script change them.
+- Pairing a new phone: only through the dashboard's Replace phone wizard (`/link/pair/*`, the user types the phone's code). Don't delete known_hosts by hand.
 - Attention/notifications keep only the source app's name, never content. No webcam.
 - Don't clear caches; don't touch GNOME Builder/Flatpak setups.
 - Testing on the phone: undo what you started (e.g. reset a test focus timer so it doesn't count).

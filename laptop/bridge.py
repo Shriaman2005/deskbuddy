@@ -4,8 +4,8 @@
 - Serves laptop stats plus media and volume controls on 127.0.0.1:8765.
   The phone reaches it as its own 127.0.0.1:8765 through an ssh reverse tunnel to Termux.
 - Types text dictated on the phone into the focused window (POST /type; refused while locked).
-  When the dashboard says dictation runs on the laptop, the phone sends the clip to POST /transcribe
-  and this laptop's whisper.cpp turns it into text.
+  When the dashboard's dictation engine is the laptop or a cloud API, the phone sends the clip to POST /transcribe
+  and this laptop's whisper.cpp or the chosen provider turns it into text (laptop/stt.py; keys: /stt/key).
 - Notices when you're typing (how long and how fast, never which keys) so Chip can type along on the phone.
 - Collects moments when an AI agent or app needs you (agent hooks call POST /attention via attention.py,
   and desktop notifications are watched on the session bus); the phone blinks its torch and plays a sound,
@@ -23,15 +23,18 @@
 import collections
 import concurrent.futures
 import glob
+import hashlib
+import hmac
 import io
 import ipaddress
 import json
 import math
 import os
 import re
+import secrets
 import socket
 import subprocess
-import tempfile
+import tarfile
 import threading
 import time
 import urllib.request
@@ -42,10 +45,11 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # python -I skips the script's folder
+import stt  # noqa: E402
 import typer  # noqa: E402
 
 PORT = 8765
-SSH_PORT = 8022  # sshd in Termux on the phone
+PAIR_PORT = 8766  # the one-shot download server for pairing a new phone (laptop's LAN address only)
 HOST_ALIAS = "chip-phone"  # the phone's ssh host key is pinned under this name, whatever its IP is
 KNOWN_HOSTS = os.path.expanduser("~/.config/deskbuddy/known_hosts")
 STATE_FILE = os.path.expanduser("~/.config/deskbuddy/state.json")
@@ -63,17 +67,16 @@ SKIN_LIMIT = 30        # installed skins
 # Other websites open in the laptop's browser can reach 127.0.0.1 too, so requests from them are refused.
 HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 ORIGINS = {f"http://{h}" for h in HOSTS} | {"http://127.0.0.1:8080", "http://localhost:8080"}
-# Dictation on the laptop: whisper.cpp v1.9.5 built here (static, AVX2), models from ggerganov/whisper.cpp on Hugging Face.
-# For a 4 s sentence on this Ryzen 5 3450U: small ~2 s (best with Hinglish), base ~0.8 s (fast mode).
-STT = os.path.expanduser("~/.local/share/deskbuddy/stt")
-WHISPER = os.path.join(STT, "whisper-cli")
-STT_MODELS = {False: os.path.join(STT, "models", "ggml-small-q8_0.bin"),
-              True: os.path.join(STT, "models", "ggml-base-q8_0.bin")}
+DASHBOARD_ORIGIN = f"http://127.0.0.1:{PORT}"  # the only origin allowed to manage the link (Handler.dashboard_only)
+DOCTOR = os.path.join(HERE, "doctor.py")
+# Dictation engines (laptop/stt.py): whisper.cpp v1.9.5 built here (static, AVX2), models from ggerganov/whisper.cpp
+# on Hugging Face in ~/.local/share/deskbuddy/stt/models; for a 4 s sentence on this Ryzen 5 3450U: small ~2 s
+# (best with Hinglish), base ~0.8 s (fast mode). Or a cloud API, with keys in ~/.config/deskbuddy/secrets.json.
 
 
-def run(*cmd, timeout=6):
+def run(*cmd, timeout=6, input=None):
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=input).stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
@@ -108,7 +111,7 @@ TOGGLES = (
     "dockPhoneBattery", "dockPhoneTemp", "timerPill", "focusBar", "dots", "musicMode", "mask",
     "clockNow", "clockHours", "clockAir", "ringCpu", "ringRam", "ringGpu", "ringBattery", "mediaCard",
     "sounds", "talk", "idle", "greetings", "hourly", "trackToasts", "laptopAlerts", "phoneAlerts", "shake",
-    "stretch", "dictation", "fastDictation", "dictateOnLaptop", "sleep", "drowsy",
+    "stretch", "dictation", "fastDictation", "sleep", "drowsy",
     # attention alerts: "torch" is the master switch (it was torch-only at first), the rest say what, how and when
     "torch", "torchAsk", "torchDone", "torchApps", "notifyAllApps", "alertTorch", "alertSound",
     "torchAway", "torchRepeat", "torchNight", "behaviourTorch",
@@ -138,7 +141,7 @@ def skin_path(skin_id):
 
 
 DEFAULTS = dict.fromkeys(TOGGLES, True) | {
-    "fastDictation": False, "dictateOnLaptop": False, "torchAway": False, "torchNight": False, "notifyAllApps": False, "pomoAutoFocus": False, "burnGuard": False, "gazeFollow": False,
+    "fastDictation": False, "torchAway": False, "torchNight": False, "notifyAllApps": False, "pomoAutoFocus": False, "burnGuard": False, "gazeFollow": False,
     "stretchMin": 50, "brightnessDay": 90,
     "sleepAt": "23:00", "wakeAt": "06:30", "brightnessNight": 3, "drowsyMin": 45,
     "torchSeconds": 3, "soundSeconds": 2, "soundVolume": 80, "soundStyle": "chime", "remindEvery": 20, "remindMinutes": 3,
@@ -147,19 +150,29 @@ DEFAULTS = dict.fromkeys(TOGGLES, True) | {
     "eyeStyle": pack_eyes()[0], "pupilSize": "M", "showPupils": True, "skin": "",  # eye style (a style id of the pack), pupil size, pupils on/off, installed skin id ("" = none)
     "locName": "", "locLat": 0.0, "locLon": 0.0,  # weather place picked on the dashboard; "" = the one in phone/www/config.js
     "apps": {},  # app name -> APP_RULES choice; apps not listed follow the switches above
+    # dictation: engine, one language for all engines (stt.LANGS), cloud provider/model/URL, laptop whisper model
+    "dictEngine": "phone", "dictLang": "hinglish", "dictProvider": "groq", "dictCloudModel": "", "dictCloudUrl": "",
+    "dictAzureRegion": "", "dictModelLaptop": "auto",
+    # the link to the phone (PhoneLink): paused, sweep the Wi-Fi for it, only on the networks listed ("wired" = a cable)
+    "linkPaused": False, "linkAutoFind": True, "linkHomeOnly": False, "linkNetworks": [],
+    "linkKeepAlive": 10, "linkRetry": 5, "sshPort": 8022,  # ssh keep-alive / retry seconds, sshd's port in Termux
 }
 RANGES = {"stretchMin": (10, 180), "brightnessDay": (5, 255), "brightnessNight": (0, 100), "drowsyMin": (5, 240),
           "torchSeconds": (1, 60), "soundSeconds": (1, 60), "soundVolume": (5, 100), "remindEvery": (10, 300),
           "remindMinutes": (1, 30), "pomoFocus": (1, 180), "pomoShort": (1, 60), "pomoLong": (1, 90),
-          "pomoLongEvery": (2, 8), "pomoGoal": (1, 24), "typingAfter": (3, 120), "chipGlow": (0, 200), "eyeGap": (-14, 24), "phonesGap": (-16, 24)}
+          "pomoLongEvery": (2, 8), "pomoGoal": (1, 24), "typingAfter": (3, 120), "chipGlow": (0, 200), "eyeGap": (-14, 24), "phonesGap": (-16, 24),
+          "linkKeepAlive": (5, 60), "linkRetry": (5, 60), "sshPort": (1024, 65535)}
 CHOICES = {"soundStyle": ("chime", "beep", "alarm", "ping"),  # the sounds in phone/alert.py
            "accent": ("cyan", "terracotta", "sage", "violet", "rose", "amber", "sky", "custom"),  # accent names chip.js knows
            "idleRate": ("rare", "normal", "often"),
-           "pupilSize": ("S", "M", "L")}
+           "pupilSize": ("S", "M", "L"),
+           "dictEngine": ("phone", "laptop", "cloud"), "dictLang": stt.LANGS, "dictProvider": tuple(stt.PROVIDERS)}
 # the idle clips in pack.json personality (idle + idleAway); idleOff lists the ones switched off
 IDLE_CLIPS = ("curious", "happyBlip", "suspicious", "look", "wink", "whistle", "sneeze", "peek", "spin", "wiggle",
               "smirkBlip", "yawn", "bored", "nod")
 APP_RULES = ("both", "torch", "sound", "off")
+# settings only the dashboard may change (the phone's page and local programs can't pause or redirect the link)
+LINK_KEYS = ("linkPaused", "linkAutoFind", "linkHomeOnly", "linkNetworks", "linkKeepAlive", "linkRetry", "sshPort")
 
 
 class Settings:
@@ -174,12 +187,24 @@ class Settings:
         except (OSError, ValueError):
             saved = {}
         self.rev = saved.get("rev", 0)
-        self.values = {k: v for k, v in saved.get("values", {}).items() if self.clean(k, v) == v}
+        values = dict(saved.get("values", {}))
+        if "dictateOnLaptop" in values:  # replaced by dictEngine
+            old = values.pop("dictateOnLaptop")
+            values.setdefault("dictEngine", "laptop" if old is True else "phone")
+        self.values = {k: v for k, v in values.items() if self.clean(k, v) == v}
 
     @staticmethod
     def clean(key, value):
         """The value to store for this setting, or None if it doesn't fit."""
         default = DEFAULTS.get(key)
+        if key == "dictModelLaptop":  # "auto" (small, base in fast mode) or a ggml model present in the stt folder
+            return value if value == "auto" or (isinstance(value, str) and value in stt.laptop_models()) else None
+        if key == "dictCloudModel":  # "" = the provider's default
+            return value if isinstance(value, str) and re.fullmatch(r"[\w.:/@+-]{0,100}", value) else None
+        if key == "dictCloudUrl":  # "" or https only (for the custom provider)
+            return value.strip() if value == "" or (isinstance(value, str) and stt.custom_endpoint(value)) else None
+        if key == "dictAzureRegion":
+            return value if isinstance(value, str) and re.fullmatch(r"[a-z0-9]{0,30}", value) else None
         if key == "locName":
             return " ".join(value.split())[:80] if isinstance(value, str) else None
         if key in ("locLat", "locLon"):
@@ -195,6 +220,11 @@ class Settings:
             return max(lo, min(hi, round(value)))
         if key in CHOICES:
             return value if value in CHOICES[key] else None
+        if key == "linkNetworks":  # home network names (SSIDs), up to 10
+            if not isinstance(value, list):
+                return None
+            names = [n for n in value if isinstance(n, str) and 0 < len(n) <= 32]
+            return list(dict.fromkeys(names))[:10]
         if isinstance(default, list):  # idle clips switched off
             if not isinstance(value, list):
                 return None
@@ -217,11 +247,16 @@ class Settings:
 
     def get(self):
         with self.lock:
-            return dict(DEFAULTS, **self.values, rev=self.rev)
+            values = dict(DEFAULTS, **self.values, rev=self.rev)
+        values["dictateOnLaptop"] = values["dictEngine"] == "laptop"  # read-only, for phone pages from before dictEngine
+        return values
 
-    def update(self, changes, reset=False):
+    def update(self, changes, reset=False, keep=()):
+        """keep: keys a reset leaves as they are."""
+        if isinstance(changes.get("dictateOnLaptop"), bool) and "dictEngine" not in changes:  # older phone pages
+            changes = dict(changes, dictEngine="laptop" if changes["dictateOnLaptop"] else "phone")
         with self.lock:
-            values = {} if reset else dict(self.values)
+            values = {k: v for k, v in self.values.items() if k in keep} if reset else dict(self.values)
             for k, v in changes.items():
                 v = self.clean(k, v)
                 if v is not None:
@@ -255,25 +290,6 @@ def number(text):
         return float(text)
     except (TypeError, ValueError):
         return None
-
-
-# ---------------------------------------------------------------- dictation on the laptop
-
-stt_lock = threading.Lock()  # one clip at a time; whisper already uses all four cores
-
-
-def transcribe(audio, fast, prompt):
-    """whisper.cpp's raw text for a WAV clip from the phone, which cleans it up itself (phone/dictation.py).
-    The clip is only written to XDG_RUNTIME_DIR, which is in RAM, and is gone when this returns."""
-    with wave.open(io.BytesIO(audio)) as w:
-        seconds = w.getnframes() / w.getframerate()
-    audio_ctx = min(1500, int(seconds * 50) + 128)  # the same speed-ups as on the phone: short window, greedy
-    with stt_lock, tempfile.NamedTemporaryFile(suffix=".wav", dir=os.environ.get("XDG_RUNTIME_DIR")) as f:
-        f.write(audio)
-        f.flush()
-        return subprocess.run([WHISPER, "-m", STT_MODELS[fast], "-f", f.name, "-l", "en", "-t", "4", "-nt", "-np",
-                               "-bs", "1", "-bo", "1", "-ac", str(audio_ctx), "--prompt", prompt],
-                              capture_output=True, text=True, timeout=60, check=True).stdout
 
 
 # ---------------------------------------------------------------- attention (the phone's torch and alert sound)
@@ -709,15 +725,76 @@ def volume_control(action):
 class PhoneLink:
     """Keeps `ssh -R` open to Termux so the phone's 127.0.0.1:8765 reaches this bridge, over the home Wi-Fi.
     The phone's ssh host key is pinned under an alias, so its address can change: when the saved address stops
-    answering, the Wi-Fi subnet is scanned for port 8022 and the host that presents the pinned key is the phone."""
+    answering, the Wi-Fi subnet is scanned for sshd's port and the host that presents the pinned key is the phone.
+    Settings read live: linkPaused, linkAutoFind, linkHomeOnly + linkNetworks, linkKeepAlive, linkRetry, sshPort."""
+    HOST_KEY_CHANGED = ("Host key verification failed", "REMOTE HOST IDENTIFICATION HAS CHANGED")
 
     def __init__(self):
         self.state = load_state()
         self.up = False
         self.since = 0.0       # when the tunnel came up
+        self.started = 0.0     # when the current ssh started (0 = none running)
         self.fails = 0         # tunnels in a row that died within seconds of starting
         self.last_scan = 0.0
         self.scans = 0
+        self.error = None      # why the last attempt failed: "not found" / "key mismatch", None = no failure
+        self.detail = ""       # ssh's last stderr line, for the dashboard
+        self.restart = False   # set by the endpoints: the running ssh should stop (the loop decides what next)
+        self.wake = threading.Event()
+        self.lock = threading.Lock()       # state["ip"] and the key file
+        self.scan_lock = threading.Lock()  # one sweep at a time (the loop's or /link/find's)
+        self._net = (0.0, None)            # (when, network())
+        self._rtt = (0.0, None, None)      # (when, (ip, port), ms)
+        self._fp = (None, None)            # (key file mtime, (fingerprint, type))
+
+    @staticmethod
+    def cfg():
+        return settings.get()
+
+    def port(self):
+        return self.cfg()["sshPort"]
+
+    # ---- the laptop's network
+    @staticmethod
+    def interface():
+        """(iface, address, its network) of the first global IPv4 address that isn't docker's or a VM bridge."""
+        for line in run("ip", "-4", "-o", "addr", "show", "scope", "global").splitlines():
+            m = re.search(r"inet ([\d.]+)/(\d+)", line)
+            if m and "docker" not in line and "virbr" not in line:
+                return line.split()[1], m.group(1), ipaddress.ip_network(f"{m.group(1)}/{m.group(2)}", strict=False)
+        return None, None, None
+
+    @staticmethod
+    def wifi_ssid(iface):
+        """(SSID, security e.g. "WPA2", "" = open) of the network iface is on (cached scan results only:
+        --rescan no), or (None, None)."""
+        for line in run("nmcli", "-t", "-f", "active,ssid,device,security", "dev", "wifi", "list", "--rescan", "no").splitlines():
+            fields = [f.replace("\\:", ":").replace("\\\\", "\\") for f in re.split(r"(?<!\\):", line)]
+            if len(fields) == 4 and fields[0] == "yes" and fields[2] == iface:
+                return fields[1] or None, fields[3].strip("- ")
+        return None, None
+
+    def network(self):
+        """{iface, ip, ssid, subnet}; ssid is "wired" on a non-wireless interface. Cached 5 s."""
+        when, net = self._net
+        if net and time.time() - when < 5:
+            return net
+        iface, ip, subnet = self.interface()
+        ssid = security = None
+        if iface:
+            ssid, security = self.wifi_ssid(iface) if os.path.isdir(f"/sys/class/net/{iface}/wireless") else ("wired", None)
+        net = {"iface": iface, "ip": ip, "ssid": ssid, "security": security, "subnet": str(subnet) if subnet else None}
+        self._net = (time.time(), net)
+        return net
+
+    def blocked(self):
+        """Why the link must stay down right now (no scanning, no connecting), or None."""
+        c = self.cfg()
+        if c["linkPaused"]:
+            return "paused"
+        if c["linkHomeOnly"] and self.network()["ssid"] not in c["linkNetworks"]:
+            return "not home network"
+        return None
 
     # ---- the pinned host key
     @staticmethod
@@ -728,106 +805,534 @@ class PhoneLink:
         except OSError:
             return set()
 
+    def fingerprint(self):
+        """(SHA256 fingerprint, key type) of the pinned key, ED25519 first; (None, None) if nothing is pinned."""
+        try:
+            mtime = os.stat(KNOWN_HOSTS).st_mtime
+        except OSError:
+            return None, None
+        if self._fp[0] != mtime:
+            keys = {}
+            for line in run("ssh-keygen", "-lf", KNOWN_HOSTS).splitlines():
+                m = re.match(r"\d+ (SHA256:\S+) .*\((\w+)\)$", line)
+                if m:
+                    keys.setdefault(m.group(2), m.group(1))
+            kind = next((k for k in ("ED25519", "ECDSA", "RSA") if k in keys), next(iter(keys), None))
+            self._fp = (mtime, (keys[kind], kind) if kind else (None, None))
+        return self._fp[1]
+
     def pin(self, ip):
         """First run only: take the key the phone already has in ~/.ssh/known_hosts (or, failing that, what it
         offers now) and keep it under the alias."""
         if self.pinned():
             return True
-        lines = [l for l in run("ssh-keygen", "-F", f"[{ip}]:{SSH_PORT}").splitlines() if l and not l.startswith("#")]
+        port = self.port()
+        lines = [l for l in run("ssh-keygen", "-F", f"[{ip}]:{port}").splitlines() if l and not l.startswith("#")]
         if not lines:
-            lines = [l for l in run("ssh-keyscan", "-T", "4", "-p", str(SSH_PORT), ip, timeout=10).splitlines()
+            lines = [l for l in run("ssh-keyscan", "-T", "4", "-p", str(port), ip, timeout=10).splitlines()
                      if l and not l.startswith("#")]
         keys = [f"{HOST_ALIAS} {' '.join(l.split()[1:3])}\n" for l in lines if len(l.split()) >= 3]
         if not keys:
             return False
-        os.makedirs(os.path.dirname(KNOWN_HOSTS), exist_ok=True)
-        with open(KNOWN_HOSTS, "w") as f:
-            f.writelines(keys)
+        with self.lock:
+            os.makedirs(os.path.dirname(KNOWN_HOSTS), exist_ok=True)
+            with open(KNOWN_HOSTS, "w") as f:
+                f.writelines(keys)
         print("pinned the phone's ssh host key", flush=True)
         return True
 
     # ---- finding the phone
+    def offered(self, ip):
+        return {tuple(l.split()[1:3]) for l in
+                run("ssh-keyscan", "-T", "3", "-p", str(self.port()), ip, timeout=8).splitlines()
+                if len(l.split()) >= 3 and not l.startswith("#")}
+
     def is_phone(self, ip):
-        keys = self.pinned()
-        offered = {tuple(l.split()[1:3]) for l in
-                   run("ssh-keyscan", "-T", "3", "-p", str(SSH_PORT), ip, timeout=8).splitlines()
-                   if len(l.split()) >= 3 and not l.startswith("#")}
-        return bool(keys & offered)
+        return bool(self.pinned() & self.offered(ip))
 
-    @staticmethod
-    def subnet():
-        for line in run("ip", "-4", "-o", "addr", "show", "scope", "global").splitlines():
-            m = re.search(r"inet ([\d.]+)/(\d+)", line)
-            if m and "docker" not in line and "virbr" not in line:
-                prefix = max(24, int(m.group(2)))  # never sweep more than a /24
-                return ipaddress.ip_network(f"{m.group(1)}/{prefix}", strict=False), m.group(1)
-        return None, None
+    def subnet(self):
+        """The network to sweep (never more than a /24) and the laptop's own address."""
+        _, mine, net = self.interface()
+        if not net:
+            return None, None
+        return ipaddress.ip_network(f"{mine}/{max(24, net.prefixlen)}", strict=False), mine
 
-    def discover(self):
-        """The phone's current address, or None. At most one sweep every 20 s."""
-        if time.time() - self.last_scan < 20:
-            return None
-        self.last_scan = time.time()
-        net, mine = self.subnet()
-        if not net or not self.pinned():
-            return None
-
-        def open_port(ip):
-            try:
-                with socket.create_connection((ip, SSH_PORT), timeout=0.6):
-                    return ip
-            except OSError:
+    def discover(self, force=False):
+        """The phone's current address, or None. At most one sweep every 20 s, unless forced (/link/find)."""
+        with self.scan_lock:
+            if self.blocked() or (not force and time.time() - self.last_scan < 20):
                 return None
+            self.last_scan = time.time()
+            net, mine = self.subnet()
+            if not net or not self.pinned():
+                return None
+            port = self.port()
 
-        hosts = [str(h) for h in net.hosts() if str(h) != mine]
-        with concurrent.futures.ThreadPoolExecutor(48) as pool:
-            candidates = [ip for ip in pool.map(open_port, hosts) if ip]
-        self.scans += 1
-        for ip in candidates:
-            if self.is_phone(ip):
-                if ip != self.state.get("ip"):
-                    print(f"found the phone at {ip}", flush=True)
-                    self.state["ip"] = ip
-                    save_state(self.state)
-                return ip
-        return None
+            def open_port(ip):
+                try:
+                    with socket.create_connection((ip, port), timeout=0.6):
+                        return ip
+                except OSError:
+                    return None
+
+            hosts = [str(h) for h in net.hosts() if str(h) != mine]
+            with concurrent.futures.ThreadPoolExecutor(48) as pool:
+                candidates = [ip for ip in pool.map(open_port, hosts) if ip]
+            self.scans += 1
+            for ip in candidates:
+                if self.is_phone(ip):
+                    self.use(ip)
+                    return ip
+            # the saved address answers, with another key: say so rather than "not found"
+            self.error = "key mismatch" if self.state.get("ip") in candidates else "not found"
+            return None
+
+    def use(self, ip):
+        """Save ip as the phone's address; a tunnel running to another address is restarted."""
+        with self.lock:
+            if ip != self.state.get("ip"):
+                print(f"found the phone at {ip}", flush=True)
+                self.state["ip"] = ip
+                save_state(self.state)
+                self.restart = bool(self.started)
+            self.fails, self.error = 0, None
+        self.wake.set()
+
+    def forget(self):
+        """Drop the pinned key and the saved address, and stop the tunnel."""
+        with self.lock:
+            try:
+                os.remove(KNOWN_HOSTS)
+            except FileNotFoundError:
+                pass
+            self.state.pop("ip", None)
+            save_state(self.state)
+            self.fails, self.error, self.detail = 0, None, ""
+            self.restart = True
+        print("forgot the phone's key and address", flush=True)
+        self.wake.set()
+
+    def replace_pin(self, ip, keys):
+        """Pairing confirmed: these keys only (old phone's dropped), this address, and a fresh tunnel."""
+        with self.lock:
+            os.makedirs(os.path.dirname(KNOWN_HOSTS), exist_ok=True)
+            with open(KNOWN_HOSTS + ".tmp", "w") as f:
+                f.writelines(f"{HOST_ALIAS} {kind} {key}\n" for kind, key in keys)
+            os.replace(KNOWN_HOSTS + ".tmp", KNOWN_HOSTS)
+            self.state["ip"] = ip
+            save_state(self.state)
+            self.fails, self.error, self.detail, self.restart = 0, None, "", True
+        self.wake.set()
+
+    def reconnect(self):
+        self.fails, self.restart = 0, True
+        self.wake.set()
+
+    def rtt(self, ip):
+        """TCP connect time to the phone's sshd in ms (None if it doesn't answer). Cached 10 s."""
+        when, key, ms = self._rtt
+        target = (ip, self.port())
+        if key == target and time.time() - when < 10:
+            return ms
+        t = time.monotonic()
+        try:
+            with socket.create_connection(target, timeout=1.5):
+                ms = round((time.monotonic() - t) * 1000, 1)
+        except OSError:
+            ms = None
+        self._rtt = (time.time(), target, ms)
+        return ms
 
     # ---- the tunnel
+    def reason(self):
+        """Why the tunnel is down, or None when it's up."""
+        if self.up:
+            return None
+        why = self.blocked()
+        if why:
+            return why
+        if not self.pinned():
+            return "no key pinned"
+        if self.started:  # ssh running but not up yet
+            return "connecting"
+        return self.error or "not found"
+
     def snapshot(self):
-        return {"tunnel": self.up, "ip": self.state.get("ip"), "up_for": round(time.time() - self.since) if self.up else 0,
-                "scans": self.scans, "pinned": bool(self.pinned())}
+        ip = self.state.get("ip")
+        fp, kind = self.fingerprint()
+        why = self.reason()
+        probe = ip and why not in ("paused", "not home network")
+        return {"tunnel": self.up, "ip": ip, "up_for": round(time.time() - self.since) if self.up else 0,
+                "scans": self.scans, "pinned": bool(self.pinned()), "port": self.port(),
+                "laptop": self.network(), "fingerprint": fp, "key_type": kind,
+                "reason": why, "detail": self.detail if why else "",
+                "rtt_ms": self.rtt(ip) if probe else None}
 
     def loop(self):
         while True:
             try:
-                ip = self.state.get("ip")
-                if ip and not self.pinned():
-                    self.pin(ip)
-                if not ip or self.fails >= 2:  # the saved address doesn't answer: look for the phone
-                    found = self.discover()
-                    if found:
-                        ip, self.fails = found, 0
-                if ip and self.pinned():
-                    self.run_tunnel(ip)
+                self.tick()
             except Exception as e:
                 print("link:", e, flush=True)
-            time.sleep(5)
+            self.wake.wait(self.cfg()["linkRetry"])
+            self.wake.clear()
+
+    def tick(self):
+        self.restart = False
+        if self.blocked():
+            return
+        ip = self.state.get("ip")
+        if ip and not self.pinned():
+            self.pin(ip)
+        if (not ip or self.fails >= 2) and self.cfg()["linkAutoFind"]:  # the saved address doesn't answer: look for the phone
+            found = self.discover()
+            if found:
+                ip = found
+        if ip and self.pinned():
+            self.run_tunnel(ip)
 
     def run_tunnel(self, ip):
-        cmd = ["ssh", "-N", "-p", str(SSH_PORT), "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
-               "-o", "ConnectTimeout=8", "-o", "ServerAliveInterval=10", "-o", "ServerAliveCountMax=3",
+        port, keepalive = self.port(), self.cfg()["linkKeepAlive"]
+        cmd = ["ssh", "-N", "-p", str(port), "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
+               "-o", "ConnectTimeout=8", "-o", f"ServerAliveInterval={keepalive}", "-o", "ServerAliveCountMax=3",
                "-o", f"UserKnownHostsFile={KNOWN_HOSTS}", "-o", "GlobalKnownHostsFile=/dev/null",
-               "-o", f"HostKeyAlias={HOST_ALIAS}", "-o", "StrictHostKeyChecking=yes",
+               "-o", f"HostKeyAlias={HOST_ALIAS}", "-o", "StrictHostKeyChecking=yes", "-o", "UpdateHostKeys=no",
+               "-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "PermitLocalCommand=no",
                "-R", f"{PORT}:127.0.0.1:{PORT}", ip]
-        started = time.time()
-        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        while proc.poll() is None:
-            if not self.up and time.time() - started > 4:  # ssh -N prints nothing; alive after 4 s means connected
-                self.up, self.since, self.fails = True, time.time(), 0
-            time.sleep(1)
-        self.up = False
+        self.started = started = time.time()
+        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        stopped = False
+        try:
+            while proc.poll() is None:
+                if self.restart or self.blocked() or (self.port(), self.cfg()["linkKeepAlive"]) != (port, keepalive):
+                    stopped = True  # paused, off the home network, reconnect/forget/new address, or new settings
+                    proc.terminate()
+                    try:
+                        proc.wait(5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                    break
+                if not self.up and time.time() - started > 4:  # ssh -N prints nothing; alive after 4 s means connected
+                    self.up, self.since, self.fails, self.error, self.detail = True, time.time(), 0, None, ""
+                time.sleep(1)
+            err = proc.stderr.read() if not stopped else ""
+        finally:
+            proc.stderr.close()
+            self.up, self.started, self.restart = False, 0.0, False
+        if stopped:
+            return
+        lines = [l.strip() for l in err.splitlines() if l.strip()]
+        self.detail = lines[-1][:160] if lines else ""
+        self.error = "key mismatch" if any(t in err for t in self.HOST_KEY_CHANGED) else "not found"
         if time.time() - started < 10:
             self.fails += 1
+
+
+# ---------------------------------------------------------------- pairing a new phone (Wi-Fi only, no adb)
+
+class Pairing:
+    """One pairing at a time, started from the dashboard. Threat: anyone else on the Wi-Fi, who can read and even
+    rewrite the plain-HTTP traffic. Design:
+    - A one-shot server on the laptop's LAN address only (PAIR_PORT, never 0.0.0.0/loopback), open 10 min.
+    - Integrity: the script's URL is its own SHA-256 (first 128 bits), and the command you type on the phone checks
+      the downloaded script against it before running it; the script carries the bundle's full SHA-256. So nobody
+      on the network can change what runs on the phone, even though they can see it.
+    - The script is served only to the first address that asks for it, the bundle once and only to that address.
+    - Nothing is pinned by itself: the phone prints its ssh key's pairing code at the end of setup and you type it
+      into the dashboard; the laptop keyscans the phone at that moment and pins only the key matching that code
+      (96 bits: no one can make a key that matches). The candidate's fingerprint is never shown by the laptop, so
+      it can't be copied from the dashboard instead of read off the phone. 5 wrong codes end the pairing.
+    - The bundle holds nothing secret (phone/ code + the laptop's public key)."""
+    SERVE_FOR = 600      # the download server closes after 10 min, or once the bundle has been fetched
+    CONFIRM_FOR = 1800   # after the fetch, how long the phone has to finish setup and you to type the code
+    MAX_WRONG = 5
+    CODE_LEN = 16        # base64 characters of the fingerprint the code covers (96 bits)
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.slots = threading.BoundedSemaphore(8)  # requests handled at once by the pairing server
+        self.server = None
+        self.session = None
+
+    # ---- what's handed out
+    @staticmethod
+    def public_key():
+        """The public half of the key the tunnel's ssh uses (the first identity ssh -G lists that exists)."""
+        for line in run("ssh", "-G", "chip-pairing.invalid").splitlines():
+            if line.startswith("identityfile "):
+                path = os.path.expanduser(line.split(None, 1)[1]) + ".pub"
+                if os.path.isfile(path):
+                    with open(path) as f:
+                        return f.read().strip()
+        return None
+
+    @staticmethod
+    def bundle(pubkey):
+        """phone/ minus __pycache__ and setup.sh, plus authorized_keys: the same layout setup.sh's $SRC expects."""
+        root = os.path.join(HERE, "..", "phone")
+
+        def keep(info):
+            if "__pycache__" in info.name.split("/") or info.name == "phone/setup.sh" or info.name.endswith(".pyc") \
+                    or not (info.isfile() or info.isdir()):  # no links or devices
+                return None
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            return info
+
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            tar.add(root, arcname="phone", filter=keep)
+            data = (pubkey + "\n").encode()
+            info = tarfile.TarInfo("authorized_keys")
+            info.size, info.mode, info.mtime = len(data), 0o600, int(time.time())
+            tar.addfile(info, io.BytesIO(data))
+        return buf.getvalue()
+
+    @staticmethod
+    def script(ip, bundle_token, digest):
+        """Downloads and checks the bundle, then runs phone/setup.sh on the extracted folder."""
+        with open(os.path.join(HERE, "..", "phone", "setup.sh")) as f:
+            setup = f.read()
+        if "DESKBUDDY_SETUP_EOF" in setup:
+            raise ValueError("setup.sh contains the heredoc marker")
+        return f"""#!/data/data/com.termux/files/usr/bin/bash
+# Chip pairing script from the laptop at {ip}. Checked against its SHA-256 before it ran.
+{{
+set -e
+DIR="$HOME/deskbuddy-pair"
+rm -rf "$DIR" && mkdir -p "$DIR"
+if ! curl -fsS "http://{ip}:{PAIR_PORT}/{bundle_token}/bundle.tar.gz" -o "$DIR/bundle.tar.gz"; then
+  echo "!! Couldn't get the setup files. If this phone didn't already fetch them, someone else did:"
+  echo "!! cancel pairing on the laptop's dashboard and start again. Don't confirm anything."
+  exit 1
+fi
+echo "{digest}  $DIR/bundle.tar.gz" | sha256sum -c --quiet || {{ echo "!! setup files altered: cancel pairing"; exit 1; }}
+tar xzf "$DIR/bundle.tar.gz" -C "$DIR" && rm -f "$DIR/bundle.tar.gz"
+cat >"$DIR/setup.sh" <<'DESKBUDDY_SETUP_EOF'
+{setup}DESKBUDDY_SETUP_EOF
+bash "$DIR/setup.sh" "$DIR" </dev/null
+exit
+}}
+"""
+
+    # ---- the session
+    def start(self):
+        """(answer, http status). The handler has checked the Origin, the replace rule and blocked()."""
+        net_info = phone_link.network()
+        _, ip, net = phone_link.interface()
+        if not ip:
+            return {"ok": False, "error": "no network"}, 409
+        if net_info["ssid"] != "wired" and not net_info.get("security"):
+            return {"ok": False, "error": "open wifi", "message": "this Wi-Fi has no password: pair on your home network"}, 409
+        homes = phone_link.cfg()["linkNetworks"]
+        if homes and net_info["ssid"] not in homes:
+            return {"ok": False, "error": "not home network", "message": "pairing only on the networks in linkNetworks"}, 409
+        pubkey = self.public_key()
+        if not pubkey:
+            return {"ok": False, "error": "no ssh key", "message": "make one with ssh-keygen -t ed25519"}, 409
+        self.cancel()
+        bundle_token = secrets.token_hex(16)  # 128 bits
+        bundle = self.bundle(pubkey)
+        script = self.script(ip, bundle_token, hashlib.sha256(bundle).hexdigest()).encode()
+        script_id = hashlib.sha256(script).hexdigest()[:32]  # the script's URL is its own hash
+        pairing = self
+
+        class PairHandler(BaseHTTPRequestHandler):
+            server_version, sys_version = "", ""
+            timeout = 15  # a slow or idle client can't hold a thread
+
+            def handle(self):
+                if not pairing.slots.acquire(blocking=False):  # too many at once: drop the connection
+                    return
+                try:
+                    super().handle()
+                finally:
+                    pairing.slots.release()
+
+            def answer(self, code, body=b"", kind="application/octet-stream"):
+                self.send_response_only(code)
+                if body:
+                    self.send_header("Content-Type", kind)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                if self.command == "GET":
+                    self.wfile.write(body)
+                self.close_connection = True
+
+            def do_GET(self):
+                s, who = pairing.session, self.client_address[0]
+                if not s or self.headers.get("Host") != f"{ip}:{PAIR_PORT}" or time.time() > s["until"]:
+                    return self.answer(404)
+                parts = self.path.split("/")
+                if len(parts) == 2 and hmac.compare_digest(parts[1].encode(), s["script_id"].encode()):
+                    if pairing.take_script(s, who):
+                        return self.answer(200, s["script"], "text/x-shellscript")
+                elif parts[1:] == [parts[1], "bundle.tar.gz"] and len(parts) == 3 \
+                        and hmac.compare_digest(parts[1].encode(), s["bundle_token"].encode()):
+                    if pairing.take_bundle(s, who):
+                        self.answer(200, s["bundle"], "application/gzip")
+                        threading.Thread(target=pairing.close_server, daemon=True).start()
+                        return
+                return self.answer(404)
+
+            def do_HEAD(self):
+                self.answer(404)
+
+            do_POST = do_PUT = do_DELETE = do_OPTIONS = do_PATCH = do_HEAD
+
+            def send_error(self, code, message=None, explain=None):  # malformed requests: a bare status, no page
+                self.close_connection = True
+                try:
+                    self.send_response_only(404 if code == 404 else 400)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                except OSError:
+                    pass
+
+            def log_message(self, *args):  # the request line carries the URL: never log it
+                pass
+
+        class PairServer(ThreadingHTTPServer):
+            daemon_threads = True
+            request_queue_size = 8
+
+            def handle_error(self, request, client_address):  # no tracebacks (they could show the request)
+                pass
+
+        try:
+            server = PairServer((ip, PAIR_PORT), PairHandler)
+        except OSError as e:
+            return {"ok": False, "error": "port busy", "message": f"{ip}:{PAIR_PORT}: {e.strerror}"}, 409
+        with self.lock:
+            self.server = server
+            self.session = {"script_id": script_id, "bundle_token": bundle_token, "ip": ip, "net": net,
+                            "until": time.time() + self.SERVE_FOR, "script": script, "bundle": bundle,
+                            "script_by": None, "fetched_by": None, "fetched_at": 0.0, "ready": None,
+                            "error": None, "wrong": 0}
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        timer = threading.Timer(self.SERVE_FOR, self.close_server, args=(server,))
+        timer.daemon = True
+        timer.start()
+        print(f"pairing: download server open on {ip}:{PAIR_PORT} for {self.SERVE_FOR // 60} min", flush=True)
+        return dict(self.status(), ok=True), 200
+
+    def take_script(self, s, addr):
+        """The script goes to the first address that asks (again to it, e.g. after a failed download), no one else."""
+        with self.lock:
+            if self.session is not s or s["fetched_by"] or (s["script_by"] and s["script_by"] != addr):
+                return False
+            if not s["script_by"]:
+                s["script_by"] = addr
+                print(f"pairing: script fetched by {addr}", flush=True)
+            return True
+
+    def take_bundle(self, s, addr):
+        """Once, and only to the address that got the script; that address is the candidate phone."""
+        with self.lock:
+            if self.session is not s or s["fetched_by"] or s["script_by"] != addr:
+                return False
+            s["fetched_by"], s["fetched_at"] = addr, time.time()
+        print(f"pairing: bundle fetched by {addr}", flush=True)
+        threading.Thread(target=self.watch_candidate, args=(s,), daemon=True).start()
+        return True
+
+    def close_server(self, server=None):
+        with self.lock:
+            if self.server is None or (server is not None and server is not self.server):
+                return
+            server, self.server = self.server, None
+        server.shutdown()
+        server.server_close()
+        print("pairing: download server closed", flush=True)
+
+    @staticmethod
+    def host_keys(addr):
+        """[(kind, key, fingerprint base64)] that addr's sshd offers now."""
+        keys = []
+        for l in run("ssh-keyscan", "-T", "3", "-p", str(phone_link.port()), addr, timeout=8).splitlines():
+            f = l.split()
+            if len(f) >= 3 and not l.startswith("#"):
+                fp = run("ssh-keygen", "-lf", "-", input=f"x {f[1]} {f[2]}\n").split()
+                if len(fp) >= 2 and fp[1].startswith("SHA256:"):
+                    keys.append((f[1], f[2], fp[1][7:]))
+        return keys
+
+    def watch_candidate(self, s):
+        """sshd on the new phone starts at the end of setup: notice when it answers (for the dashboard's progress)."""
+        addr = s["fetched_by"]
+        if ipaddress.ip_address(addr) not in s["net"]:
+            s["error"] = "fetched from outside the local network"
+            return
+        while self.session is s and time.time() < s["fetched_at"] + self.CONFIRM_FOR:
+            if self.host_keys(addr):
+                s["ready"] = time.time()
+                return
+            time.sleep(5)
+
+    def status(self):
+        s = self.session
+        if not s:
+            return {"active": False}
+        serving = self.server is not None
+        left = (s["until"] if serving else s["fetched_at"] + self.CONFIRM_FOR if s["fetched_by"] else 0) - time.time()
+        if left <= 0:
+            return {"active": False, "expired": True}
+        h = s["script_id"]
+        out = {"active": True, "expires_in": round(left), "serving": serving,
+               "command": f"h={h}; curl -fsSo chip.sh http://{s['ip']}:{PAIR_PORT}/$h && sha256sum chip.sh | "
+                          f"grep -q ^$h && bash chip.sh || echo PAIRING FAILED",
+               "script_by": s["script_by"], "fetched_by": s["fetched_by"],
+               # no fingerprint here on purpose: the code must be read off the phone, not copied from the laptop
+               "candidate": {"ip": s["fetched_by"], "ready": bool(s["ready"])} if s["fetched_by"] else None,
+               "wrong_codes": s["wrong"], "code_length": self.CODE_LEN}
+        if s["error"]:
+            out["error"] = s["error"]
+        if run("systemctl", "is-active", "ufw") == "active":
+            out["firewall"] = (f"ufw is on, so the phone can't reach port {PAIR_PORT}: for this pairing only, "
+                               f"sudo ufw allow from {s['net']} to any port {PAIR_PORT} proto tcp   "
+                               f"(after: sudo ufw delete allow from {s['net']} to any port {PAIR_PORT} proto tcp)")
+        return out
+
+    def confirm(self, code):
+        """code: the pairing code the phone printed (or its full SHA256 fingerprint)."""
+        code = re.sub(r"\s+", "", code) if isinstance(code, str) else ""
+        code = code[7:] if code.startswith("SHA256:") else code
+        if len(code) < self.CODE_LEN or not re.fullmatch(r"[A-Za-z0-9+/]+=*", code):
+            return {"ok": False, "error": "bad code", "message": f"type the {self.CODE_LEN}-character code the phone shows"}, 400
+        with self.lock:
+            s = self.session
+            if not self.status().get("active") or not s["fetched_by"] or s["error"]:
+                return {"ok": False, "error": "no candidate", "message": "no phone has finished setup yet"}, 409
+            ip = s["fetched_by"]
+        keys = [k for k in self.host_keys(ip) if k[2].startswith(code.rstrip("="))]  # what the phone offers right now
+        with self.lock:
+            if self.session is not s:
+                return {"ok": False, "error": "no candidate"}, 409
+            if not keys:
+                s["wrong"] += 1
+                if s["wrong"] >= self.MAX_WRONG:
+                    self.session = None
+                    print("pairing: cancelled after too many wrong codes", flush=True)
+                    return {"ok": False, "error": "too many wrong codes", "message": "pairing cancelled"}, 409
+                return {"ok": False, "error": "code mismatch", "tries_left": self.MAX_WRONG - s["wrong"]}, 409
+            self.session = None
+        phone_link.replace_pin(ip, [keys[0][:2]])
+        print(f"pairing: pinned the phone at {ip}", flush=True)
+        try:
+            r = subprocess.run([os.path.join(HERE, "..", "deploy.sh")], capture_output=True, text=True, timeout=180)
+            deploy = {"ok": r.returncode == 0, "lines": (r.stdout + r.stderr).splitlines()[-20:]}
+        except (OSError, subprocess.TimeoutExpired) as e:
+            deploy = {"ok": False, "lines": [type(e).__name__]}
+        return {"ok": True, "ip": ip, "fingerprint": "SHA256:" + keys[0][2], "deploy": deploy}, 200
+
+    def cancel(self):
+        with self.lock:
+            self.session = None
+        self.close_server()
+        return {"ok": True}
 
 
 # ---------------------------------------------------------------- audio visualizer (cava-style)
@@ -1280,6 +1785,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"error": "forbidden"}, 403)
         return False
 
+    def dashboard_only(self, reading=False):
+        """For actions only the dashboard may take (after allowed()): Origin must be exactly DASHBOARD_ORIGIN.
+        The phone's page (:8080) and requests without an Origin are refused. reading=True (GETs) also lets a
+        missing Origin through, since browsers send none on a same-origin GET; :8080 is still refused."""
+        origin = self.headers.get("Origin")
+        if origin == DASHBOARD_ORIGIN or (reading and origin is None):
+            return True
+        self.send_json({"ok": False, "error": "forbidden", "message": "only the dashboard may do this"}, 403)
+        return False
+
     def cors(self):
         if self.headers.get("Origin") in ORIGINS:
             self.send_header("Access-Control-Allow-Origin", self.headers["Origin"])
@@ -1358,7 +1873,11 @@ class Handler(BaseHTTPRequestHandler):
                 phone.update(seen=time.time(), rev=number(q.get("rev")), mood=q.get("mood", "")[:20],
                              screen=number(q.get("screen")), battery=number(q.get("bat")),
                              charging=q.get("chg") == "1", temp=number(q.get("temp")),
-                             skinErr=q.get("skinErr", "")[:120])  # why the phone fell back to the base pack, "" = fine
+                             skinErr=q.get("skinErr", "")[:120],  # why the phone fell back to the base pack, "" = fine
+                             wifi=({"ssid": q["ssid"][:32], "rssi": number(q.get("rssi")), "speed": number(q.get("speed")),
+                                    "freq": number(q.get("freq")),
+                                    "ip": q.get("pip", "") if re.fullmatch(r"[\d.]{7,15}", q.get("pip", "")) else None}
+                                   if q.get("ssid") else None))  # the phone's own Wi-Fi: names and numbers only
             return self.send_json(dict(stats.snapshot(), **typing.snapshot(), settingsRev=settings.rev,
                                        attention=attention.pending()))
         if url.path == "/viz":
@@ -1379,6 +1898,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(gaze.layout())
         if url.path == "/settings":
             return self.send_json(settings.get())
+        if url.path == "/stt/status":  # keys (keySet/last4 only), models and languages per engine
+            return self.send_json(stt.status(settings.get()))
         if url.path == "/geocode":  # the dashboard's place search (Open-Meteo's free geocoder, the same service the phone's forecast uses)
             return self.send_json(geocode(parse_qs(url.query).get("q", [""])[0]))
         if url.path.startswith("/skins"):
@@ -1387,6 +1908,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"events": attention.recent(), "apps": apps.listing()})
         if url.path == "/phone":
             return self.send_json(dict(phone, age=round(time.time() - phone["seen"], 1)) if phone else {})
+        if url.path == "/link/pair":  # carries the pairing token: never to the phone's page
+            return self.dashboard_only(reading=True) and self.send_json(pairing.status())
         if url.path == "/link":  # for the dashboard and doctor.py
             return self.send_json(phone_link.snapshot())
         if url.path == "/api/status":  # the preview's stand-in for the phone server: what the phone last reported
@@ -1469,11 +1992,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path.split("?")[0].startswith("/skins/"):
             return self.post_skins(self.path.split("?")[0])
+        if self.path.split("?")[0].startswith("/link/"):
+            if not self.dashboard_only():
+                return
+            return self.post_link(self.path.split("?")[0])
         if self.path.split("?")[0] in ("/settings", "/settings/reset"):
             changes = self.read_json()
             if changes is None:
                 return self.send_json({"error": "expected a JSON object"}, 400)
-            return self.send_json(settings.update(changes, reset=self.path.startswith("/settings/reset")))
+            if self.headers.get("Origin") != DASHBOARD_ORIGIN:
+                changes = {k: v for k, v in changes.items() if k not in LINK_KEYS}
+            values = settings.update(changes, reset=self.path.startswith("/settings/reset"),
+                                     keep=() if self.headers.get("Origin") == DASHBOARD_ORIGIN else LINK_KEYS)
+            if self.path.startswith("/settings/reset") or any(k.startswith("link") or k == "sshPort" for k in changes):
+                phone_link.wake.set()  # unpaused, new port, ...: act now, not after linkRetry
+            return self.send_json(values)
         url = urlsplit(self.path)
         if url.path == "/attention":  # an AI agent needs you (attention.py, the opencode plugin, the dashboard's test)
             a = self.read_json()
@@ -1490,30 +2023,64 @@ class Handler(BaseHTTPRequestHandler):
             layout = gaze.set_phone(*nums)
             return self.send_json(layout or {"error": "the chip-gaze extension is not running"}, 200 if layout else 503)
         if url.path == "/transcribe":  # a dictated clip from the phone (16 kHz WAV, at most 60 s)
+            # ?engine=laptop|cloud&lang=<stt.LANGS>&fast=1, each defaulting to the settings. No fallback: on failure
+            # the answer is {ok: false, error: <stt.ERRORS code>, message} and the clip goes nowhere else.
             length = int(self.headers.get("Content-Length") or 0)
             if not 0 < length <= 4_000_000:
-                return self.send_json({"error": "clip too large"}, 413)
+                return self.send_json({"ok": False, "error": "too_large", "message": "Clip too large"}, 413)
             audio = self.rfile.read(length)
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
-            t0 = time.time()
+            cfg = settings.get()
+            engine, lang = q.get("engine") or "laptop", q.get("lang") or cfg["dictLang"]
+            if engine not in ("laptop", "cloud"):
+                return self.send_json({"ok": False, "error": "bad_engine", "message": "engine must be laptop or cloud"}, 400)
+            if gnome_locked():
+                return self.send_json(stt.SttError("locked").json(), 423)  # nothing would be typed anyway
             try:
-                text = transcribe(audio, q.get("fast") == "1", q.get("prompt", "")[:300])
+                return self.send_json(stt.transcribe(audio, engine, lang, cfg, fast=q.get("fast") == "1"))
             except (wave.Error, EOFError):
-                return self.send_json({"error": "not a WAV clip"}, 400)
-            except (OSError, subprocess.SubprocessError) as e:  # whisper missing, crashed or too slow
-                print("transcribe:", e, flush=True)
-                return self.send_json({"error": "transcription failed"}, 503)
-            return self.send_json({"text": text, "ms": int((time.time() - t0) * 1000)})
+                return self.send_json({"ok": False, "error": "bad_audio", "message": "Not a 16-bit WAV clip"}, 400)
+            except stt.SttError as e:
+                print("transcribe:", engine, e.code, flush=True)  # the code only: never audio, text or keys
+                return self.send_json(e.json(), e.status)
+        if url.path == "/stt/key":  # {provider, key|null}: write-only, the answer is {provider, keySet, last4}
+            body = self.read_json()
+            if body is None or body.get("provider") not in stt.PROVIDERS or not (body.get("key") is None or isinstance(body.get("key"), str)):
+                return self.send_json({"ok": False, "error": "bad_request", "message": "expected {provider, key|null}"}, 400)
+            key = body["key"].strip() if isinstance(body.get("key"), str) else None
+            try:
+                state = stt.set_key(body["provider"], key or None)
+            except ValueError as e:
+                return self.send_json({"ok": False, "error": "bad_key", "message": str(e)}, 400)
+            return self.send_json({"ok": True, "provider": body["provider"], **state})
+        if url.path == "/stt/test":  # a generated 1 s clip through the chosen engine (or {engine, provider} to try another)
+            body = self.read_json() or {}
+            cfg = settings.get()
+            engine = body.get("engine") or cfg["dictEngine"]
+            if body.get("provider") in stt.PROVIDERS:
+                cfg["dictProvider"] = body["provider"]
+            if engine == "phone":
+                return self.send_json({"ok": False, "error": "not_here", "engine": "phone",
+                                       "message": "The phone engine runs on the phone; hold Chip's face to try it"}, 400)
+            if engine not in ("laptop", "cloud"):
+                return self.send_json({"ok": False, "error": "bad_engine", "message": "engine must be laptop or cloud"}, 400)
+            try:
+                r = stt.transcribe(stt.test_clip(), engine, cfg["dictLang"], cfg, fast=cfg["fastDictation"], check_audio=False)
+            except stt.SttError as e:
+                return self.send_json({**e.json(), "engine": engine}, e.status)
+            return self.send_json({"ok": True, "engine": engine, "ms": r["ms"]})  # the hum's "text" is meaningless
         if self.path.split("?")[0] == "/type":  # dictated text from the phone
             length = min(int(self.headers.get("Content-Length") or 0), 8192)
             text = self.rfile.read(length).decode("utf-8", "replace")[:2000]
             if gnome_locked():
-                return self.send_json({"error": "locked"}, 423)  # never type into the lock screen
+                return self.send_json({"ok": False, "error": "locked", "message": "The laptop is locked"}, 423)  # never type into the lock screen
             try:
                 typed = typer.type_text(text)
+            except typer.TypingError as e:
+                return self.send_json({"ok": False, "error": e.code, "message": str(e)}, 409)
             except Exception as e:
-                print("type:", e, flush=True)
-                return self.send_json({"error": "typing failed"}, 500)
+                print("type:", type(e).__name__, flush=True)
+                return self.send_json({"ok": False, "error": "typing_failed", "message": "Typing failed"}, 500)
             return self.send_json({"ok": True, "typed": typed})
         parts = self.path.split("?")[0].strip("/").split("/")
         if len(parts) == 2:
@@ -1526,12 +2093,76 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True})
         self.send_json({"error": "not found"}, 404)
 
+    def post_link(self, path):
+        """/link/reconnect, /link/find, /link/ip {ip}, /link/forget, /link/doctor (dashboard only)."""
+        link = phone_link
+        if path == "/link/pair/start":  # {replace: true} to pair a new phone while the old one is linked
+            body = self.read_json() or {}
+            if link.pinned() and link.up and body.get("replace") is not True:
+                return self.send_json({"ok": False, "error": "phone linked",
+                                       "message": "a phone is pinned and connected; send {replace: true} to pair another"}, 409)
+            why = link.blocked()
+            if why:
+                return self.send_json({"ok": False, "error": why}, 409)
+            answer, code = pairing.start()
+            return self.send_json(answer, code)
+        if path == "/link/pair/confirm":
+            body = self.read_json() or {}
+            answer, code = pairing.confirm(body.get("code") or body.get("fingerprint"))
+            return self.send_json(answer, code)
+        if path == "/link/pair/cancel":
+            return self.send_json(pairing.cancel())
+        if path == "/link/doctor":
+            try:
+                r = subprocess.run([sys.executable, "-I", DOCTOR], capture_output=True, text=True, timeout=60)
+            except subprocess.TimeoutExpired:
+                return self.send_json({"ok": False, "lines": ["doctor.py took more than 60 s"]}, 504)
+            return self.send_json({"ok": r.returncode == 0, "lines": r.stdout.splitlines()})
+        if path == "/link/forget":
+            link.forget()
+            return self.send_json({"ok": True})
+        if path not in ("/link/reconnect", "/link/find", "/link/ip"):
+            return self.send_json({"error": "not found"}, 404)
+        if path == "/link/ip":  # checked before blocked(), so a bad request is a 400 whatever the link's state
+            body = self.read_json()
+            raw = body.get("ip") if body else None
+            iface, mine, net = link.interface()
+            try:
+                addr = ipaddress.IPv4Address(raw) if isinstance(raw, str) else None
+            except ValueError:
+                addr = None
+            if not addr or not net or not addr.is_private or addr.is_loopback or addr.is_link_local or addr not in net \
+                    or addr in (net.network_address, net.broadcast_address) or str(addr) == mine:
+                return self.send_json({"ok": False, "error": "bad_ip",
+                                       "message": f"expected a private IPv4 address in {net or 'the current subnet'}"}, 400)
+        why = link.blocked()
+        if why:
+            return self.send_json({"ok": False, "error": why}, 409)
+        if path == "/link/reconnect":
+            link.reconnect()
+            return self.send_json({"ok": True})
+        if not link.pinned():
+            return self.send_json({"ok": False, "error": "no key pinned"}, 409)
+        if path == "/link/find":  # a sweep now, whatever the 20 s limit says
+            ip = link.discover(force=True)
+            return self.send_json({"ok": bool(ip), "ip": ip, **({} if ip else {"error": link.error or "not found"})},
+                                  200 if ip else 404)
+        offered = link.offered(str(addr))
+        if not offered:
+            return self.send_json({"ok": False, "error": "not found", "message": f"no sshd on {addr}:{link.port()}"}, 404)
+        if not link.pinned() & offered:
+            return self.send_json({"ok": False, "error": "key mismatch",
+                                   "message": f"{addr} doesn't present the pinned key"}, 409)
+        link.use(str(addr))
+        return self.send_json({"ok": True, "ip": str(addr)})
+
     def log_message(self, *args):
         pass
 
 
 stats = Stats()
 phone_link = PhoneLink()
+pairing = Pairing()
 visualizer = Visualizer()
 gaze = Gaze()
 settings = Settings()
