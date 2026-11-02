@@ -54,8 +54,7 @@ header {
 
 /* ---------- layout */
 main { padding: 24px clamp(16px, 4vw, 40px) 40px; max-width: 1480px; margin: 0 auto; }
-.hero { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; margin-bottom: 20px; }
-@media (max-width: 1000px) { .hero { grid-template-columns: 1fr; } }
+.hero { margin-bottom: 20px; }
 .grid { columns: 3 340px; column-gap: 20px; }
 .grid .card { break-inside: avoid; margin-bottom: 20px; }
 .card { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 16px; padding: 18px 18px 8px; }
@@ -104,20 +103,12 @@ main { padding: 24px clamp(16px, 4vw, 40px) 40px; max-width: 1480px; margin: 0 a
 input[type=range] { accent-color: var(--eye); cursor: pointer; }
 input[type=range]:disabled { cursor: default; }
 
-/* ---------- preview */
-.preview .frame {
-  position: relative; aspect-ratio: 1520 / 720; margin: 10px 0 12px; padding: 10px; border-radius: 22px;
-  background: linear-gradient(145deg, #18242d, #0b1217); border: 1px solid var(--line2);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .05);
-}
-.preview iframe { display: block; width: 100%; height: 100%; border: 0; border-radius: 12px; background: #000; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button, .chip {
   padding: 7px 12px; border-radius: 9px; background: #101d26; border: 1px solid var(--line2); color: var(--soft); font-size: 13.5px;
 }
 .seg button.on, .chip[aria-pressed=true] { background: #12303e; border-color: #2d6a85; color: var(--fg); }
 .seg button:disabled { opacity: .35; cursor: default; }
-.preview .hint { margin: 10px 0 10px; color: var(--muted); font-size: 12.5px; }
 
 /* ---------- sleep */
 .sleep .big { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 2px; }
@@ -348,17 +339,6 @@ footer code { color: var(--soft); }
 
 <main>
   <section class="hero">
-    <div class="card preview">
-      <div class="card-head"><span class="ic">📺</span><h2>Live preview</h2></div>
-      <div class="frame"><iframe id="frame" src="/preview/index.html" title="Chip preview"></iframe></div>
-      <div class="seg" id="seg">
-        <button data-screen="0">🙂 Face</button><button data-screen="1">🕐 Clock</button><button data-screen="2">💻 Laptop</button>
-        <button data-screen="3">⏳ Timer</button><button data-screen="4">🎵 Visualizer</button>
-      </div>
-      <p class="hint">The preview runs here on the laptop with your settings and live data. Drag to swipe, click to tap.
-        Chip on your desk picks up each change within a few seconds.</p>
-    </div>
-
     <div class="card sleep">
       <div class="card-head"><span class="ic">😴</span><h2>Sleep</h2><input type="checkbox" class="sw" data-k="sleep" aria-label="Sleep at night"></div>
       <p class="note">Asleep, Chip closes its eyes, dims the screen and stays quiet. A tap wakes it for 20 seconds.</p>
@@ -411,7 +391,7 @@ footer code { color: var(--soft); }
   const EYES_HTML = `<div class="eyes" id="eyes"><p class="skinnote" id="eyes-skin" hidden>A custom skin is on, so Chip's own looks are paused. ` +
     `Use “Back to Chip's own look” in Make your own Chip to switch them on again.</p><div class="styles" id="eye-styles"></div>` +
     `<div class="row choice" id="pupil-row" hidden><span class="txt"><b>Pupil size</b><small>The dark centre that follows your cursor</small></span>` +
-    `<div class="pick" id="pupil-pick"></div></div><div class="look" id="eye-look"><iframe id="eye-frame" title="Eye style preview" tabindex="-1"></iframe></div></div>`;
+    `<div class="pick" id="pupil-pick"></div></div></div>`;
   const PHONES_HTML = `<div class="phones" id="phones"><div class="row"><span class="txt"><b>Default headphones</b>` +
     `<small>Worn when following is off, or when the skin has no headphones of its own.</small></span></div><div class="styles" id="phones-pick"></div></div>`;
   const SKINS_HTML = `<div class="mk" id="mk"><p class="note">Turn your pet, yourself, a character or your own art into Chip. An AI chat does the drawing; Chip checks the result before using it.</p>` +
@@ -677,8 +657,6 @@ footer code { color: var(--soft); }
 
   // ---------------------------------------------------------------- state
   let S = null, saving = 0, phoneInfo = null, linkInfo = null;
-  const frame = $("#frame");
-  const toPreview = (msg) => { try { frame.contentWindow.postMessage(msg, location.origin); } catch (e) { /* still loading */ } };
 
   function render() {
     if (!S) return;
@@ -699,7 +677,6 @@ footer code { color: var(--soft); }
     for (const el of $$("[data-card-needs]")) el.classList.toggle("dim", !S[el.dataset.cardNeeds]);
     const gazeEl = $("#gaze");
     if (gazeEl) { gazeEl.hidden = !S.gazeFollow; pollGaze(); }   // no monitor setup, and no pointer polling, while the toggle is off
-    $$("#seg button").forEach((b) => { b.disabled = !tabOn(Number(b.dataset.screen)); });
     renderApps();
     renderPlace();
     document.documentElement.style.setProperty("--eye", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);  // the page follows Chip's accent
@@ -709,7 +686,6 @@ footer code { color: var(--soft); }
     renderLook();
   }
   const ACCENTS = { cyan: "#2ee6f2", terracotta: "#ee9358", sage: "#b4d38c", violet: "#a78bfa", rose: "#f472b6", amber: "#f5c04a", sky: "#6cb8ff" };
-  const tabOn = (i) => [true, S.tabClock, S.tabLaptop, S.tabTimer, S.tabViz][i];
   function outputFor(el) { el.nextElementSibling.textContent = fmtUnit(Number(el.value), el.dataset.unit || "min"); }
   $("[data-k=brightnessNight]").dataset.unit = "pct";
 
@@ -760,13 +736,12 @@ footer code { color: var(--soft); }
   // ---------------------------------------------------------------- talking to the bridge
   async function save(patch) {
     Object.assign(S, patch); render();
-    toPreview({ prefs: S });
     saving++;
     const r = await fetch("/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) })
       .then((x) => (x.ok ? x.json() : null)).catch(() => null);
     saving--;
     if (!r) return toast("Couldn't save. Is the desk buddy bridge running?", true);
-    if (!saving) { S = r; render(); toPreview({ prefs: S }); }
+    if (!saving) { S = r; render(); }
     toast("Saved ✓");
   }
   async function loadSettings() {
@@ -775,7 +750,7 @@ footer code { color: var(--soft); }
     if (!r || saving) return;
     const changed = !S || r.rev !== S.rev;
     S = r;
-    if (changed) { render(); toPreview({ prefs: S }); }  // e.g. a drawer toggle on the phone
+    if (changed) render();  // e.g. a drawer toggle on the phone
   }
   // ---------------------------------------------------------------- voice dictation (engine, language, laptop model, cloud)
   // /stt/status says which languages, models and providers exist and whether a key is set (never the key itself).
@@ -978,13 +953,7 @@ footer code { color: var(--soft); }
     }
     if (b.dataset.k) save({ [b.dataset.k]: v === "true" ? true : v === "false" ? false : v || !S[b.dataset.k] });
     if (b.dataset.sleep) save({ sleepAt: b.dataset.sleep, wakeAt: b.dataset.wake });
-    if (b.dataset.screen) toPreview({ screen: Number(b.dataset.screen) });
   });
-  window.addEventListener("message", (e) => {  // the preview says which tab it's on
-    if (e.origin !== location.origin || e.source !== frame.contentWindow || !e.data || typeof e.data.screen !== "number") return;
-    $$("#seg button").forEach((b) => b.classList.toggle("on", Number(b.dataset.screen) === e.data.screen));
-  });
-  frame.addEventListener("load", () => { if (S) toPreview({ prefs: S }); });
 
   let resetArmed = 0;
   $("#reset").addEventListener("click", async () => {
@@ -997,7 +966,7 @@ footer code { color: var(--soft); }
     const r = await fetch("/settings/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
       .then((x) => (x.ok ? x.json() : null)).catch(() => null);
     if (!r) return toast("Couldn't reset. Is the desk buddy bridge running?", true);
-    S = r; render(); toPreview({ prefs: S }); toast("Back to defaults ✓");
+    S = r; render(); toast("Back to defaults ✓");
   });
 
   $("#torch-test").addEventListener("click", async () => {
@@ -1135,14 +1104,13 @@ footer code { color: var(--soft); }
   }
 
   // ---------------------------------------------------------------- eye styles
-  let EYES = null, eyeLook = null, eyeBuilt = false, pupilFor = "";   // pack.json's eyes block
+  let EYES = null, eyeBuilt = false, pupilFor = "";   // pack.json's eyes block
   fetch("/preview/pack.json").then((r) => (r.ok ? r.json() : null)).then((p) => { EYES = p && p.eyes; if (S) renderLook(); }).catch(() => {});
   function renderEyes() {
     const box = $("#eyes");
     if (!EYES) return;
     if (!eyeBuilt) {
       eyeBuilt = true;
-      eyeLook = addLook($("#eye-look"));
       for (const [id, st] of Object.entries(EYES.styles)) {
         const b = mk("button", "chip");
         b.dataset.k = "eyeStyle"; b.dataset.v = id;
@@ -1161,8 +1129,6 @@ footer code { color: var(--soft); }
       $("#pupil-pick").replaceChildren(...sizes.map((z) => { const b = mk("button", "chip", z); b.dataset.k = "pupilSize"; b.dataset.v = z; return b; }));
     }
     for (const b of $$("#pupil-pick .chip")) b.setAttribute("aria-pressed", String(b.dataset.v === size));
-    // &skin= (empty) keeps a skin that is switched on from covering the style being shown
-    eyeLook.url = `/preview/index.html?screen=0&mood=neutral&skin=&eyes=${encodeURIComponent(cur)}&pupil=${size || "M"}&gaze=0,0`;
   }
 
   // ---------------------------------------------------------------- make your own Chip
@@ -1414,27 +1380,26 @@ footer code { color: var(--soft); }
     }));
   }
   $("#mk-own").addEventListener("click", () => save({ skin: "" }));
-  // the default-headphones picker: one card for Chip's own, one per installed skin that has a pair. Each card previews the
-  // real combination with the active skin. Rebuilt only when the list, a name or the active skin changes (so the previews
-  // don't reload); the chosen card is just re-marked. Names come from users: textContent only.
-  let phonesSig = "", phonesLooks = [];
+  // the default-headphones picker: one card for Chip's own, one per installed skin that has a pair. Each card is a still
+  // picture of just the headphones (the preview page's ?only=phones: no face, no animation, no eye look). Rebuilt only
+  // when the list, a name or the active skin changes; the chosen card is just re-marked. Names come from users: textContent only.
+  let phonesSig = "";
   function renderPhones() {
     const box = $("#phones-pick");
     if (!box || !S) return;
     const list = skinList.filter((k) => k.hasHeadphones), sig = JSON.stringify([S.skin, list.map((k) => [k.id, k.name])]);
     if (sig !== phonesSig) {
       phonesSig = sig;
-      for (const l of phonesLooks) looks.splice(looks.indexOf(l), 1);
-      phonesLooks = [];
-      const q = (who) => `/preview/index.html?screen=0&mood=neutral&music&gaze=0,0&skin=${encodeURIComponent(S.skin || "")}&phones=${encodeURIComponent(who)}`;
+      const q = (who) => `/preview/index.html?only=phones&screen=0&mood=neutral&music&skin=${encodeURIComponent(S.skin || "")}&phones=${encodeURIComponent(who)}`;
       box.replaceChildren(...[["", "Chip's own"], ...list.map((k) => [k.id, k.name || k.id])].map(([id, label]) => {
-        const b = mk("button", "chip"), wrap = mk("div", "look");
-        wrap.append(mk("iframe"));
-        wrap.firstChild.title = label + " headphones preview"; wrap.firstChild.tabIndex = -1;
+        const b = mk("button", "chip"), wrap = mk("div", "look"), frame = mk("iframe");
+        frame.title = label + " headphones"; frame.tabIndex = -1; frame.src = q(id || "chip");
+        wrap.append(frame);
+        // scale the frame to the card (the same as the live looks, without their timer)
+        new ResizeObserver(() => { frame.style.transform = `scale(${wrap.clientWidth / 640})`; }).observe(wrap);
         b.dataset.phones = id;
         b.append(wrap, mk("b", "", label));
         b.addEventListener("click", () => save({ phonesDefault: id }));
-        const l = addLook(wrap); l.url = q(id || "chip"); phonesLooks.push(l);
         return b;
       }));
     }

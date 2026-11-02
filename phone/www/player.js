@@ -292,7 +292,7 @@
       const key = x + "," + y;
       if (S.pos[l.id] !== undefined && S.pos[l.id] !== key) moved = true;
       S.pos[l.id] = key;
-      if (spr) {
+      if (spr && (!S.only || l.id === S.only)) {   // only: the dashboard's headphones card draws just that layer
         const b = ChipPack.sprite(spr);
         let f = frame || (o && o.frame !== undefined && o.frame !== null ? o.frame : (S.moodFrame[l.id] || frameOf(l)));
         if (l.id === "eyeL" || l.id === "eyeR") {
@@ -305,7 +305,7 @@
           ctx.globalAlpha = alpha;
           if (l.id === "headphones" && S.hpGap) drawSplit(cv, b, S.hpGap); else ctx.drawImage(cv, -b.ax, -b.ay);
           ctx.globalAlpha = 1; if (moved) S.stats.moving++; if (tilted) S.stats.tilted++; }
-      } else if (l.text && S.text[l.id]) {
+      } else if (l.text && S.text[l.id] && !S.only) {
         ctx.globalAlpha = alpha; ctx.drawImage(S.text[l.id], 0, 0); ctx.globalAlpha = 1;
         if (moved) S.stats.moving++; if (tilted) S.stats.tilted++;
       }
@@ -326,8 +326,7 @@
       st.tilted = S.camPos && S.camPos.split(",")[2] !== String(cam.scale) ? 1 : 0;   // a camera cut to another zoom
       S.camPos = camKey;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = ChipPack.palette.bg;
-      ctx.fillRect(0, 0, GW, GH);
+      if (!S.only) { ctx.fillStyle = ChipPack.palette.bg; ctx.fillRect(0, 0, GW, GH); }   // only: transparent, the headphones alone
       // whole-number scale at rest; the offset is rounded so sprite pixels stay on the grid
       ctx.setTransform(cam.scale, 0, 0, cam.scale, Math.round(GW / 2 - cam.x * cam.scale), Math.round(GH / 2 - cam.y * cam.scale));
       roots.forEach((l) => drawLayer(l, ov, 1, false, false));
@@ -393,6 +392,7 @@
       set onEvent(fn) { S.onEvent = fn; },
       set shouldDraw(fn) { S.shouldDraw = fn; },
       freeze(T) { S.frozen = T; S.dirty = true; },   // for previews: render this time only, no random blinks
+      setOnly(id) { S.only = id || null; S.dirty = true; },   // draw just this sprite layer (the dashboard's headphones card)
       refresh() { S.textStr = {}; S.text = {}; S.dirty = true; },   // after an accent change
       get mood() { return S.mood; },
       get stats() { return S.stats; },

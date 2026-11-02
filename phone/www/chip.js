@@ -169,6 +169,8 @@
 
     app.classList.add("chip");
     go(pack.start);
+    if (app.dataset.only === "phones") player.setOnly("headphones");   // the dashboard's headphones card: a still picture
+    if (app.dataset.only) { player.setSignals(sig()); player.freeze(4); }   // ... signals once (onStep stops), frozen once the wake-up has settled
     player.start();
     window.Chip = { player, pack };   // for the preview and the budget check
   });

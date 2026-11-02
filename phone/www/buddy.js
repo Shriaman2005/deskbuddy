@@ -155,6 +155,7 @@
   const preview = new URLSearchParams(location.search);
   if (preview.has("eyes")) app.dataset.eyes = preview.get("eyes");  // ?eyes=toon&pupil=L: chip.js's eye style and pupil size
   if (preview.has("pupil")) app.dataset.pupil = preview.get("pupil").toUpperCase();
+  if (preview.has("only")) app.dataset.only = preview.get("only");  // ?only=phones: the dashboard's headphones card (chip.js)
   // ?skin=<id> shows an installed skin, ?skin=draft the last skin that passed the check (before it is installed)
   // busy at its computer (a scene is playing or a focus session runs): no tricks, no bobbing to the music
   const isWorking = () => app.classList.contains("scene") || (focus.running && focus.mode === "focus");

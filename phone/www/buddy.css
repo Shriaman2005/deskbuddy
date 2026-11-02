@@ -300,6 +300,9 @@ circle.fg { fill: none; stroke: var(--good); stroke-width: 7; stroke-linecap: ro
 #app.chip #sky, #app.scene #sky { display: none; }   /* the scene is pure black; the glow would show in the letterbox bars */
 #scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #app.pixel #scene canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+/* ?only=phones (the dashboard's headphones card): the canvas alone, on whatever is behind it */
+#app[data-only] > :not(#s-face), #app[data-only] #s-face > :not(#scene) { display: none !important; }
+#app[data-only] { background: transparent; }
 #app.pixel.scene::after, #app.chip::after, #app.chip #fx { display: none; }  /* no scanlines over a scene: they'd be redrawn with every frame */
 
 /* timer pill on the face */

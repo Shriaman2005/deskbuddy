@@ -87,7 +87,7 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
 ## On the laptop
 - **Dashboard:** http://127.0.0.1:8765 (also **Chip Dashboard** in the app grid). Switches for every
   feature (tabs, dock items, clock and laptop panels, face extras, sounds, talking, alerts, dictation,
-  brightness) and Chip's sleep time, with a live preview of the face. Changes save instantly
+  brightness) and Chip's sleep time. Changes save instantly
   (`~/.config/deskbuddy/settings.json`) and reach the phone on its next poll (~3 s); the drawer toggles on
   the phone write back to the same settings. Served by the bridge, so `deskbuddy-bridge` must be running.
 - `systemctl --user start deskbuddy-bridge` — laptop stats, media and volume controls for the
@@ -113,7 +113,7 @@ Chip's eyes can follow the laptop's mouse pointer across all monitors. Off by de
 ## Eye styles
 Chip's eyes come in three styles from its pack (`phone/www/pack.json`, `eyes.styles`): **Classic** (its own scanline
 eyes), **Toon** (big bright eyes with an accent-coloured iris) and **Button** (round accent eyes with a big black pupil).
-- Pick one in the dashboard's **Eyes follow the cursor** card, where a live preview shows it looking around. The
+- Pick one in the dashboard's **Eyes follow the cursor** card. The
   setting is `eyeStyle` (empty = the pack's default, Classic).
 - The pupil is S, M or L (`pupilSize`, default M). Only styles that offer a size show the choice.
 - The pupil follows the cursor: it moves inside its box, converges a little when the pointer is near the phone,
