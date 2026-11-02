@@ -1,0 +1,45 @@
+name: ci
+on:
+  push:
+    branches: [port, main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PYTHONUTF8: "1"
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - run: python -m pip install asyncssh==2.24.1
+      - run: python -I -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/selftest.py phone/server.py phone/alert.py phone/dictation.py
+      - run: node laptop/check_pack.js
+      - run: python -I laptop/test_skins.py
+      - run: python -I laptop/selftest.py
+      - run: python -I laptop/tests/test_link.py
+  desktop:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r laptop/requirements.txt asyncssh==2.24.1
+      - run: python -I -X utf8 -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/selftest.py phone/server.py phone/alert.py phone/dictation.py
+      - run: python -I -X utf8 laptop/selftest.py
+      - run: python -I -X utf8 laptop/tests/test_link.py
