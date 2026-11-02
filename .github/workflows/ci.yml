@@ -42,4 +42,16 @@ jobs:
       - run: python -m pip install -r laptop/requirements.txt asyncssh==2.24.1
       - run: python -I -X utf8 -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/selftest.py phone/server.py phone/alert.py phone/dictation.py
       - run: python -I -X utf8 laptop/selftest.py
+      - if: failure() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p /tmp/cd /tmp/cc
+          echo '{"rev":1,"values":{"linkPaused":true}}' > /tmp/cc/settings.json
+          CHIP_PORT=18765 CHIP_PAIR_PORT=18766 CHIP_CONFIG_DIR=/tmp/cc CHIP_DATA_DIR=/tmp/cd PYTHONFAULTHANDLER=1 python -I -X utf8 laptop/bridge.py > /tmp/bridge.log 2>&1 &
+          sleep 12
+          echo "--- curl"; curl -sv -m 10 http://127.0.0.1:18765/caps || true
+          echo "--- lsof"; lsof -nP -iTCP:18765 || true
+          echo "--- log"; cat /tmp/bridge.log
+          kill -ABRT %1 || true; sleep 1
+          echo "--- after abort"; cat /tmp/bridge.log
       - run: python -I -X utf8 laptop/tests/test_link.py
