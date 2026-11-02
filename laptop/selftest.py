@@ -9,6 +9,7 @@ import inspect
 import json
 import os
 import shutil
+import signal
 import socket
 import sys
 import tempfile
@@ -92,7 +93,7 @@ def main():
         json.dump({"rev": 1, "values": {"linkPaused": True}}, f)  # never scan the Wi-Fi or open a tunnel from a test
     fake = os.environ.get("CHIP_FAKE_CAPS") or "gpu=0"
     env = dict(os.environ, CHIP_PORT=str(port), CHIP_PAIR_PORT=str(pair_port), CHIP_CONFIG_DIR=cfg,
-               CHIP_DATA_DIR=data, CHIP_FAKE_CAPS=fake)
+               CHIP_DATA_DIR=data, CHIP_FAKE_CAPS=fake, PYTHONFAULTHANDLER="1")
     bridge = proc.popen([sys.executable, "-I", "-X", "utf8", os.path.join(HERE, "bridge.py")], env=env,
                         stdin=proc.DEVNULL, stdout=proc.PIPE, stderr=proc.STDOUT)
     caps = {}
@@ -175,6 +176,9 @@ def main():
 
 def finish(bridge, tmp, caps):
     """Stop the bridge, keep its output in the report when a check failed, then report."""
+    if not all(c["ok"] for c in checks) and hasattr(signal, "SIGABRT") and os.name == "posix":
+        bridge.send_signal(signal.SIGABRT)  # faulthandler prints where every thread is stuck
+        time.sleep(1)
     bridge.terminate()
     try:
         out = bridge.communicate(timeout=5)[0]
