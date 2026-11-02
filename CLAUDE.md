@@ -2,6 +2,9 @@
 
 Retired Samsung M01 Core (Android Go, weak CPU) shows "Chip" in the kiFOSSk kiosk WebView; the laptop runs a
 bridge. README.md has the full feature list: read only the section you need.
+Cross-platform port, Stage 1 (Windows/macOS laptops over the same Termux + ssh design, no installers):
+`docs/port/PLAN.md` (Status = progress; read only Overview, Rules and your task's section); PROMPTS.md is for the
+user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't start it unless asked.
 
 ## Layout
 - `phone/www/` — the face page (http://127.0.0.1:8080 on the phone)
