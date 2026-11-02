@@ -1,0 +1,11 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# `chip-start` in Termux: starts Chip's services (sshd for the laptop's tunnel, the face server on :8080, the
+# supervisor that keeps them up) and holds a wake lock so Android doesn't suspend them with the screen off.
+# A new Termux session does the same on its own (~/.bashrc); this is for after `chip-stop`.
+bash ~/deskbuddy/services.sh
+sleep 2
+ok() { local name=$1; shift; pgrep "$@" >/dev/null && echo "  ✓ $name" || echo "  ✗ $name (not running: see ~/deskbuddy/supervisor.log)"; }
+ok "ssh server (the laptop's tunnel)" -x sshd
+ok "face server" -f "[d]eskbuddy/server.py"
+ok "supervisor" -f "[d]eskbuddy/supervisor.sh"
+echo "Chip is running. Face: http://127.0.0.1:8080 (in Chrome). Stop everything: chip-stop"

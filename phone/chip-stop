@@ -1,0 +1,14 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# `chip-stop` in Termux: stops everything Chip started: the supervisor first (it would restart the rest), then the face
+# server, PulseAudio and sshd (the laptop's tunnel drops), and lets go of the wake lock. Settings and pairing stay.
+# Termux's notification "Exit" stops everything too. Opening a new Termux session starts Chip again (or: chip-start).
+pkill -f "[d]eskbuddy/supervisor.sh"
+pkill -f "[d]eskbuddy/server.py"
+pkill -x whisper-cli   # a dictation in progress
+pkill -x parec
+pkill -x pulseaudio
+timeout 5 termux-torch off 2>/dev/null   # a blinking alert shouldn't outlive Chip
+termux-wake-unlock
+echo "Chip stopped (wake lock released). Start again: chip-start"
+pkill -x sshd   # last: if this was typed over the laptop's ssh, the session ends here
+true

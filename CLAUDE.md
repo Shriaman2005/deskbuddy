@@ -15,14 +15,20 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
     sprites, `player.js` draws the rig (stepped 12 fps), `chip.js` is the state machine fed by #app data-*/classes,
     #face m-* mood classes and chip:react / chip:notify events. Follow the pack; don't invent visuals.
 - `phone/*.py` — Termux side: server.py, alert.py (torch/sounds), dictation.py
-- `laptop/bridge.py` — systemd user service `deskbuddy-bridge`, 127.0.0.1:8765, ssh -R tunnel to the phone
-  (PhoneLink: pinned key in ~/.config/deskbuddy/known_hosts under alias chip-phone, `/link` = its state with a `reason`).
+- `laptop/bridge.py` — systemd user service `deskbuddy-bridge`, 127.0.0.1:8765, ssh -R tunnel to the phone.
+- `laptop/link.py` — PhoneLink (pinned key in ~/.config/deskbuddy/known_hosts under alias chip-phone, `/link` = its state
+  with a `reason` and `files`: auto-deploy once when the tunnel comes up and the phone's .chip-hash differs) and Pairing.
+  `laptop/sshlink.py` = the one set of pinned ssh options (tunnel, deploy, doctor; CONFIG_DIR/id_ed25519 if present).
+  `laptop/deploy.py` = deploy (tar in Python; deploy.sh wraps it). Tests: `<venv>/bin/python -I laptop/tests/test_link.py`
+  (fake phone over asyncssh, venv only; CHIP_TUNNEL_REMOTE_PORT), never touches the real phone.
   Settings schema = DEFAULTS/RANGES/CHOICES/APP_RULES; stored in ~/.config/deskbuddy/settings.json
   Link settings: linkPaused, linkAutoFind, linkHomeOnly, linkNetworks, linkKeepAlive, linkRetry, sshPort (LINK_KEYS).
 - `laptop/platforms/` — every OS-specific call: paths.py (CONFIG_DIR/DATA_DIR; CHIP_CONFIG_DIR/CHIP_DATA_DIR for tests),
   proc.py (the one subprocess helper), linux.py (the GNOME code), windows.py/macos.py stubs over base.py. CAPS go out in
   /stats `caps` and GET /caps; phone and dashboard hide missing features ("Linux only for now"); test with
   `CHIP_FAKE_CAPS=gpu=0,media=0`. `laptop/selftest.py` runs a throwaway bridge (CHIP_PORT) and checks routes + CAPS.
+  Network: linux.py `ip`/nmcli; base.py psutil interface(); windows.py netsh / macos.py ipconfig for the Wi-Fi name
+  (caps.wifiName false = hidden: "Only on home networks" greyed).
 - Connections card in `laptop/dashboard.html` (Reconnect, Find phone, Replace phone = pairing wizard, Forget, Doctor).
   README "Connections and reboots" describes it.
 - `laptop/doctor.py` — checks the laptop, the Wi-Fi link (incl. paused, home network, key mismatch from `/link` reason) and Termux.

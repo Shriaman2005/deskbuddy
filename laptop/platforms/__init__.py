@@ -60,7 +60,7 @@ def fake_caps():
 
 
 def _detect():
-    found = dict(backend.caps(), termuxLink=bool(shutil.which("ssh")), skins=bool(shutil.which("node")),
+    found = dict(backend.caps(), termuxLink=bool(proc.which("ssh")), skins=bool(shutil.which("node")),
                  laptopStt=os.path.isfile(WHISPER))
     return {k: bool(found.get(k)) for k in CAP_KEYS} | fake_caps()
 

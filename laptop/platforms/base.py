@@ -1,5 +1,9 @@
 """What an OS backend provides, with "this OS can't do it (yet)" for everything. linux.py replaces all of it;
-windows.py and macos.py start from here (S5/S6 fill them in). Only the standard library: this must import anywhere."""
+windows.py and macos.py start from here (S5/S6 fill them in). Only the standard library at import time (psutil only
+inside interface(), when installed): this must import anywhere."""
+import ipaddress
+import re
+import socket
 
 NAME = "unknown"
 
@@ -104,8 +108,31 @@ class GazeWatch:
         pass
 
 
+# adapters that aren't the home network: VMs, containers, VPNs, tunnels, Apple's peer-to-peer links
+_VIRTUAL = re.compile(r"vethernet|virtualbox|vbox|vmware|vmnet|hyper-v|docker|wsl|loopback|tailscale|zerotier|"
+                      r"wireguard|^wg\d|^utun|^tun|^tap|^ppp|ipsec|vpn|bridge|^awdl|^llw|^anpi|^gif|^stf|npcap|"
+                      r"teredo|isatap|hamachi|nordlynx|bluetooth", re.I)
+_LIKELY = re.compile(r"^en\d|wi-?fi|wlan|wireless|ethernet", re.I)  # tried first: macOS en0/en1, Windows Wi-Fi/Ethernet
+
+
 def interface():
-    """(iface, address, ipaddress network) of the first global IPv4 address that isn't docker's or a VM's."""
+    """(iface, address, ipaddress network) of the first private IPv4 address that isn't a VM's or VPN's, or
+    (None, None, None). Uses psutil (Windows/macOS); linux.py reads `ip` instead."""
+    try:
+        import psutil
+    except ImportError:
+        return None, None, None
+    up = {name for name, st in psutil.net_if_stats().items() if st.isup}
+    names = sorted(psutil.net_if_addrs().items(), key=lambda kv: not _LIKELY.search(kv[0]))
+    for name, addrs in names:
+        if name not in up or _VIRTUAL.search(name):
+            continue
+        for a in addrs:
+            if a.family != socket.AF_INET or not a.netmask:
+                continue
+            ip = ipaddress.ip_address(a.address)
+            if ip.is_private and not (ip.is_loopback or ip.is_link_local or ip.is_unspecified):
+                return name, a.address, ipaddress.ip_network(f"{a.address}/{a.netmask}", strict=False)
     return None, None, None
 
 

@@ -355,7 +355,7 @@ footer code { color: var(--soft); }
           <label>Wakes up<input type="time" data-k="wakeAt" required></label>
         </div>
         <div class="chips" id="presets"></div>
-        <div class="row range"><span class="txt"><b>Screen while asleep</b></span>
+        <div class="row range" data-unless="personalPhone"><span class="txt"><b>Screen while asleep</b></span>
           <input type="range" data-k="brightnessNight" min="0" max="100" step="1"><output></output></div>
       </div>
       <label class="row"><span class="txt"><b>Get drowsy when you're away</b><small>Heavy eyelids and yawns when nobody has touched it and the laptop is idle or locked</small></span>
@@ -383,7 +383,7 @@ footer code { color: var(--soft); }
 
   // ---------------------------------------------------------------- cards
   const sw = (k, label, help = "", needs = "") => ({ k, label, help, needs });
-  const range = (k, label, min, max, step, unit, needs = "") => ({ k, label, min, max, step, unit, needs, range: true });
+  const range = (k, label, min, max, step, unit, needs = "", unless = false) => ({ k, label, min, max, step, unit, needs, unless, range: true });
   const choice = (k, label, help, options, needs = "") => ({ k, label, help, options, needs });  // a row of buttons, one per value
   const section = (label) => ({ section: label });
   const IDLE = [["curious", "🧐 Curious"], ["happyBlip", "😊 Happy"], ["suspicious", "🤨 Suspicious"], ["look", "👀 Look around"],
@@ -419,6 +419,7 @@ footer code { color: var(--soft); }
     `<div class="grp"><small>📱 Phone: offline, ~6 s a sentence, the laptop stays free. 💻 Laptop: offline, ~2 s, bigger model. ☁️ Cloud API: fastest, but your audio goes to the provider.</small><b>Language</b><small class="cur" id="stt-cur"></small>` +
     `<input type="search" id="stt-q" placeholder="Search languages, e.g. Hindi or ja" autocomplete="off" aria-label="Search languages">` +
     `<div class="langs" id="stt-langs"></div><div class="warn" id="stt-warn" hidden></div></div>` +
+    `<div class="grp" data-stt-show="phone"><small>Needs the phone's speech engine: once, in Termux on the phone, run <code>bash ~/deskbuddy/stt-setup.sh</code> (about 10 minutes, optional). Without it, pick Laptop or Cloud.</small></div>` +
     `<div class="grp" data-stt-show="laptop"><b>Laptop model</b><small>Bigger models understand more but are slower. Automatic uses small, or base in fast mode.</small>` +
     `<div class="seg" id="stt-models"></div><div id="stt-missing"></div></div>` +
     `<div class="grp" data-stt-show="cloud"><b>Cloud provider</b><div class="seg" id="stt-providers"></div>` +
@@ -444,6 +445,14 @@ footer code { color: var(--soft); }
   const CONN_NETS = `<div class="row netrow" data-needs="linkHomeOnly"><span class="txt"><b>Home networks</b>` +
     `<small>Chip only connects (and only scans) on these. “wired” means a cable. Up to 10.</small></span>` +
     `<div class="nets" id="conn-nets"></div></div>`;
+  // what to do on the phone itself, shown before and during pairing and after it
+  const PHONE_PREP = `<p class="step"><b>First, on the new phone:</b> install <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">Termux</a> ` +
+    `and <a href="https://f-droid.org/packages/com.termux.api/" target="_blank" rel="noopener">Termux:API</a> from F-Droid (the same source for both: mixing sources breaks them; the Play Store's Termux is outdated). ` +
+    `Open Termux once, then do step 1 below.</p>`;
+  const PHONE_FACE = `<p class="step"><b>Then on the phone:</b> open <code>http://127.0.0.1:8080</code> in Chrome, then ⋮ → <b>Install app</b> (or “Add to Home screen”). ` +
+    `Chip then opens full screen and keeps the screen on while it shows. Switch on <b>Personal phone</b> above if it's a phone you also use. ` +
+    `Open Termux to start Chip (or type <code>chip-start</code>); type <code>chip-stop</code>, or tap Exit in Termux's notification, to stop it. ` +
+    `An always-on phone can use Termux:Boot and kiFOSSk instead.</p>`;
   const CONN_END = `<details id="conn-adv"><summary>Advanced</summary>` +
     `<div class="warnbox">⚠️ A wrong port stops the tunnel, and nothing here can fix it from the phone. Only change it if you moved sshd in Termux (<code>sshd -p</code>). Range 1024–65535.</div>` +
     `<div class="line"><label for="conn-port" style="flex:1;color:var(--soft);font-size:13.5px">Phone's ssh port</label>` +
@@ -546,6 +555,7 @@ footer code { color: var(--soft); }
       range("stretchMin", "Every", 10, 180, 5, "min", "stretch"),
     ] },
     { icon: "🔌", title: "Connections", conn: true, rows: [
+      sw("personalPhone", "Personal phone", "A phone you also use: Chip never changes its screen brightness and hides the app buttons. Chip runs as an installed web app (open Termux first)"),
       sw("linkPaused", "Pause the link", "Closes the tunnel and stops looking for the phone"),
       sw("linkAutoFind", "Find the phone when it moves", "Scans this Wi-Fi's /24 for the phone's key if its address stops answering"),
       sw("linkHomeOnly", "Only on home networks", "Never scan or connect elsewhere (cafés, hotspots)"),
@@ -568,7 +578,7 @@ footer code { color: var(--soft); }
          ["sky", '<i class="swatch" style="background:#6cb8ff"></i>Sky'], ["custom", "🎨 Custom"]]),
       { color: true, k: "accentColor", label: "Custom colour", help: "Pick any colour; Chip's palette follows it (very dark colours are lightened)" },
       range("chipGlow", "Chip's glow", 0, 200, 10, "vol"),
-      range("brightnessDay", "Daytime brightness", 5, 255, 5, "pct"),
+      range("brightnessDay", "Daytime brightness", 5, 255, 5, "pct", "", true),
     ] },
   ];
   const DOCK = [
@@ -603,7 +613,7 @@ footer code { color: var(--soft); }
         `<input type="color" class="picker" data-k="${r.k}"></div>`;
     }
     if (r.range) {
-      return `<div class="row range${r.needs ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b></span>` +
+      return `<div class="row range${r.needs ? " sub" : ""}"${needs}${r.unless ? ' data-unless="personalPhone"' : ""}><span class="txt"><b>${esc(r.label)}</b></span>` +
         `<input type="range" data-k="${r.k}" data-unit="${r.unit}" min="${r.min}" max="${r.max}" step="${r.step}"><output></output></div>`;
     }
     return `<label class="row${r.needs ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
@@ -675,6 +685,10 @@ footer code { color: var(--soft); }
       const on = el.dataset.needs.split(" ").every((k) => S[k]);
       el.classList.toggle("dim", !on);
       $$("input, button", el).forEach((i) => { i.disabled = !on; });
+    }
+    for (const el of $$("[data-unless]")) {   // greyed while that switch is on (a personal phone: Chip doesn't touch the brightness)
+      el.classList.toggle("dim", !!S[el.dataset.unless]);
+      $$("input, button", el).forEach((i) => { i.disabled = !!S[el.dataset.unless]; });
     }
     for (const el of $$("[data-card-needs]")) el.classList.toggle("dim", !S[el.dataset.cardNeeds]);
     renderCaps();
@@ -749,7 +763,8 @@ footer code { color: var(--soft); }
   }
   // What this laptop can do (GET /caps, laptop/platforms): rows for missing features are dimmed and say so.
   const CAP_NEEDS = { ringGpu: "gpu", mediaCard: "media", trackToasts: "nowPlaying", tabViz: "visualizer", typingScene: "typingRate",
-    typingAfter: "typingRate", gazeFollow: "gaze", torchApps: "notifications", notifyAllApps: "notifications" };
+    typingAfter: "typingRate", gazeFollow: "gaze", torchApps: "notifications", notifyAllApps: "notifications", linkHomeOnly: "wifiName" };
+  const CAP_WHY = { linkHomeOnly: "This computer doesn't show apps the Wi-Fi name (allow location access for Python to use it)" };
   let CAPS = null;
   const capOk = (k) => !CAP_NEEDS[k] || !CAPS || CAPS[CAP_NEEDS[k]] !== false;
   function renderCaps() {
@@ -758,10 +773,11 @@ footer code { color: var(--soft); }
       if (!row) continue;
       const off = !capOk(k);
       row.classList.toggle("nocap", off);
-      if (off) $$("input, button", row).forEach((i) => { i.disabled = true; });
+      // a switch that is on stays usable, so it can be turned off (e.g. home networks only on a laptop that hides the name)
+      if (off) $$("input, button", row).forEach((i) => { i.disabled = !(S && S[k] === true); });
       let tag = $(".only", row);
       if (off && !tag) {
-        tag = document.createElement("em"); tag.className = "only"; tag.textContent = "Linux only for now";
+        tag = document.createElement("em"); tag.className = "only"; tag.textContent = CAP_WHY[k] || "Linux only for now";
         $(".txt b", row).after(tag);
       }
       if (tag) tag.hidden = !off;
@@ -1533,6 +1549,10 @@ footer code { color: var(--soft); }
       if (w.speed || band) row("Link speed", [w.speed ? `${Math.round(w.speed)} Mbps` : "", band].filter(Boolean).join(" · "));
     }
     sens("Laptop", esc([lap.ssid, lap.ip].filter(Boolean).join(" · ") || "—") + (lap.subnet ? ` <small>${esc(lap.iface || "")} ${esc(lap.subnet)}</small>` : ""));
+    if (L.files) {  // PhoneLink.sync_files: compared with the laptop's phone/ each time the tunnel comes up
+      const F = { "up to date": ["Up to date", "good"], "updating": ["Updating…", "warn"], "checking": ["Checking…", ""], "failed": ["Failed", "bad"] }[L.files] || [L.files, ""];
+      row("Phone files", esc(F[0]) + (L.files === "failed" && L.files_detail ? ` <small>${esc(L.files_detail)}. Run ./deploy.sh to see why</small>` : ""), F[1]);
+    }
     sens("Phone's ssh key", L.fingerprint ? `<code${connMask ? "" : ` title="${esc(L.fingerprint)}"`}>${esc(shortFp(L.fingerprint))}</code> <small>${esc(L.key_type || "")}</small>` : "not pinned yet");
     $("#conn-dl").innerHTML = rows.join("");
   }
@@ -1618,16 +1638,17 @@ footer code { color: var(--soft); }
     if (pairResult) {
       const r = pairResult;
       h = `<p class="step"><b style="color:var(--good)">✓ Paired with ${esc(r.ip)}</b><br><small>Key ${esc(shortFp(r.fingerprint))}</small></p>` +
-        `<p class="step">${r.deploy.ok ? "Chip's files were sent to the new phone. The face loads within a minute." : "The key is pinned, but sending Chip's files failed. Run ./deploy.sh on the laptop:"}</p>` +
-        (r.deploy.ok ? "" : `<pre>${esc((r.deploy.lines || []).join("\n"))}</pre>`) +
+        `<p class="step">${r.deploy.ok ? "Chip's files were sent to the new phone." : "The key is pinned, but sending Chip's files failed. Run ./deploy.sh on the laptop:"}</p>` +
+        (r.deploy.ok ? PHONE_FACE : `<pre>${esc((r.deploy.lines || []).join("\n"))}</pre>`) +
         `<div class="acts"><button class="chip go" id="wiz-done">Done</button></div>`;
     } else if (!p.active) {
-      h = (p.expired ? `<p class="hint">The last pairing ran out of time.</p>` : "") +
+      h = (p.expired ? `<p class="hint">The last pairing ran out of time.</p>` : "") + PHONE_PREP +
         `<p class="step">Pairing opens a one-time download on this laptop for 10 minutes, for one phone only. Nothing is trusted until you type the code the phone shows.</p>` +
+        (CAPS && CAPS.os && CAPS.os !== "linux" ? `<p class="hint">Your computer may ask to allow Python on the network: allow it (private networks).</p>` : "") +
         `<div class="acts"><button class="chip go" id="wiz-start">Start pairing</button></div>` + msg;
     } else {
       const fw = p.firewall && p.firewall.match(/^(.*?pairing only), (sudo .*?)\s+\(after: (sudo .*)\)$/);
-      h = `<p class="step">Expires in <span class="count" id="conn-count"></span></p>`;
+      h = `<p class="step">Expires in <span class="count" id="conn-count"></span></p>` + (p.serving ? PHONE_PREP : "");
       if (p.serving) {
         h += `<p class="step"><b>1.</b> In Termux on the new phone, paste this one line (it checks the script before running it):</p>` +
           `<div class="cmdbox cmd" id="wiz-cmd">${esc(p.command)}</div><div class="acts"><button class="chip" id="wiz-copy">Copy command</button></div>`;

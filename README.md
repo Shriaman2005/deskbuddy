@@ -187,7 +187,11 @@ settings, alerts and dictation all use that one tunnel. The face page itself, ti
   sites can't pause or redirect the link.
 - **Phone key pinning:** the bridge pins the phone's ssh host key under the alias `chip-phone` in
   `~/.config/deskbuddy/known_hosts`. If the phone's IP changes, the bridge scans the /24 for `sshPort` and accepts
-  only the host that presents that key, then saves the new IP.
+  only the host that presents that key, then saves the new IP. Every ssh call (tunnel, deploy, doctor) uses the
+  same strict options from `laptop/sshlink.py`; if `~/.config/deskbuddy/id_ed25519` exists, it is the only key offered.
+- **Phone files:** each time the tunnel comes up, the bridge compares the phone's copy of `phone/` (the hash
+  `~/deskbuddy/.chip-hash` that `laptop/deploy.py` leaves there) with the laptop's and deploys once if they differ;
+  the Connections card shows "Phone files: Up to date / Updating / Failed". `./deploy.sh` still deploys by hand.
 - **Pairing a new phone** (or after Termux is reinstalled): dashboard, Connections, Replace phone. The laptop shows a
   one-time download for 10 minutes; the new phone runs the pairing script from Termux and shows a code, and you
   type that code on the laptop. Nothing is trusted before that. Don't edit known_hosts by hand.

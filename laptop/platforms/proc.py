@@ -1,5 +1,6 @@
 """The one way Chip starts other programs: no console window on Windows, UTF-8 text, a timeout on every run."""
 import os
+import shutil
 import subprocess
 from subprocess import DEVNULL, PIPE, STDOUT, SubprocessError, TimeoutExpired  # noqa: F401  (re-exported for callers)
 
@@ -19,6 +20,16 @@ def run(*cmd, timeout=6, input=None):
         return complete(cmd, timeout, input=input).stdout.strip()
     except (OSError, TimeoutExpired):
         return ""
+
+
+def which(name):
+    """Full path of a program on PATH, or None. On Windows also Windows' own OpenSSH folder (System32\\OpenSSH),
+    which isn't always on PATH for programs started at login."""
+    found = shutil.which(name)
+    if found or os.name != "nt":
+        return found
+    path = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "System32", "OpenSSH", name + ".exe")
+    return path if os.path.isfile(path) else None
 
 
 def popen(cmd, text=True, **kw):

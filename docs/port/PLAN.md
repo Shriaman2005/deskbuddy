@@ -8,7 +8,11 @@ The prompts are in `docs/port/PROMPTS.md` (for the user). Stage 2 (Android app +
 Tick a line when its task is committed: `- [x] S1 Platform layer — 2026-11-05 a1b2c3d: notes, follow-ups`.
 - [x] S0 Repo prep — 2026-11-02: MIT LICENSE (copyright "Aman"); history scan clean, no key formats or secret files ever committed
 - [x] S1 Platform layer + selftest — 2026-11-02 24d45e8: Linux shapes unchanged (+ /stats caps, GET /caps); follow-ups: stubs answer locked()=None so /type and /transcribe say "locked" on Windows/macOS until S5/S6; doctor.py checks are still Linux-only; phone page with the caps hiding not deployed yet (no effect on Linux)
-- [ ] S2 Link, pairing and deploy on every OS (+ fake phone)
+- [x] S2 Link, pairing and deploy on every OS (+ fake phone) — 2026-11-03 HASH: PhoneLink/Pairing moved to link.py
+  (bridge.py −600 lines), sshlink.py, deploy.py (+ auto-sync, .chip-hash), doctor per OS, tests/test_link.py (29 checks,
+  fake phone) pass; real link + doctor + ./deploy.sh OK. Follow-ups: install.py must call sshlink.ensure_own_key() (S5/S6)
+  and set HKCU Run "Chip" / LaunchAgent org.deskbuddy.bridge (names doctor checks); rediscovery test skips on macOS (no
+  127.0.0.2); Windows/macOS Wi-Fi parsing is untested on real machines (S4 CI, friends); localized netsh "Open" is a word list
 - [ ] S3 Phone side for any Android phone
 - [ ] S4 CI on Linux, Windows, macOS
 - [ ] S5 Windows backend + install.py

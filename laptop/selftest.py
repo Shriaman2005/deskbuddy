@@ -5,6 +5,7 @@ bridge still refuses what it must. Prints a JSON report; exit status 1 if any ch
 Needs no GNOME, D-Bus or phone (CI): those caps are then simply false.
 Run: python3 -I laptop/selftest.py"""
 import http.client
+import inspect
 import json
 import os
 import shutil
@@ -67,7 +68,7 @@ def missing(have, want):
 def check_backends():
     """windows.py and macos.py must import on every OS and offer everything base.py does (and linux.py too)."""
     import importlib
-    names = {n for n in vars(base) if not n.startswith("_") and n not in ("NAME",)}
+    names = {n for n, v in vars(base).items() if not n.startswith("_") and n != "NAME" and not inspect.ismodule(v)}
     for mod in ("linux", "windows", "macos"):
         try:
             m = importlib.import_module("platforms." + mod)
@@ -76,7 +77,8 @@ def check_backends():
             continue
         check(f"platforms.{mod} offers the base.py set", not names - set(vars(m)), sorted(names - set(vars(m))))
         if mod != "linux":
-            check(f"platforms.{mod} caps are all false", not any(m.caps().values()))
+            # wifiName may be true where the OS shows the Wi-Fi name (S2); the rest waits for S5/S6
+            check(f"platforms.{mod} caps are all false", not any(v for k, v in m.caps().items() if k != "wifiName"))
 
 
 def main():

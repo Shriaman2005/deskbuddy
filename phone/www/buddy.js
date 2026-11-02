@@ -47,6 +47,7 @@
     phonesFollowSkin: true, phonesDefault: "",  // a skin's own headphones when it has a pair; else "" = Chip's own, or an installed skin id to borrow from
     eyeStyle: "", pupilSize: "M", showPupils: true, skin: "", locName: "", locLat: 0, locLon: 0,  // weather place from the dashboard ("" = config.js); eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
     brightnessDay: C.brightness.day,
+    personalPhone: false,  // the phone is also in use (Chrome web app): never touch its screen brightness
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
   };
   const prefs = Object.assign({}, DEFAULT_PREFS,
@@ -74,9 +75,12 @@
   }
   const post = (url) => fetch(url, { method: "POST" }).then((r) => r.ok).catch(() => false);
   const phone = {
-    brightness: (level) => post(`/api/brightness?level=${level}`),
+    brightness: (level) => (prefs.personalPhone ? Promise.resolve(false) : post(`/api/brightness?level=${level}`)),
     say: (text) => { if (prefs.talk && !state.night) post(`/api/say?text=${encodeURIComponent(text)}`); },
     launch: (id) => post(`/api/launch?app=${id}`),
+    // Android blocks `am start` from Termux unless Termux is in front, which it isn't in Chrome (the installed web app too):
+    // apps are only offered in kiFOSSk, a WebView ("; wv)"), and never on a personal phone
+    get canLaunch() { return !prefs.personalPhone && !(/Chrome\//.test(navigator.userAgent) && !/; wv\)/.test(navigator.userAgent)); },
   };
   const laptop = (path) => post(C.laptop + path);
 
@@ -1224,8 +1228,8 @@
 
   // ---------------------------------------------------------------- drawer (apps + toggles)
   const APPS = [
-    ["brave", "🦁", "Brave"], ["termux", "⌨️", "Termux"],
-    ["files", "📁", "Files"], ["settings", "⚙️", "Settings"], ["launcher", "🏠", "All apps"],
+    ["browser", "🌐", "Browser"], ["termux", "⌨️", "Termux"],
+    ["files", "📁", "Files"], ["settings", "⚙️", "Settings"], ["home", "🏠", "Home"],
   ];
   $("#tiles").innerHTML = APPS.map(([id, ic, label]) => `<button class="tile" data-app="${id}"><i>${ic}</i>${label}</button>`).join("");
   function renderToggles() {
@@ -1236,7 +1240,7 @@
     set("dictEngine", prefs.dictEngine !== "phone", `${ENGINE_ICON[prefs.dictEngine] || "📱"} Dictation: ${ENGINE_NAME[prefs.dictEngine] || "Phone"}`);
     set("flashlight", !!state.flashlight, state.flashlight ? "🔦 Torch on" : "🔦 Torch off");
   }
-  function openDrawer() { renderToggles(); $("#drawer").classList.add("open"); }
+  function openDrawer() { renderToggles(); $("#tiles").style.display = phone.canLaunch ? "" : "none"; $("#drawer").classList.add("open"); }
   $("#drawer").addEventListener("click", async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
@@ -1567,5 +1571,18 @@
   setInterval(fetchWeather, 20 * 60000);
   setInterval(checkVersion, 60000);
   fetchWeather(); pollLaptop(); pollPhone(); checkVersion();
+
+  // Chrome web app: the screen stays on while Chip is showing (kiFOSSk keeps it on itself; a browser without the API skips this).
+  // The lock is released whenever the page is hidden, so it is asked for again each time it is visible.
+  let wakeLock = null;
+  async function keepAwake() {
+    if (!onPhone || !navigator.wakeLock || document.visibilityState !== "visible" || wakeLock) return;
+    try { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); }
+    catch (e) { wakeLock = null; }  // refused (battery saver): tried again at the next visibilitychange
+  }
+  document.addEventListener("visibilitychange", keepAwake);
+  keepAwake();
+  // a service worker that does nothing, only so Chrome offers "Install app" (it must cache nothing: deploys rely on reloads)
+  if (onPhone && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   if (!state.night && prefs.greetings) setTimeout(() => { express("surprised", 700); setTimeout(() => { anim("hop", 500); express("joy", 1500); say(`Hi! I'm ${buddyName()} 👋`, 2500); }, 700); }, 900);
 })();
