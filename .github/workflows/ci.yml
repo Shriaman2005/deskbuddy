@@ -47,7 +47,7 @@ jobs:
         run: |
           mkdir -p /tmp/cd /tmp/cc
           echo '{"rev":1,"values":{"linkPaused":true}}' > /tmp/cc/settings.json
-          CHIP_PORT=18765 CHIP_PAIR_PORT=18766 CHIP_CONFIG_DIR=/tmp/cc CHIP_DATA_DIR=/tmp/cd PYTHONFAULTHANDLER=1 python -I -X utf8 laptop/bridge.py > /tmp/bridge.log 2>&1 &
+          CHIP_PORT=18765 CHIP_PAIR_PORT=18766 CHIP_CONFIG_DIR=/tmp/cc CHIP_DATA_DIR=/tmp/cd PYTHONFAULTHANDLER=1 python -I -X utf8 -X faulthandler laptop/bridge.py > /tmp/bridge.log 2>&1 &
           sleep 12
           echo "--- curl"; curl -sv -m 10 http://127.0.0.1:18765/caps || true
           echo "--- lsof"; lsof -nP -iTCP:18765 || true

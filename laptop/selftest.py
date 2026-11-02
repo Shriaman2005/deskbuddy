@@ -93,8 +93,8 @@ def main():
         json.dump({"rev": 1, "values": {"linkPaused": True}}, f)  # never scan the Wi-Fi or open a tunnel from a test
     fake = os.environ.get("CHIP_FAKE_CAPS") or "gpu=0"
     env = dict(os.environ, CHIP_PORT=str(port), CHIP_PAIR_PORT=str(pair_port), CHIP_CONFIG_DIR=cfg,
-               CHIP_DATA_DIR=data, CHIP_FAKE_CAPS=fake, PYTHONFAULTHANDLER="1")
-    bridge = proc.popen([sys.executable, "-I", "-X", "utf8", os.path.join(HERE, "bridge.py")], env=env,
+               CHIP_DATA_DIR=data, CHIP_FAKE_CAPS=fake)
+    bridge = proc.popen([sys.executable, "-I", "-X", "utf8", "-X", "faulthandler", os.path.join(HERE, "bridge.py")], env=env,
                         stdin=proc.DEVNULL, stdout=proc.PIPE, stderr=proc.STDOUT)
     caps = {}
     try:
