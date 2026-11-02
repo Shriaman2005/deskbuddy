@@ -103,7 +103,7 @@ def main():
             time.sleep(0.3)
             status, caps = get(port, "/caps")
         if not check("bridge starts and answers /caps", status == 200, f"status {status}: {caps}"):
-            return report(caps)
+            return finish(bridge, tmp, caps)
 
         # CAPS: every key a bool, the fake applied, the tool caps match what is installed, no bus = no bus caps
         caps = dict(caps)
@@ -167,16 +167,23 @@ def main():
         status, _ = get(port, "/link/forget", method="POST")
         check("link writes refused without an Origin", status == 403, status)
         check("no known_hosts written by the test", not os.path.exists(os.path.join(cfg, "known_hosts")))
-    finally:
-        bridge.terminate()
-        try:
-            out = bridge.communicate(timeout=5)[0]
-        except proc.TimeoutExpired:
-            bridge.kill()
-            out = bridge.communicate()[0]
-        if not all(c["ok"] for c in checks) and out:
-            checks.append({"name": "bridge output", "ok": True, "detail": out[-2000:]})
-        shutil.rmtree(tmp, ignore_errors=True)
+    except BaseException:
+        finish(bridge, tmp, caps)
+        raise
+    return finish(bridge, tmp, caps)
+
+
+def finish(bridge, tmp, caps):
+    """Stop the bridge, keep its output in the report when a check failed, then report."""
+    bridge.terminate()
+    try:
+        out = bridge.communicate(timeout=5)[0]
+    except proc.TimeoutExpired:
+        bridge.kill()
+        out = bridge.communicate()[0]
+    if not all(c["ok"] for c in checks) and out:
+        checks.append({"name": "bridge output", "ok": True, "detail": out[-2000:]})
+    shutil.rmtree(tmp, ignore_errors=True)
     return report(caps)
 
 
