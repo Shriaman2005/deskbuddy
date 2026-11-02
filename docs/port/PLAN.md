@@ -7,7 +7,7 @@ The prompts are in `docs/port/PROMPTS.md` (for the user). Stage 2 (Android app +
 ## Status
 Tick a line when its task is committed: `- [x] S1 Platform layer — 2026-11-05 a1b2c3d: notes, follow-ups`.
 - [x] S0 Repo prep — 2026-11-02: MIT LICENSE (copyright "Aman"); history scan clean, no key formats or secret files ever committed
-- [ ] S1 Platform layer + selftest
+- [x] S1 Platform layer + selftest — 2026-11-02 24d45e8: Linux shapes unchanged (+ /stats caps, GET /caps); follow-ups: stubs answer locked()=None so /type and /transcribe say "locked" on Windows/macOS until S5/S6; doctor.py checks are still Linux-only; phone page with the caps hiding not deployed yet (no effect on Linux)
 - [ ] S2 Link, pairing and deploy on every OS (+ fake phone)
 - [ ] S3 Phone side for any Android phone
 - [ ] S4 CI on Linux, Windows, macOS
