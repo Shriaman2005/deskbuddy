@@ -19,6 +19,10 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
   (PhoneLink: pinned key in ~/.config/deskbuddy/known_hosts under alias chip-phone, `/link` = its state with a `reason`).
   Settings schema = DEFAULTS/RANGES/CHOICES/APP_RULES; stored in ~/.config/deskbuddy/settings.json
   Link settings: linkPaused, linkAutoFind, linkHomeOnly, linkNetworks, linkKeepAlive, linkRetry, sshPort (LINK_KEYS).
+- `laptop/platforms/` — every OS-specific call: paths.py (CONFIG_DIR/DATA_DIR; CHIP_CONFIG_DIR/CHIP_DATA_DIR for tests),
+  proc.py (the one subprocess helper), linux.py (the GNOME code), windows.py/macos.py stubs over base.py. CAPS go out in
+  /stats `caps` and GET /caps; phone and dashboard hide missing features ("Linux only for now"); test with
+  `CHIP_FAKE_CAPS=gpu=0,media=0`. `laptop/selftest.py` runs a throwaway bridge (CHIP_PORT) and checks routes + CAPS.
 - Connections card in `laptop/dashboard.html` (Reconnect, Find phone, Replace phone = pairing wizard, Forget, Doctor).
   README "Connections and reboots" describes it.
 - `laptop/doctor.py` — checks the laptop, the Wi-Fi link (incl. paused, home network, key mismatch from `/link` reason) and Termux.
@@ -48,7 +52,7 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
   kiFOSSk app on the phone). After bridge.py edits: `systemctl --user restart deskbuddy-bridge`.
   Links broken? `python3 -I laptop/doctor.py`.
 - Syntax check: `node laptop/check_pack.js`, `node laptop/check_budget.js` (peak moving/rotated layers, needs the bridge), `node -e 'new Function(require("fs").readFileSync("phone/www/player.js","utf8"))'`,
-  `python3 -m py_compile laptop/bridge.py`
+  `python3 -m py_compile laptop/bridge.py`, `python3 -I laptop/selftest.py`
 - Preview without the phone: headless Chrome at 1480x720 on
   `http://127.0.0.1:8765/preview/index.html?screen=0&typing` (also `mood=focus`, `&sceneT=`, `&wpm=`, `&idle=`,
   `&accent=sage`, `&music`, `&gaze=x,y` pins the eyes' look, -1..1, no /gaze stream; `&eyes=classic|toon|button`,

@@ -138,8 +138,13 @@
   }
   let tempMood = null, tempUntil = 0, tempTimer = 0, mood = "neutral";
 
+  // What the laptop can do (bridge /stats caps, laptop/platforms): a feature whose cap is missing stays hidden, whatever
+  // the pref says. No caps yet (laptop away, an older bridge) = everything as before.
+  const NEEDS = { ringGpu: "gpu", mediaCard: "media", tabViz: "visualizer", typingScene: "typingRate", gazeFollow: "gaze" };
+  const capOk = (k) => !NEEDS[k] || !state.laptop || !state.laptop.caps || state.laptop.caps[NEEDS[k]] !== false;
+  const want = (k) => !!prefs[k] && capOk(k);
   // You've been typing on the laptop for a while (bridge.py counts key presses, not which keys): Chip types along.
-  const typingNow = () => prefs.typingScene && state.laptopOnline && !!state.laptop && state.laptop.typing_for >= prefs.typingAfter;
+  const typingNow = () => want("typingScene") && state.laptopOnline && !!state.laptop && state.laptop.typing_for >= prefs.typingAfter;
   function baseMood() {
     if (dict.phase === "listening") return "listen";
     if (dict.phase === "thinking") return "think";
@@ -512,7 +517,7 @@
   const screens = $$(".screen");
   const TABS = 4, VIZ = 4;  // face, clock, laptop, timer; the visualizer opens from the laptop page
   const TAB_PREFS = [null, "tabClock", "tabLaptop", "tabTimer", "tabViz"];  // the face can't be hidden
-  const tabOn = (i) => !TAB_PREFS[i] || prefs[TAB_PREFS[i]];
+  const tabOn = (i) => !TAB_PREFS[i] || want(TAB_PREFS[i]);
   let screenIdx = 0;
   function nextTab(dir) {
     let i = screenIdx;
@@ -614,6 +619,7 @@
   function onLaptop(d, wasOnline) {
     const prev = state.laptop, t = now(), alerts = prefs.laptopAlerts;
     state.laptop = d;
+    if (JSON.stringify(d.caps || null) !== JSON.stringify((prev && prev.caps) || null)) applyPrefs({});  // show/hide what the laptop can do
     if (Object.keys(pendingPrefs).length) pushPrefs();
     else if (d.settingsRev != null && d.settingsRev !== prefsRev) syncPrefs();
     if (d.skinsRev != null) {   // an installed skin's file changed on the laptop (renamed, new headphones): read the one in use again
@@ -1433,7 +1439,7 @@
     for (const k in DEFAULT_PREFS) if (typeof p[k] === typeof DEFAULT_PREFS[k]) prefs[k] = p[k];
     if (preview.get("accent")) prefs.accent = preview.get("accent");
     store.set("prefs", prefs);
-    if (prefs.gazeFollow && !preview.has("gaze")) gazeOpen();
+    if (want("gazeFollow") && !preview.has("gaze")) gazeOpen();
     else if (gazeSrc) gazeClose();
     paintAccent();
     app.dataset.chipGlow = prefs.chipGlow;
@@ -1448,9 +1454,9 @@
     if (isPomo() && !timerActive() && !alarmUntil && focus.total !== prefs[POMO[focus.mode]] * 60000) {
       focus.total = focus.left = prefs[POMO[focus.mode]] * 60000; saveFocus();
     }
-    for (const [k, sel] of Object.entries(SHOWS)) $$(sel).forEach((el) => el.classList.toggle("off", !prefs[k]));
+    for (const [k, sel] of Object.entries(SHOWS)) $$(sel).forEach((el) => el.classList.toggle("off", !want(k)));
     $("#c-panel").classList.toggle("off", !prefs.clockNow && !prefs.clockHours && !prefs.clockAir);
-    $(".rings").classList.toggle("off", !prefs.ringCpu && !prefs.ringRam && !prefs.ringGpu && !prefs.ringBattery);
+    $(".rings").classList.toggle("off", !want("ringCpu") && !want("ringRam") && !want("ringGpu") && !want("ringBattery"));
     $$("#dots i").forEach((d, k) => d.classList.toggle("off", !tabOn(k)));
     $("#dots").classList.toggle("off", !prefs.dots || [1, 2, 3].every((k) => !tabOn(k)));
     if (!tabOn(screenIdx)) go(screenIdx);  // go() moves off a tab that was just hidden

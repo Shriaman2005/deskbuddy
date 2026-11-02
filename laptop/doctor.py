@@ -3,13 +3,15 @@
 Run: python3 -I ~/deskbuddy/laptop/doctor.py   (exit status 1 if anything failed)"""
 import json
 import os
-import subprocess
 import sys
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I skips the script's folder
+from platforms import paths, proc  # noqa: E402
+
 BRIDGE = "http://127.0.0.1:8765"
-KNOWN_HOSTS = os.path.expanduser("~/.config/deskbuddy/known_hosts")
-STATE = os.path.expanduser("~/.config/deskbuddy/state.json")
+KNOWN_HOSTS = paths.config("known_hosts")
+STATE = paths.config("state.json")
 failed = 0
 
 
@@ -21,10 +23,7 @@ def check(ok, what, fix=""):
 
 
 def run(*cmd, timeout=15):
-    try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
+    return proc.run(*cmd, timeout=timeout)
 
 
 def get(path):

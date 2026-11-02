@@ -75,6 +75,8 @@ main { padding: 24px clamp(16px, 4vw, 40px) 40px; max-width: 1480px; margin: 0 a
 .row .txt small { display: block; color: var(--muted); font-size: 12.5px; }
 .row.sub { padding-left: 18px; }
 .row.dim { opacity: .4; cursor: default; }
+.row.nocap { opacity: .4; cursor: default; }
+.row .only { margin-left: 8px; font-size: 11px; font-style: normal; font-weight: 400; padding: 1px 7px; border-radius: 6px; background: #22303a; color: var(--muted); }
 .row[hidden] { display: none; }
 .row.range { cursor: default; flex-wrap: wrap; }
 .row.range .txt { flex: 0 0 auto; }
@@ -675,8 +677,9 @@ footer code { color: var(--soft); }
       $$("input, button", el).forEach((i) => { i.disabled = !on; });
     }
     for (const el of $$("[data-card-needs]")) el.classList.toggle("dim", !S[el.dataset.cardNeeds]);
+    renderCaps();
     const gazeEl = $("#gaze");
-    if (gazeEl) { gazeEl.hidden = !S.gazeFollow; pollGaze(); }   // no monitor setup, and no pointer polling, while the toggle is off
+    if (gazeEl) { gazeEl.hidden = !S.gazeFollow || !capOk("gazeFollow"); pollGaze(); }   // no monitor setup, and no pointer polling, while the toggle is off
     renderApps();
     renderPlace();
     document.documentElement.style.setProperty("--eye", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);  // the page follows Chip's accent
@@ -743,6 +746,30 @@ footer code { color: var(--soft); }
     if (!r) return toast("Couldn't save. Is the desk buddy bridge running?", true);
     if (!saving) { S = r; render(); }
     toast("Saved ✓");
+  }
+  // What this laptop can do (GET /caps, laptop/platforms): rows for missing features are dimmed and say so.
+  const CAP_NEEDS = { ringGpu: "gpu", mediaCard: "media", trackToasts: "nowPlaying", tabViz: "visualizer", typingScene: "typingRate",
+    typingAfter: "typingRate", gazeFollow: "gaze", torchApps: "notifications", notifyAllApps: "notifications" };
+  let CAPS = null;
+  const capOk = (k) => !CAP_NEEDS[k] || !CAPS || CAPS[CAP_NEEDS[k]] !== false;
+  function renderCaps() {
+    for (const k in CAP_NEEDS) {
+      const row = $(`.row [data-k="${k}"]`)?.closest(".row");
+      if (!row) continue;
+      const off = !capOk(k);
+      row.classList.toggle("nocap", off);
+      if (off) $$("input, button", row).forEach((i) => { i.disabled = true; });
+      let tag = $(".only", row);
+      if (off && !tag) {
+        tag = document.createElement("em"); tag.className = "only"; tag.textContent = "Linux only for now";
+        $(".txt b", row).after(tag);
+      }
+      if (tag) tag.hidden = !off;
+    }
+  }
+  async function loadCaps() {
+    CAPS = await fetch("/caps", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    render();
   }
   async function loadSettings() {
     if (saving) return;
@@ -1666,7 +1693,7 @@ footer code { color: var(--soft); }
   $("#conn-rep").addEventListener("toggle", () => { if ($("#conn-rep").open) loadPair(); });
   setInterval(updateCount, 1000);
 
-  loadSettings(); loadPhone(); loadAttention();
+  loadSettings(); loadCaps(); loadPhone(); loadAttention();
   setInterval(loadAttention, 4000);
   setInterval(loadSettings, 4000);
   setInterval(loadPhone, 2000);

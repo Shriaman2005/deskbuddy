@@ -22,7 +22,6 @@
 """
 import collections
 import concurrent.futures
-import glob
 import hashlib
 import hmac
 import io
@@ -33,7 +32,6 @@ import os
 import re
 import secrets
 import socket
-import subprocess
 import tarfile
 import threading
 import time
@@ -45,20 +43,22 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # python -I skips the script's folder
+import platforms  # noqa: E402
 import stt  # noqa: E402
-import typer  # noqa: E402
+from platforms import paths  # noqa: E402
+from platforms.proc import DEVNULL, PIPE, SubprocessError, TimeoutExpired, run  # noqa: E402
 
-PORT = 8765
-PAIR_PORT = 8766  # the one-shot download server for pairing a new phone (laptop's LAN address only)
+PORT = int(os.environ.get("CHIP_PORT") or 8765)  # CHIP_PORT / CHIP_PAIR_PORT only for selftest.py
+PAIR_PORT = int(os.environ.get("CHIP_PAIR_PORT") or 8766)  # the one-shot download server for pairing a new phone (laptop's LAN address only)
 HOST_ALIAS = "chip-phone"  # the phone's ssh host key is pinned under this name, whatever its IP is
-KNOWN_HOSTS = os.path.expanduser("~/.config/deskbuddy/known_hosts")
-STATE_FILE = os.path.expanduser("~/.config/deskbuddy/state.json")
-SETTINGS_FILE = os.path.expanduser("~/.config/deskbuddy/settings.json")
-GAZE_FILE = os.path.expanduser("~/.config/deskbuddy/gaze.json")  # where the phone sits, per monitor layout
+KNOWN_HOSTS = paths.config("known_hosts")
+STATE_FILE = paths.config("state.json")
+SETTINGS_FILE = paths.config("settings.json")
+GAZE_FILE = paths.config("gaze.json")  # where the phone sits, per monitor layout
 DASHBOARD = os.path.join(HERE, "dashboard.html")
 PREVIEW = os.path.realpath(os.path.join(HERE, "..", "phone", "www"))  # the buddy page itself, for the dashboard's preview
 PACK_FILE = os.path.join(PREVIEW, "pack.json")
-SKINS_DIR = os.path.expanduser("~/.config/deskbuddy/skins")  # <id>.json per installed skin, _draft.json for the passing upload
+SKINS_DIR = paths.config("skins")  # <id>.json per installed skin, _draft.json for the passing upload
 SKIN_JS = os.path.join(HERE, "skin.js")
 SKIN_ID = re.compile(r"[a-z0-9-]{1,32}")
 SKIN_MAX = 600 * 1024  # bytes of a skin file (skin.js enforces the same)
@@ -72,21 +72,6 @@ DOCTOR = os.path.join(HERE, "doctor.py")
 # Dictation engines (laptop/stt.py): whisper.cpp v1.9.5 built here (static, AVX2), models from ggerganov/whisper.cpp
 # on Hugging Face in ~/.local/share/deskbuddy/stt/models; for a 4 s sentence on this Ryzen 5 3450U: small ~2 s
 # (best with Hinglish), base ~0.8 s (fast mode). Or a cloud API, with keys in ~/.config/deskbuddy/secrets.json.
-
-
-def run(*cmd, timeout=6, input=None):
-    try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=input).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-
-
-def read(path):
-    try:
-        with open(path) as f:
-            return f.read().strip()
-    except OSError:
-        return None
 
 
 def load_state():
@@ -307,7 +292,7 @@ AI_SITES = {"claude.ai": "Claude", "chatgpt.com": "ChatGPT", "chat.openai.com": 
 BROWSERS = re.compile(r"chrom|brave|firefox|edge|opera|vivaldi", re.I)
 KNOWN_AI = ("Claude Code", "Gemini CLI", "opencode", "Claude", "ChatGPT", "Antigravity")  # listed on the dashboard from the start
 KINDS = ("ask", "done", "app", "notify", "test")  # agent asks / agent finished / AI app notification / any other app / test
-APPS_FILE = os.path.expanduser("~/.config/deskbuddy/apps.json")
+APPS_FILE = paths.config("apps.json")
 
 
 def who(app, body):
@@ -411,45 +396,26 @@ class Attention:
         return [e for e in self.recent() if e["age"] < 60][:5]
 
     def watch_notifications(self):
-        """Desktop notifications from the session bus: libnotify-style ones and GNOME's GTK ones.
-        Only who sent it is kept, never what it says."""
-        cmd = ["busctl", "--user", "monitor", "--json=short",
-               "--match", "type='method_call',interface='org.freedesktop.Notifications',member='Notify'",
-               "--match", "type='method_call',interface='org.gtk.Notifications',member='AddNotification'"]
-        while True:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-            for line in proc.stdout:
-                try:
-                    msg = json.loads(line)
-                    data = msg["payload"]["data"]
-                    if msg.get("member") == "Notify":
-                        app, title, body, hints = data[0], data[3], data[4], data[6]
-                        quiet = hints.get("urgency", {}).get("data") == 0 or hints.get("transient", {}).get("data")
-                    else:
-                        d = data[2]
-                        app, title, body = data[0], d.get("title", {}).get("data", ""), d.get("body", {}).get("data", "")
-                        quiet = d.get("priority", {}).get("data") == "low"
-                except (ValueError, KeyError, IndexError, TypeError, AttributeError):
-                    continue
-                key = (app, title, body)  # GNOME Shell passes each notification on once more; count it once
-                if key == self.last_note[0] and time.time() - self.last_note[1] < 5:
-                    continue
-                self.last_note = (key, time.time())
-                name, ai = who(str(app), str(body))
-                if ai:
-                    self.add(name, "app", "sent a notification")
-                elif not quiet:  # low-priority and passing ones (media, progress) never count
-                    self.add(name, "notify", "sent a notification", ai=False)
-            proc.wait()
-            time.sleep(5)
+        """Desktop notifications, from the OS backend. Only who sent it is kept, never what it says."""
+        platforms.watch_notifications(self.on_notification)
+
+    def on_notification(self, app, title, body, quiet):
+        key = (app, title, body)  # GNOME Shell passes each notification on once more; count it once
+        if key == self.last_note[0] and time.time() - self.last_note[1] < 5:
+            return
+        self.last_note = (key, time.time())
+        name, ai = who(str(app), str(body))
+        if ai:
+            self.add(name, "app", "sent a notification")
+        elif not quiet:  # low-priority and passing ones (media, progress) never count
+            self.add(name, "notify", "sent a notification", ai=False)
 
 
 # ---------------------------------------------------------------- typing
 
 class Typing:
-    """Whether you're typing, for how long and roughly how fast, from counters anyone can read: a USB
-    keyboard's transfer count (/sys/bus/usb/devices/*/urbnum goes up by one per key press and per release;
-    devices that are also a mouse are left out) and the built-in keyboard's interrupt in /proc/interrupts.
+    """Whether you're typing, for how long and roughly how fast, from the OS backend's key-press counter
+    (platforms KeyCounter; on Linux USB keyboards' transfer counts and the built-in keyboard's interrupt).
     Nothing about which keys. A pause longer than GAP seconds ends a stretch of typing."""
     GAP = 3  # short, so Chip leaves its laptop right when you stop (a longer pause starts a new stretch)
 
@@ -457,33 +423,16 @@ class Typing:
         self.lock = threading.Lock()
         self.since = self.last = 0.0
         self.recent = collections.deque()  # (time, key reports) over the last 10 s
-        self.devices, self.found_at = [], 0
-
-    @staticmethod
-    def usb_keyboards():
-        found = []
-        for dev in glob.glob("/sys/bus/usb/devices/*"):
-            protos = {read(i + "/bInterfaceProtocol") for i in glob.glob(dev + "/*:*")
-                      if read(i + "/bInterfaceClass") == "03" and read(i + "/bInterfaceSubClass") == "01"}
-            if "01" in protos and "02" not in protos:  # a keyboard boot interface and no mouse one
-                found.append(dev + "/urbnum")
-        return found
-
-    def count(self):
-        if time.time() - self.found_at > 30:  # keyboards come and go
-            self.devices, self.found_at = self.usb_keyboards(), time.time()
-        total = sum(int(read(p) or 0) for p in self.devices)
-        with open("/proc/interrupts") as f:
-            for line in f:
-                if line.split(":", 1)[0].strip() == "1" and "i8042" in line:  # the laptop's own keyboard
-                    total += sum(int(x) for x in line.split()[1:] if x.isdigit())
-        return total
+        self.counter = platforms.KeyCounter()
 
     def loop(self):
         prev = None
         while True:
             try:
-                n = self.count()
+                n = self.counter.count()
+                if n is None:  # this OS can't count key presses
+                    time.sleep(5)
+                    continue
                 if prev is not None and n > prev:
                     now = time.time()
                     with self.lock:
@@ -512,11 +461,12 @@ class Typing:
 # ---------------------------------------------------------------- stats
 
 class Stats:
+    """The laptop's numbers for /stats, sampled by the OS backend (platforms/__init__.py lists the keys)."""
+
     def __init__(self):
         self.data = {}
         self.lock = threading.Lock()
-        self._cpu = None
-        self._net = None
+        self.sampler = platforms.Sampler()
 
     def snapshot(self):
         with self.lock:
@@ -526,121 +476,10 @@ class Stats:
         with self.lock:
             self.data.update(kw)
 
-    def cpu(self):
-        with open("/proc/stat") as f:
-            v = [int(x) for x in f.readline().split()[1:9]]
-        idle, total = v[3] + v[4], sum(v)
-        prev, self._cpu = self._cpu, (idle, total)
-        if not prev or total == prev[1]:
-            return None
-        return round(100 * (1 - (idle - prev[0]) / (total - prev[1])))
-
-    def cores(self):
-        with open("/proc/stat") as f:
-            rows = [l.split() for l in f if re.match(r"cpu\d", l)]
-        now = [(int(r[4]) + int(r[5]), sum(int(x) for x in r[1:9])) for r in rows]
-        prev, self._cores = getattr(self, "_cores", None), now
-        if not prev or len(prev) != len(now):
-            return []
-        return [round(100 * (1 - (i - pi) / (t - pt))) if t != pt else 0 for (i, t), (pi, pt) in zip(now, prev)]
-
-    @staticmethod
-    def ram():
-        m = {}
-        with open("/proc/meminfo") as f:
-            for line in f:
-                k, v = line.split(":", 1)
-                m[k] = int(v.split()[0])
-        return round(100 * (1 - m["MemAvailable"] / m["MemTotal"]))
-
-    @staticmethod
-    def temp():
-        for hw in glob.glob("/sys/class/hwmon/hwmon*"):
-            if read(hw + "/name") == "k10temp":
-                t = read(hw + "/temp1_input")
-                return round(int(t) / 1000) if t else None
-        return None
-
-    @staticmethod
-    def battery():
-        for bat in glob.glob("/sys/class/power_supply/BAT*"):
-            cap = read(bat + "/capacity")
-            if cap is not None:
-                return int(cap), read(bat + "/status") in ("Charging", "Full", "Not charging")
-        return None, None
-
-    def net(self):
-        rx = tx = 0
-        with open("/proc/net/dev") as f:
-            for line in f.readlines()[2:]:
-                name, rest = line.split(":", 1)
-                if name.strip() == "lo":
-                    continue
-                v = rest.split()
-                rx, tx = rx + int(v[0]), tx + int(v[8])
-        t = time.monotonic()
-        prev, self._net = self._net, (t, rx, tx)
-        if not prev:
-            return 0, 0
-        dt = t - prev[0]
-        return round((rx - prev[1]) / dt), round((tx - prev[2]) / dt)
-
-    @staticmethod
-    def sensors():
-        hw = {read(h + "/name"): h for h in glob.glob("/sys/class/hwmon/hwmon*")}
-        def temp(name, n=1):
-            v = read(f"{hw[name]}/temp{n}_input") if name in hw else None
-            return round(int(v) / 1000) if v else None
-        fan = read(hw["dell_smm"] + "/fan1_input") if "dell_smm" in hw else None
-        gpu = next(iter(glob.glob("/sys/class/drm/card*/device/gpu_busy_percent")), None)
-        m = {}
-        with open("/proc/meminfo") as f:
-            for line in f:
-                k, v = line.split(":", 1)
-                m[k] = int(v.split()[0])
-        st = os.statvfs("/")
-        disk_total, disk_free = st.f_blocks * st.f_frsize, st.f_bavail * st.f_frsize
-        wifi = None
-        try:
-            with open("/proc/net/wireless") as f:
-                line = f.readlines()[2].split()
-                wifi = {"iface": line[0].rstrip(":"), "dbm": int(float(line[3]))}
-        except (OSError, IndexError, ValueError):
-            pass
-        bat = next(iter(glob.glob("/sys/class/power_supply/BAT*")), None)
-        b = {}
-        if bat:
-            cur, volt = read(bat + "/current_now"), read(bat + "/voltage_now")
-            now_, full, design = read(bat + "/charge_now"), read(bat + "/charge_full"), read(bat + "/charge_full_design")
-            status = read(bat + "/status")
-            watts = int(cur) * int(volt) / 1e12 if cur and volt else 0
-            b = {"watts": round(watts, 1), "cycles": int(read(bat + "/cycle_count") or 0),
-                 "health": round(100 * int(full) / int(design)) if full and design else None, "status": status}
-            if cur and int(cur) > 0 and now_ and full:
-                hours = (int(now_) if status == "Discharging" else int(full) - int(now_)) / int(cur)
-                b["minutes_left"] = round(hours * 60)
-        with open("/proc/loadavg") as f:
-            load = [float(x) for x in f.read().split()[:3]]
-        return {
-            "temps": {"cpu": temp("k10temp"), "gpu": temp("amdgpu"), "ssd": temp("nvme"), "board": temp("dell_smm")},
-            "fan": int(fan) if fan else None,
-            "gpu": int(read(gpu)) if gpu else None,
-            "ram_used_gb": round((m["MemTotal"] - m["MemAvailable"]) / 1048576, 1),
-            "ram_total_gb": round(m["MemTotal"] / 1048576, 1),
-            "swap": round(100 * (1 - m["SwapFree"] / m["SwapTotal"])) if m.get("SwapTotal") else 0,
-            "disk": round(100 * (1 - disk_free / disk_total)), "disk_free_gb": round(disk_free / 1e9),
-            "load": load, "wifi": wifi, "bat": b,
-        }
-
     def fast_loop(self):
         while True:
             try:
-                bat, charging = self.battery()
-                rx, tx = self.net()
-                with open("/proc/uptime") as f:
-                    uptime = int(float(f.read().split()[0]))
-                self.update(cpu=self.cpu(), cores=self.cores(), ram=self.ram(), temp=self.temp(), battery=bat,
-                            charging=charging, net_rx=rx, net_tx=tx, uptime=uptime, **self.sensors())
+                self.update(**self.sampler.sample())
             except Exception as e:  # keep serving even if one sensor misbehaves
                 print("stats:", e, flush=True)
             time.sleep(2)
@@ -648,80 +487,12 @@ class Stats:
     def slow_loop(self):
         while True:
             try:
-                vol = run("wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@")
-                m = re.search(r"Volume:\s*([\d.]+)", vol)
-                self.update(
-                    media=media_status(),
-                    volume=round(float(m.group(1)) * 100) if m else None,
-                    muted="MUTED" in vol,
-                    idle_ms=gnome_idle_ms(),
-                    locked=gnome_locked(),
-                )
+                vol, muted = platforms.volume()
+                self.update(media=platforms.media_status(), volume=vol, muted=muted,
+                            idle_ms=platforms.idle_ms(), locked=platforms.locked())
             except Exception as e:
                 print("stats:", e, flush=True)
             time.sleep(3)
-
-
-def gdbus(dest, path, method, *args):
-    return run("gdbus", "call", "--session", "--dest", dest, "--object-path", path, "--method", method, *args)
-
-
-def gnome_idle_ms():
-    m = re.search(r"uint64 (\d+)", gdbus("org.gnome.Mutter.IdleMonitor", "/org/gnome/Mutter/IdleMonitor/Core",
-                                         "org.gnome.Mutter.IdleMonitor.GetIdletime"))
-    return int(m.group(1)) if m else None
-
-
-def gnome_locked():
-    return gdbus("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver", "org.gnome.ScreenSaver.GetActive") == "(true,)"
-
-
-# ---------------------------------------------------------------- media (MPRIS over D-Bus)
-
-def mpris_players():
-    names = gdbus("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.ListNames")
-    return re.findall(r"'(org\.mpris\.MediaPlayer2\.[^']+)'", names)
-
-
-def mpris_prop(name, prop):
-    return gdbus(name, "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties.Get",
-                 "org.mpris.MediaPlayer2.Player", prop)
-
-
-def gvariant_str(text, key):
-    m = re.search(r"'%s': <\[?(['\"])(.*?)(?<!\\)\1" % re.escape(key), text)
-    return m.group(2).replace("\\'", "'") if m else ""
-
-
-def media_status():
-    paused = None
-    for name in mpris_players():
-        status = re.search(r"'(Playing|Paused|Stopped)'", mpris_prop(name, "PlaybackStatus"))
-        status = status.group(1) if status else "Stopped"
-        if status == "Stopped":
-            continue
-        meta = mpris_prop(name, "Metadata")
-        item = {"name": name, "player": name.split(".")[3].capitalize(), "status": status,
-                "title": gvariant_str(meta, "xesam:title"), "artist": gvariant_str(meta, "xesam:artist")}
-        if status == "Playing":
-            return item
-        paused = paused or item
-    return paused
-
-
-def media_control(action):
-    method = {"playpause": "PlayPause", "next": "Next", "previous": "Previous"}[action]
-    current = media_status()
-    names = [current["name"]] if current else mpris_players()[:1]
-    for name in names:
-        gdbus(name, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player." + method)
-
-
-def volume_control(action):
-    if action == "mute":
-        run("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle")
-    else:
-        run("wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "5%+" if action == "up" else "5%-")
 
 
 # ---------------------------------------------------------------- the link to the phone (Wi-Fi only)
@@ -762,21 +533,7 @@ class PhoneLink:
     @staticmethod
     def interface():
         """(iface, address, its network) of the first global IPv4 address that isn't docker's or a VM bridge."""
-        for line in run("ip", "-4", "-o", "addr", "show", "scope", "global").splitlines():
-            m = re.search(r"inet ([\d.]+)/(\d+)", line)
-            if m and "docker" not in line and "virbr" not in line:
-                return line.split()[1], m.group(1), ipaddress.ip_network(f"{m.group(1)}/{m.group(2)}", strict=False)
-        return None, None, None
-
-    @staticmethod
-    def wifi_ssid(iface):
-        """(SSID, security e.g. "WPA2", "" = open) of the network iface is on (cached scan results only:
-        --rescan no), or (None, None)."""
-        for line in run("nmcli", "-t", "-f", "active,ssid,device,security", "dev", "wifi", "list", "--rescan", "no").splitlines():
-            fields = [f.replace("\\:", ":").replace("\\\\", "\\") for f in re.split(r"(?<!\\):", line)]
-            if len(fields) == 4 and fields[0] == "yes" and fields[2] == iface:
-                return fields[1] or None, fields[3].strip("- ")
-        return None, None
+        return platforms.interface()
 
     def network(self):
         """{iface, ip, ssid, subnet}; ssid is "wired" on a non-wireless interface. Cached 5 s."""
@@ -786,7 +543,7 @@ class PhoneLink:
         iface, ip, subnet = self.interface()
         ssid = security = None
         if iface:
-            ssid, security = self.wifi_ssid(iface) if os.path.isdir(f"/sys/class/net/{iface}/wireless") else ("wired", None)
+            ssid, security = platforms.wifi_ssid(iface) if platforms.is_wireless(iface) else ("wired", None)
         net = {"iface": iface, "ip": ip, "ssid": ssid, "security": security, "subnet": str(subnet) if subnet else None}
         self._net = (time.time(), net)
         return net
@@ -1004,7 +761,7 @@ class PhoneLink:
                "-o", "ForwardAgent=no", "-o", "ForwardX11=no", "-o", "PermitLocalCommand=no",
                "-R", f"{PORT}:127.0.0.1:{PORT}", ip]
         self.started = started = time.time()
-        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        proc = platforms.proc.popen(cmd, stdin=DEVNULL, stdout=DEVNULL, stderr=PIPE)
         stopped = False
         try:
             while proc.poll() is None:
@@ -1013,7 +770,7 @@ class PhoneLink:
                     proc.terminate()
                     try:
                         proc.wait(5)
-                    except subprocess.TimeoutExpired:
+                    except TimeoutExpired:
                         proc.kill()
                         proc.wait()
                     break
@@ -1294,7 +1051,7 @@ exit
                "wrong_codes": s["wrong"], "code_length": self.CODE_LEN}
         if s["error"]:
             out["error"] = s["error"]
-        if run("systemctl", "is-active", "ufw") == "active":
+        if platforms.firewall_on():
             out["firewall"] = (f"ufw is on, so the phone can't reach port {PAIR_PORT}: for this pairing only, "
                                f"sudo ufw allow from {s['net']} to any port {PAIR_PORT} proto tcp   "
                                f"(after: sudo ufw delete allow from {s['net']} to any port {PAIR_PORT} proto tcp)")
@@ -1326,9 +1083,9 @@ exit
         phone_link.replace_pin(ip, [keys[0][:2]])
         print(f"pairing: pinned the phone at {ip}", flush=True)
         try:
-            r = subprocess.run([os.path.join(HERE, "..", "deploy.sh")], capture_output=True, text=True, timeout=180)
+            r = platforms.proc.complete([os.path.join(HERE, "..", "deploy.sh")], timeout=180)
             deploy = {"ok": r.returncode == 0, "lines": (r.stdout + r.stderr).splitlines()[-20:]}
-        except (OSError, subprocess.TimeoutExpired) as e:
+        except (OSError, TimeoutExpired) as e:
             deploy = {"ok": False, "lines": [type(e).__name__]}
         return {"ok": True, "ip": ip, "fingerprint": "SHA256:" + keys[0][2], "deploy": deploy}, 200
 
@@ -1383,8 +1140,10 @@ class Visualizer:
             with self.lock:
                 while self.clients == 0:
                     self.lock.wait()
-            proc = subprocess.Popen(["parec", "--device=@DEFAULT_MONITOR@", "--format=s16le", f"--rate={self.RATE}",
-                                     "--channels=1", "--latency-msec=40"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            proc = platforms.audio_monitor(self.RATE)
+            if proc is None:  # this OS can't capture what it plays
+                time.sleep(5)
+                continue
             buf = [0.0] * self.N
             try:
                 while self.clients > 0:
@@ -1427,33 +1186,6 @@ class Visualizer:
 
 
 # ---------------------------------------------------------------- gaze (Chip's eyes follow the mouse)
-
-GAZE_BUS = ("org.deskbuddy.Gaze", "/org/deskbuddy/Gaze", "org.deskbuddy.Gaze")  # the chip-gaze Shell extension
-
-
-def gaze_call(method):
-    """The values the extension answers with, or None while it isn't loaded (it needs a new login after install)."""
-    try:
-        return json.loads(run("busctl", "--user", "--json=short", "call", *GAZE_BUS, method))["data"]
-    except (ValueError, KeyError, TypeError):
-        return None
-
-
-def gaze_pointer():
-    data = gaze_call("Pointer")
-    if isinstance(data, list) and len(data) == 2 and all(type(v) is int for v in data):
-        return tuple(data)
-    return None
-
-
-def gaze_monitors():
-    data = gaze_call("Monitors")
-    try:
-        monitors = json.loads(data[0])
-        return [{k: m[k] for k in ("x", "y", "w", "h", "primary")} for m in monitors]
-    except (ValueError, KeyError, IndexError, TypeError):
-        return []
-
 
 class Gaze:
     """Works out where Chip should look: the direction from the phone to the mouse pointer, -1..1 on both axes.
@@ -1504,7 +1236,7 @@ class Gaze:
 
     def layout(self):
         """For the dashboard: what the extension sees, fresh each time."""
-        cursor, monitors = gaze_pointer(), gaze_monitors()
+        cursor, monitors = platforms.gaze_pointer(), platforms.gaze_monitors()
         if monitors:
             self.monitors = monitors
         spot = self.phone_spot(monitors)
@@ -1515,7 +1247,7 @@ class Gaze:
 
     def set_phone(self, x, y):
         """Remember the phone's spot for the current monitor setup, kept within one monitor height of the screens."""
-        monitors = gaze_monitors()
+        monitors = platforms.gaze_monitors()
         if not monitors:
             return None
         self.monitors = monitors
@@ -1563,29 +1295,19 @@ class Gaze:
 
     def screen_locked(self):
         if time.monotonic() - self.locked_at >= 5:
-            self.locked, self.locked_at = gnome_locked(), time.monotonic()
+            self.locked, self.locked_at = platforms.locked(), time.monotonic()
         return self.locked
 
-    def read_moves(self, proc):
-        for line in proc.stdout:
-            try:
-                x, y = json.loads(line)["payload"]["data"]
-            except (ValueError, KeyError, TypeError):
-                continue
-            if type(x) is int and type(y) is int:
-                self.cursor, self.moved_at = (x, y), time.monotonic()
+    def moved(self, x, y):
+        self.cursor, self.moved_at = (x, y), time.monotonic()
 
     def start_watching(self):
-        cmd = ["busctl", "--user", "monitor", "--json=short", "--match",
-               f"type='signal',interface='{GAZE_BUS[2]}',member='Moved'"]
-        self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        self.proc = platforms.GazeWatch(self.moved)
         self.proc_at = time.monotonic()
-        threading.Thread(target=self.read_moves, args=(self.proc,), daemon=True).start()
 
     def stop_watching(self):
         if self.proc:
-            self.proc.kill()
-            self.proc.wait()
+            self.proc.stop()
             self.proc = None
 
     def deactivate(self):
@@ -1597,16 +1319,16 @@ class Gaze:
         now = time.monotonic()
         if not self.active:
             self.active, self.cursor, self.moved_at, self.sync_at = True, None, now, 0
-        if (self.proc is None or self.proc.poll() is not None) and now - self.proc_at >= 5:
+        if (self.proc is None or not self.proc.alive()) and now - self.proc_at >= 5:
             self.start_watching()
         if now - self.sync_at >= 10:  # the extension's timer stops 15 s after the last Start()
             self.sync_at = now
-            gaze_call("Start")
-            monitors = gaze_monitors()
+            platforms.gaze_call("Start")
+            monitors = platforms.gaze_monitors()
             if monitors:
                 self.monitors = monitors
             if self.cursor is None:
-                self.cursor = gaze_pointer()
+                self.cursor = platforms.gaze_pointer()
         self.publish(self.look())
 
     def run(self):
@@ -1656,9 +1378,9 @@ class Skins:
 
     @staticmethod
     def run(*args, stdin=b""):
-        done = subprocess.run(["node", SKIN_JS, *args], input=stdin, capture_output=True, timeout=10)
+        done = platforms.proc.complete(["node", SKIN_JS, *args], timeout=10, input=stdin, text=False)
         if done.returncode:
-            raise subprocess.SubprocessError(done.stderr.decode("utf-8", "replace")[:300])
+            raise SubprocessError(done.stderr.decode("utf-8", "replace")[:300])
         return done.stdout
 
     def prompt(self):
@@ -1985,7 +1707,9 @@ class Handler(BaseHTTPRequestHandler):
                                     "ip": q.get("pip", "") if re.fullmatch(r"[\d.]{7,15}", q.get("pip", "")) else None}
                                    if q.get("ssid") else None))  # the phone's own Wi-Fi: names and numbers only
             return self.send_json(dict(stats.snapshot(), **typing.snapshot(), settingsRev=settings.rev, skinsRev=skins.rev,
-                                       attention=attention.pending()))
+                                       attention=attention.pending(), caps=platforms.caps()))
+        if url.path == "/caps":  # what this laptop can do (platforms CAPS); the dashboard hides the rest
+            return self.send_json(dict(platforms.caps(), os=platforms.NAME))
         if url.path == "/viz":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -2033,7 +1757,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/skins/prompt":  # the master prompt for the chatbot, built from the pack
             try:
                 return self.send_text(skins.prompt())
-            except (OSError, subprocess.SubprocessError) as e:
+            except (OSError, SubprocessError) as e:
                 return self.skin_failed(e)
         if url.path == "/skins":
             return self.send_json(skins.listing())
@@ -2049,7 +1773,7 @@ class Handler(BaseHTTPRequestHandler):
                     text = skins.phones_prompt(m.group(1))
                     return self.send_text(text) if text is not None else self.send_json({"error": "not found"}, 404)
                 text = skins.with_phones_draft(m.group(1))   # the preview: the skin with the checked pair on
-            except (OSError, ValueError, subprocess.SubprocessError) as e:
+            except (OSError, ValueError, SubprocessError) as e:
                 return self.skin_failed(e)
             return self.send_raw_json(text) if text else self.send_json({"error": "no headphones draft"}, 404)
         m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/headphones\.json", url.path)
@@ -2079,7 +1803,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 return self.send_json(skins.check(body))
-            except (OSError, ValueError, subprocess.SubprocessError) as e:
+            except (OSError, ValueError, SubprocessError) as e:
                 return self.skin_failed(e)
         if path == "/skins/install":  # installs the draft; an optional {"name"} sets the name Chip goes by
             body = self.read_json()
@@ -2088,7 +1812,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"error": "expected {\"name\": 1-40 characters} or nothing"}, 400)
             try:
                 listing, failed = skins.install(name)
-            except (OSError, ValueError, KeyError, subprocess.SubprocessError) as e:
+            except (OSError, ValueError, KeyError, SubprocessError) as e:
                 return self.skin_failed(e)
             return self.send_json(listing) if failed is None else self.send_json(failed[1], failed[0])
         m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/headphones/(check|install)", path)
@@ -2104,7 +1828,7 @@ class Handler(BaseHTTPRequestHandler):
                     report = skins.check_phones(skin_id, body, parse_qs(urlsplit(self.path).query).get("replace") == ["1"])
                     return self.send_json(report) if report is not None else self.send_json({"error": "not found"}, 404)
                 listing, failed = skins.install_phones(skin_id)
-            except (OSError, ValueError, KeyError, subprocess.SubprocessError) as e:
+            except (OSError, ValueError, KeyError, SubprocessError) as e:
                 return self.skin_failed(e)
             return self.send_json(listing) if failed is None else self.send_json(failed[1], failed[0])
         m = re.fullmatch(r"/skins/([a-z0-9-]{1,32})/rename", path)
@@ -2172,7 +1896,7 @@ class Handler(BaseHTTPRequestHandler):
             engine, lang = q.get("engine") or "laptop", q.get("lang") or cfg["dictLang"]
             if engine not in ("laptop", "cloud"):
                 return self.send_json({"ok": False, "error": "bad_engine", "message": "engine must be laptop or cloud"}, 400)
-            if gnome_locked():
+            if platforms.locked() is not False:
                 return self.send_json(stt.SttError("locked").json(), 423)  # nothing would be typed anyway
             try:
                 return self.send_json(stt.transcribe(audio, engine, lang, cfg, fast=q.get("fast") == "1"))
@@ -2210,11 +1934,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.split("?")[0] == "/type":  # dictated text from the phone
             length = min(int(self.headers.get("Content-Length") or 0), 8192)
             text = self.rfile.read(length).decode("utf-8", "replace")[:2000]
-            if gnome_locked():
+            if platforms.locked() is not False:
                 return self.send_json({"ok": False, "error": "locked", "message": "The laptop is locked"}, 423)  # never type into the lock screen
             try:
-                typed = typer.type_text(text)
-            except typer.TypingError as e:
+                typed = platforms.type_text(text)
+            except platforms.TypingError as e:
                 return self.send_json({"ok": False, "error": e.code, "message": str(e)}, 409)
             except Exception as e:
                 print("type:", type(e).__name__, flush=True)
@@ -2224,10 +1948,10 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 2:
             kind, action = parts
             if kind == "media" and action in ("playpause", "next", "previous"):
-                media_control(action)
+                platforms.media_control(action)
                 return self.send_json({"ok": True})
             if kind == "volume" and action in ("up", "down", "mute"):
-                volume_control(action)
+                platforms.volume_control(action)
                 return self.send_json({"ok": True})
         self.send_json({"error": "not found"}, 404)
 
@@ -2252,8 +1976,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(pairing.cancel())
         if path == "/link/doctor":
             try:
-                r = subprocess.run([sys.executable, "-I", DOCTOR], capture_output=True, text=True, timeout=60)
-            except subprocess.TimeoutExpired:
+                r = platforms.proc.complete([sys.executable, "-I", DOCTOR], timeout=60)
+            except TimeoutExpired:
                 return self.send_json({"ok": False, "lines": ["doctor.py took more than 60 s"]}, 504)
             return self.send_json({"ok": r.returncode == 0, "lines": r.stdout.splitlines()})
         if path == "/link/forget":

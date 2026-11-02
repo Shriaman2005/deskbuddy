@@ -32,7 +32,9 @@ def check(skin):
 
 EXAMPLE = json.loads(node("example"))
 PACK = json.load(open(os.path.join(HERE, "..", "phone", "www", "pack.json")))
-DEADPOOL = os.path.expanduser("~/.config/deskbuddy/skins/deadpool-mask.json")
+sys.path.insert(0, HERE)  # python -I skips the script's folder
+from platforms import paths  # noqa: E402
+DEADPOOL = paths.config("skins", "deadpool-mask.json")
 FIT_WARNINGS = ("cover the inside of the eyes", "don't sit on the ears", "look flat")   # the headphones-fit warnings
 
 
