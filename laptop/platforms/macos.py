@@ -88,29 +88,29 @@ def _load():
         cg = ctypes.CDLL(FRAMEWORKS + "CoreGraphics.framework/CoreGraphics")
         cf = ctypes.CDLL(FRAMEWORKS + "CoreFoundation.framework/CoreFoundation")
         ax = ctypes.CDLL(FRAMEWORKS + "ApplicationServices.framework/ApplicationServices")
-        sig = {
-            cg.CGEventSourceSecondsSinceLastEventType: ([ctypes.c_int32, c_uint32], c_double),
-            cg.CGSessionCopyCurrentDictionary: ([], c_void_p),
-            cg.CGEventCreateKeyboardEvent: ([c_void_p, c_uint16, c_bool], c_void_p),
-            cg.CGEventKeyboardSetUnicodeString: ([c_void_p, c_ulong, POINTER(c_uint16)], None),
-            cg.CGEventKeyboardGetUnicodeString: ([c_void_p, c_ulong, POINTER(c_ulong), POINTER(c_uint16)], None),
-            cg.CGEventSetFlags: ([c_void_p, c_uint64], None),
-            cg.CGEventGetFlags: ([c_void_p], c_uint64),
-            cg.CGEventPost: ([c_uint32, c_void_p], None),
-            cf.CFStringCreateWithCString: ([c_void_p, c_char_p, c_uint32], c_void_p),
-            cf.CFDictionaryGetValue: ([c_void_p, c_void_p], c_void_p),
-            cf.CFDictionaryCreate: ([c_void_p, POINTER(c_void_p), POINTER(c_void_p), c_long, c_void_p, c_void_p], c_void_p),
-            cf.CFGetTypeID: ([c_void_p], c_ulong),
-            cf.CFBooleanGetTypeID: ([], c_ulong),
-            cf.CFBooleanGetValue: ([c_void_p], c_bool),
-            cf.CFRelease: ([c_void_p], None),
-            ax.AXIsProcessTrusted: ([], c_bool),
-            ax.AXIsProcessTrustedWithOptions: ([c_void_p], c_bool),
-        }
-        for fn, (args, res) in sig.items():
+        sig = [  # (function, argtypes, restype); ctypes functions can't be dict keys
+            (cg.CGEventSourceSecondsSinceLastEventType, [ctypes.c_int32, c_uint32], c_double),
+            (cg.CGSessionCopyCurrentDictionary, [], c_void_p),
+            (cg.CGEventCreateKeyboardEvent, [c_void_p, c_uint16, c_bool], c_void_p),
+            (cg.CGEventKeyboardSetUnicodeString, [c_void_p, c_ulong, POINTER(c_uint16)], None),
+            (cg.CGEventKeyboardGetUnicodeString, [c_void_p, c_ulong, POINTER(c_ulong), POINTER(c_uint16)], None),
+            (cg.CGEventSetFlags, [c_void_p, c_uint64], None),
+            (cg.CGEventGetFlags, [c_void_p], c_uint64),
+            (cg.CGEventPost, [c_uint32, c_void_p], None),
+            (cf.CFStringCreateWithCString, [c_void_p, c_char_p, c_uint32], c_void_p),
+            (cf.CFDictionaryGetValue, [c_void_p, c_void_p], c_void_p),
+            (cf.CFDictionaryCreate, [c_void_p, POINTER(c_void_p), POINTER(c_void_p), c_long, c_void_p, c_void_p], c_void_p),
+            (cf.CFGetTypeID, [c_void_p], c_ulong),
+            (cf.CFBooleanGetTypeID, [], c_ulong),
+            (cf.CFBooleanGetValue, [c_void_p], c_bool),
+            (cf.CFRelease, [c_void_p], None),
+            (ax.AXIsProcessTrusted, [], c_bool),
+            (ax.AXIsProcessTrustedWithOptions, [c_void_p], c_bool),
+        ]
+        for fn, args, res in sig:
             fn.argtypes, fn.restype = args, res
         return cg, cf, ax
-    except (OSError, AttributeError):
+    except Exception:  # noqa: BLE001  (a framework or symbol missing: no idle, lock or typing, but the bridge runs)
         return None
 
 

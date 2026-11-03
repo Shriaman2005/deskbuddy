@@ -96,7 +96,7 @@ jobs:
         run: Get-Content "$HOME\.local\share\deskbuddy\bridge.log" -Tail 80 -ErrorAction SilentlyContinue
       # S6: the macOS backend without permissions (ctypes read-back), the installer + LaunchAgent, then the uninstall
       - name: macOS - ctypes checks (key events read back, idle, lock, caps)
-        if: runner.os == 'macOS'
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
         run: python -I -X utf8 laptop/tests/test_macos.py
       - name: macOS - install.py --ci
         if: ${{ !cancelled() && runner.os == 'macOS' }}
