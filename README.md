@@ -18,6 +18,13 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
   <img src="docs/img/accent-rose.png" width="24%" alt="Chip in rose">
 </p>
 
+<p align="center"><b>Three eye styles:</b> Classic (above), Toon and Button.</p>
+
+<p align="center">
+  <img src="docs/img/eyes-toon.png" width="49%" alt="Toon eyes in violet">
+  <img src="docs/img/eyes-button.png" width="49%" alt="Button eyes in rose">
+</p>
+
 ## Gallery
 
 | Typing along / focus mode | Music visualizer |
@@ -31,13 +38,6 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
 | Pomodoro timer | Headphones while music plays |
 |---|---|
 | <img src="docs/img/timer.png" alt="Pomodoro timer screen"> | <img src="docs/img/headphones.png" alt="Chip wearing headphones while music plays"> |
-
-**Eye styles and accent colours** (Classic above, Toon, Button):
-
-<p align="center">
-  <img src="docs/img/eyes-toon.png" width="49%" alt="Toon eyes in violet">
-  <img src="docs/img/eyes-button.png" width="49%" alt="Button eyes in rose">
-</p>
 
 **Custom skins**, made with an AI chatbot in a few minutes (fan-made examples, not included in the repo):
 
