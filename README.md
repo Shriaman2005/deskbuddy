@@ -8,8 +8,14 @@ Free and open source. Runs over your home Wi-Fi. No cable, no cloud account, no 
 Works with almost any Android phone, even a very slow one: it was built on a budget Samsung Galaxy M01 Core.
 
 <p align="center">
-  <img src="docs/img/face-happy.png" width="49%" alt="Chip smiling, with the status bar">
-  <img src="docs/img/headphones.png" width="49%" alt="Chip wearing headphones while music plays">
+  <img src="docs/img/face.png" width="80%" alt="Chip's default face">
+</p>
+<p align="center"><b>Pick any accent colour</b> and Chip's whole look follows it:</p>
+<p align="center">
+  <img src="docs/img/accent-cyan.png" width="24%" alt="Chip in cyan">
+  <img src="docs/img/accent-terracotta.png" width="24%" alt="Chip in terracotta">
+  <img src="docs/img/accent-violet.png" width="24%" alt="Chip in violet">
+  <img src="docs/img/accent-rose.png" width="24%" alt="Chip in rose">
 </p>
 
 ## Why you'll love it
@@ -46,9 +52,9 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
 |---|---|
 | <img src="docs/img/clock.png" alt="Clock and weather screen"> | <img src="docs/img/laptop.png" alt="Laptop stats and music screen"> |
 
-| Pomodoro timer | Chip's own face |
+| Pomodoro timer | Headphones while music plays |
 |---|---|
-| <img src="docs/img/timer.png" alt="Pomodoro timer screen"> | <img src="docs/img/face.png" alt="Chip's face"> |
+| <img src="docs/img/timer.png" alt="Pomodoro timer screen"> | <img src="docs/img/headphones.png" alt="Chip wearing headphones while music plays"> |
 
 **Eye styles and accent colours** (Classic above, Toon, Button):
 
