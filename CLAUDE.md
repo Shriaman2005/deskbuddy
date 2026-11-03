@@ -35,6 +35,8 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
 - macOS: the same install.py (Python 3.12+, certificates, venv, key, LaunchAgent org.deskbuddy.bridge via `launchctl bootstrap gui/<uid>`,
   log ~/Library/Logs/deskbuddy-bridge.log, prints which Python to allow in Accessibility). CI on macos-latest: selftest with the same
   CHIP_EXPECT_CAPS, `tests/test_macos.py` (key events read back, nothing posted), install --ci twice, --uninstall.
+- `laptop/hooks.py` — the dashboard's AI agents card (Claude Code, Gemini CLI settings.json hooks; opencode plugin): install/remove/test,
+  `.chip-bak` once, recognises any `…attention.py claude-code|gemini` line; `/hooks*` dashboard-only; `tests/test_hooks.py` (temp HOME).
 - Connections card in `laptop/dashboard.html` (Reconnect, Find phone, Replace phone = pairing wizard, Forget, Doctor).
   README "Connections and reboots" describes it.
 - `laptop/doctor.py` — checks the laptop, the Wi-Fi link (incl. paused, home network, key mismatch from `/link` reason) and Termux.

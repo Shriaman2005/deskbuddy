@@ -483,6 +483,8 @@ footer code { color: var(--soft); }
       range("remindMinutes", "For up to", 1, 30, 1, "min", "torch torchRepeat"),
       sw("torchNight", "Also while Chip sleeps", "", "torch"),
     ] },
+    { icon: "🤖", title: "AI agents", agents: true,
+      note: "Adds Chip's hook to each agent's own settings so Chip knows when it needs you. Only Chip's lines are added or removed; the file is backed up once to settings.json.chip-bak." },
     { icon: "📱", title: "Apps", appList: true,
       note: "Pick how each app gets your attention. Default follows the Attention alerts card; choosing torch or sound " +
         "for an app turns it on even when \"All other apps\" is off. Apps appear here once they've sent a notification." },
@@ -637,6 +639,7 @@ footer code { color: var(--soft); }
       body += `<div class="attn" data-needs="torch"><button class="chip" id="torch-test">🔔 Test the alert</button>` +
         `<ul id="attn-log"><li class="none">No alerts yet</li></ul></div>`;
     }
+    if (c.agents) body += `<div class="applist" id="agents"><div class="none">Loading…</div></div>`;
     if (c.stt) body += STT_HTML;
     if (c.conn) body += CONN_END;
     if (c.appList) body += `<div class="applist" id="applist"></div>`;
@@ -694,7 +697,7 @@ footer code { color: var(--soft); }
     renderCaps();
     const gazeEl = $("#gaze");
     if (gazeEl) { gazeEl.hidden = !S.gazeFollow || !capOk("gazeFollow"); pollGaze(); }   // no monitor setup, and no pointer polling, while the toggle is off
-    renderApps();
+    renderApps(); if (typeof loadAgents === "function" && $("#agents")) loadAgents();
     renderPlace();
     document.documentElement.style.setProperty("--eye", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);  // the page follows Chip's accent
     renderSleep();
@@ -953,6 +956,29 @@ footer code { color: var(--soft); }
         RULES.map(([v, l]) => `<option value="${v}"${rule === v ? " selected" : ""}>${l}</option>`).join("") + `</select></div>`;
     }).join("");
   }
+  // ---------------------------------------------------------------- AI agents card (GET /hooks, POST /hooks/install|remove|test)
+  async function loadAgents() {
+    const box = $("#agents");
+    if (!box) return;
+    const r = await fetch("/hooks", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!r) { box.textContent = "Couldn't read the agents' settings. Is the bridge running?"; return; }
+    box.innerHTML = r.agents.map((a) => {
+      const state = a.installed ? (a.current ? "Installed" : "Installed (will refresh)") : "Not installed";
+      return `<div class="app"><span class="nm"><b>${esc(a.label)}</b><small>${state} · ${esc(a.file)}${a.note ? " · " + esc(a.note) : ""}</small></span>` +
+        (a.installed ? `<button class="chip" data-hook="test" data-agent="${a.id}">Test</button>` : "") +
+        `<button class="chip${a.installed && a.current ? " danger" : ""}" data-hook="${a.installed && a.current ? "remove" : "install"}" data-agent="${a.id}">${a.installed ? (a.current ? "Remove" : "Refresh") : "Install"}</button></div>`;
+    }).join("");
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-hook]");
+    if (!b) return;
+    b.disabled = true;
+    const r = await fetch("/hooks/" + b.dataset.hook, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: b.dataset.agent }) }).then((x) => x.json()).catch(() => null);
+    toast(!r ? "Couldn't reach the bridge" : r.ok ? (b.dataset.hook === "test" ? "Sent. Chip should alert within a few seconds 🔔" : "Done ✓") : r.message, !r || !r.ok);
+    loadAgents();
+  });
+
   async function loadAttention() {
     const r = await fetch("/attention", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
     if (!r) return;
@@ -1714,7 +1740,7 @@ footer code { color: var(--soft); }
   $("#conn-rep").addEventListener("toggle", () => { if ($("#conn-rep").open) loadPair(); });
   setInterval(updateCount, 1000);
 
-  loadSettings(); loadCaps(); loadPhone(); loadAttention();
+  loadSettings(); loadCaps(); loadPhone(); loadAttention(); loadAgents();
   setInterval(loadAttention, 4000);
   setInterval(loadSettings, 4000);
   setInterval(loadPhone, 2000);

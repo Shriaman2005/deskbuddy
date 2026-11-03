@@ -27,6 +27,7 @@ jobs:
       - run: python -I laptop/test_skins.py
       - run: python -I laptop/selftest.py
       - run: python -I laptop/tests/test_link.py
+      - run: python3 -I laptop/tests/test_hooks.py
   desktop:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -45,6 +46,7 @@ jobs:
         env:
           CHIP_EXPECT_CAPS: stats,idle,locked,typing
       - run: python -I -X utf8 laptop/tests/test_link.py
+      - run: python -I -X utf8 laptop/tests/test_hooks.py
       # S5: the Windows installer, the bridge it starts, typing into a real window, then the uninstall
       - name: Windows - install.py --ci
         if: runner.os == 'Windows'

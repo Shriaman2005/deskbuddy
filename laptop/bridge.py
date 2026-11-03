@@ -36,6 +36,7 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # python -I skips the script's folder
+import hooks  # noqa: E402
 import link  # noqa: E402
 import platforms  # noqa: E402
 import stt  # noqa: E402
@@ -1114,6 +1115,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"events": attention.recent(), "apps": apps.listing()})
         if url.path == "/phone":
             return self.send_json(dict(phone, age=round(time.time() - phone["seen"], 1)) if phone else {})
+        if url.path == "/hooks":  # the AI agents card: which agents have Chip's hook (dashboard only)
+            return self.dashboard_only(reading=True) and self.send_json(hooks.listing())
         if url.path == "/link/pair":  # carries the pairing token: never to the phone's page
             return self.dashboard_only(reading=True) and self.send_json(pairing.status())
         if url.path == "/link":  # for the dashboard and doctor.py
@@ -1230,6 +1233,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path.split("?")[0].startswith("/skins/"):
             return self.post_skins(self.path.split("?")[0])
+        if self.path.split("?")[0] in ("/hooks/install", "/hooks/remove", "/hooks/test"):
+            if not self.dashboard_only():  # edits the agents' config files: never the phone's page or a script
+                return
+            body = self.read_json()
+            if body is None:
+                return self.send_json({"error": "expected a JSON object"}, 400)
+            code, out = hooks.handle(self.path.split("?")[0].rsplit("/", 1)[1], body.get("agent"))
+            return self.send_json(out, code)
         if self.path.split("?")[0].startswith("/link/"):
             if not self.dashboard_only():
                 return

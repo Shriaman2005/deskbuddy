@@ -190,6 +190,15 @@ def main():
         check("link writes refused from the phone's page", status == 403, status)
         status, _ = get(port, "/link/forget", method="POST")
         check("link writes refused without an Origin", status == 403, status)
+        for path in ("/hooks/install", "/hooks/remove"):
+            for hdr in ({}, {"Origin": "http://127.0.0.1:8080"}):
+                status, _ = get(port, path, method="POST", headers=hdr)
+                check(f"{path} refused unless it comes from the dashboard ({hdr or 'no Origin'})", status == 403, status)
+        status, agents = get(port, "/hooks")
+        check("/hooks lists claude-code, gemini and opencode", status == 200 and isinstance(agents, dict)
+              and [a.get("id") for a in agents.get("agents", [])] == ["claude-code", "gemini", "opencode"], agents)
+        status, _ = get(port, "/hooks", headers={"Origin": "http://127.0.0.1:8080"})
+        check("/hooks refused for the phone's page", status == 403, status)
         check("no known_hosts written by the test", not os.path.exists(os.path.join(cfg, "known_hosts")))
     except BaseException:
         finish(bridge, tmp, caps)
