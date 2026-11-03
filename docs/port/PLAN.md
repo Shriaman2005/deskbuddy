@@ -15,7 +15,12 @@ Tick a line when its task is committed: `- [x] S1 Platform layer — 2026-11-05 
   127.0.0.2); Windows/macOS Wi-Fi parsing is untested on real machines (S4 CI, friends); localized netsh "Open" is a word list
 - [ ] S3 Phone side for any Android phone
 - [ ] S4 CI on Linux, Windows, macOS
-- [ ] S5 Windows backend + install.py
+- [x] S5 Windows backend + install.py — 2026-11-03 a25c8f8: windows-latest CI green end to end (selftest with
+  CHIP_EXPECT_CAPS=stats,idle,locked,typing, install.py --ci twice, bridge /stats, Run entry, typing into Notepad and a Tk
+  box, --uninstall, port taken exclusively); the runner has a real desktop, so typing is proven there. Follow-ups:
+  macOS job still fails in selftest (S4/S6: the bridge never answers there); only a person can test: the lock screen,
+  an admin window (UIPI), the Microsoft Store Python refusal, double-click install, a real reboot/login, Wi-Fi name,
+  battery, whisper-cli.exe; the dictation/UIPI note belongs in S8's docs; install.py's macOS part is S6
 - [ ] S6 macOS backend + install.py
 - [ ] S7 AI-agent hooks card
 - [ ] R1 Review → merge port → main
