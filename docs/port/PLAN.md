@@ -21,7 +21,14 @@ Tick a line when its task is committed: `- [x] S1 Platform layer — 2026-11-05 
   macOS job still fails in selftest (S4/S6: the bridge never answers there); only a person can test: the lock screen,
   an admin window (UIPI), the Microsoft Store Python refusal, double-click install, a real reboot/login, Wi-Fi name,
   battery, whisper-cli.exe; the dictation/UIPI note belongs in S8's docs; install.py's macOS part is S6
-- [ ] S6 macOS backend + install.py
+- [ ] S6 macOS backend + install.py — 2026-11-03 d4f891f: paused by the user (Windows is enough for now). Code in:
+  macos.py (ctypes idle/lock/Unicode CGEvents behind Accessibility), psstats.py (shared with Windows), install.py macOS
+  part (LaunchAgent), tests/test_macos.py, CI steps; fixed the bridge never listening on macOS (getfqdn hang ->
+  link.QuickServer). Not proven: the last macOS CI run failed on an unhashable ctypes table (fixed in d4f891f, not
+  re-checked). To resume: get the macos-latest job green. Friend test only: Accessibility for Python.app under the
+  LaunchAgent, real typing (apps reading the key code instead of the string), lock/fast user switching, the
+  certificates step on a fresh python.org install, launchctl bootstrap at a real login, Wi-Fi name (redacted on 14+),
+  battery, whisper-cli from Homebrew. S8 docs: say Accessibility goes to Python itself
 - [ ] S7 AI-agent hooks card
 - [ ] R1 Review → merge port → main
 - [ ] S8 Docs and friend test kit → tag v0.1.0-beta.1, friends test

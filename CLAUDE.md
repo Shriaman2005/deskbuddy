@@ -24,7 +24,7 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
   Settings schema = DEFAULTS/RANGES/CHOICES/APP_RULES; stored in ~/.config/deskbuddy/settings.json
   Link settings: linkPaused, linkAutoFind, linkHomeOnly, linkNetworks, linkKeepAlive, linkRetry, sshPort (LINK_KEYS).
 - `laptop/platforms/` — every OS-specific call: paths.py (CONFIG_DIR/DATA_DIR; CHIP_CONFIG_DIR/CHIP_DATA_DIR for tests),
-  proc.py (the one subprocess helper), linux.py (the GNOME code), windows.py (psutil stats, GetLastInputInfo idle, OpenInputDesktop lock, SendInput typing, `prepare_listener` = SO_EXCLUSIVEADDRUSE; ctypes structs sized on any OS) and macos.py (stub) over base.py. `laptop/textclean.py` = the one-line text cleaner typer.py and windows.py share. CAPS go out in
+  proc.py (the one subprocess helper), linux.py (the GNOME code), windows.py (psutil stats, GetLastInputInfo idle, OpenInputDesktop lock, SendInput typing, `prepare_listener` = SO_EXCLUSIVEADDRUSE; ctypes structs sized on any OS) and macos.py (CoreGraphics via ctypes: idle, CGSession lock, CGEvent Unicode typing behind Accessibility) over base.py; psstats.py = the psutil stats both share. `laptop/textclean.py` = the text cleaner all typing backends share. Servers subclass `link.QuickServer` (no getfqdn: it hangs on macOS). CAPS go out in
   /stats `caps` and GET /caps; phone and dashboard hide missing features ("Linux only for now"); test with
   `CHIP_FAKE_CAPS=gpu=0,media=0`. `laptop/selftest.py` runs a throwaway bridge (CHIP_PORT) and checks routes + CAPS.
   Network: linux.py `ip`/nmcli; base.py psutil interface(); windows.py netsh / macos.py ipconfig for the Wi-Fi name
@@ -32,6 +32,9 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
 - Windows: `laptop/install.py` (venv in DATA_DIR/venv, Chip key, HKCU Run "Chip" → pythonw supervise.py, `--ci`, `--uninstall`) and
   `laptop/supervise.py` (restarts bridge.py within 5 s, log DATA_DIR/bridge.log, `--stop`). CI proves it on windows-latest:
   `CHIP_EXPECT_CAPS=stats,idle,locked,typing` for selftest.py, `tests/test_typing_windows.py` (Notepad + Tk, exit 77 = no desktop).
+- macOS: the same install.py (Python 3.12+, certificates, venv, key, LaunchAgent org.deskbuddy.bridge via `launchctl bootstrap gui/<uid>`,
+  log ~/Library/Logs/deskbuddy-bridge.log, prints which Python to allow in Accessibility). CI on macos-latest: selftest with the same
+  CHIP_EXPECT_CAPS, `tests/test_macos.py` (key events read back, nothing posted), install --ci twice, --uninstall.
 - Connections card in `laptop/dashboard.html` (Reconnect, Find phone, Replace phone = pairing wizard, Forget, Doctor).
   README "Connections and reboots" describes it.
 - `laptop/doctor.py` — checks the laptop, the Wi-Fi link (incl. paused, home network, key mismatch from `/link` reason) and Termux.
