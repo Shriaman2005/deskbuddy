@@ -29,7 +29,7 @@ Tick a line when its task is committed: `- [x] S1 Platform layer — 2026-11-05 
   LaunchAgent, real typing (apps reading the key code instead of the string), lock/fast user switching, the
   certificates step on a fresh python.org install, launchctl bootstrap at a real login, Wi-Fi name (redacted on 14+),
   battery, whisper-cli from Homebrew. S8 docs: say Accessibility goes to Python itself
-- [x] S7 AI-agent hooks card — 2026-11-03 HASH: laptop/hooks.py + dashboard card "AI agents" (GET /hooks, POST /hooks/install|remove|test, dashboard-only), tests/test_hooks.py (temp HOME) + selftest route checks; the user's `python3 -I …/attention.py` lines are recognised as installed. Follow-ups: Windows hook shell is unconfirmed (command uses forward slashes + 8.3 short paths, quoted only if a space is left; verify with a friend); macOS untouched (paused with S6)
+- [x] S7 AI-agent hooks card — 2026-11-03 04c4891: laptop/hooks.py + dashboard card "AI agents" (GET /hooks, POST /hooks/install|remove|test, dashboard-only), tests/test_hooks.py (temp HOME) + selftest route checks; the user's `python3 -I …/attention.py` lines are recognised as installed. Follow-ups: Windows hook shell is unconfirmed (command uses forward slashes + 8.3 short paths, quoted only if a space is left; verify with a friend); macOS untouched (paused with S6)
 - [ ] R1 Review → merge port → main
 - [ ] S8 Docs and friend test kit → tag v0.1.0-beta.1, friends test
 - [ ] F  Friend-test fixes (one line per round)
