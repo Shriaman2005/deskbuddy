@@ -166,6 +166,17 @@ def main():
         status, page = get(port, "/")
         check("dashboard page served", status == 200 and isinstance(page, str) and "<html" in page.lower(), status)
 
+        # nobody else can take the bridge's port (Windows: SO_REUSEADDR would let them; the bridge binds exclusively)
+        for host in ("127.0.0.1",) + (("0.0.0.0",) if os.name == "nt" else ()):
+            with socket.socket() as rival:
+                rival.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                try:
+                    rival.bind((host, port))
+                    taken = True
+                except OSError:
+                    taken = False
+            check(f"another program can't bind {host}:{port} while the bridge has it", not taken)
+
         # what must stay refused
         status, _ = get(port, "/stats", host="evil.example")
         check("refuses a foreign Host", status == 403, status)

@@ -24,11 +24,14 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
   Settings schema = DEFAULTS/RANGES/CHOICES/APP_RULES; stored in ~/.config/deskbuddy/settings.json
   Link settings: linkPaused, linkAutoFind, linkHomeOnly, linkNetworks, linkKeepAlive, linkRetry, sshPort (LINK_KEYS).
 - `laptop/platforms/` — every OS-specific call: paths.py (CONFIG_DIR/DATA_DIR; CHIP_CONFIG_DIR/CHIP_DATA_DIR for tests),
-  proc.py (the one subprocess helper), linux.py (the GNOME code), windows.py/macos.py stubs over base.py. CAPS go out in
+  proc.py (the one subprocess helper), linux.py (the GNOME code), windows.py (psutil stats, GetLastInputInfo idle, OpenInputDesktop lock, SendInput typing, `prepare_listener` = SO_EXCLUSIVEADDRUSE; ctypes structs sized on any OS) and macos.py (stub) over base.py. `laptop/textclean.py` = the one-line text cleaner typer.py and windows.py share. CAPS go out in
   /stats `caps` and GET /caps; phone and dashboard hide missing features ("Linux only for now"); test with
   `CHIP_FAKE_CAPS=gpu=0,media=0`. `laptop/selftest.py` runs a throwaway bridge (CHIP_PORT) and checks routes + CAPS.
   Network: linux.py `ip`/nmcli; base.py psutil interface(); windows.py netsh / macos.py ipconfig for the Wi-Fi name
   (caps.wifiName false = hidden: "Only on home networks" greyed).
+- Windows: `laptop/install.py` (venv in DATA_DIR/venv, Chip key, HKCU Run "Chip" → pythonw supervise.py, `--ci`, `--uninstall`) and
+  `laptop/supervise.py` (restarts bridge.py within 5 s, log DATA_DIR/bridge.log, `--stop`). CI proves it on windows-latest:
+  `CHIP_EXPECT_CAPS=stats,idle,locked,typing` for selftest.py, `tests/test_typing_windows.py` (Notepad + Tk, exit 77 = no desktop).
 - Connections card in `laptop/dashboard.html` (Reconnect, Find phone, Replace phone = pairing wizard, Forget, Doctor).
   README "Connections and reboots" describes it.
 - `laptop/doctor.py` — checks the laptop, the Wi-Fi link (incl. paused, home network, key mismatch from `/link` reason) and Termux.
