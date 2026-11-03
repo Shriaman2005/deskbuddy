@@ -82,9 +82,13 @@ def check_backends():
             check("windows INPUT struct is 40 bytes on 64-bit (28 on 32-bit)", m.input_size_ok(), ctypes.sizeof(m.INPUT))
             check("windows splits characters outside the BMP into two UTF-16 units", m.utf16_units("a\U0001F600") == [97, 0xD83D, 0xDE00])
             check("windows typing never sends Enter, Tab or control keys", m.typable("a\nb\tc\r\n\x08d\x1b") == "a b c d")
-        if mod != "linux" and not (mod == "windows" and sys.platform == "win32"):
-            # wifiName may be true where the OS shows the Wi-Fi name (S2); macOS waits for S6, and Windows' own
-            # caps only exist on Windows (there CHIP_EXPECT_CAPS and the bridge's /caps below are the test)
+        if mod == "macos":
+            check("macos keeps surrogate pairs together in 20-unit events",
+                  [len(c) for c in m.chunks([97] * 19 + [0xD83D, 0xDE00] + [98] * 30)] == [19, 20, 12])
+        own = {"windows": "win32", "macos": "darwin"}.get(mod)
+        if own and sys.platform != own:
+            # wifiName may be true where the OS shows the Wi-Fi name (S2); the other caps only exist on that OS
+            # (there CHIP_EXPECT_CAPS and the bridge's /caps below are the test)
             check(f"platforms.{mod} caps are all false", not any(v for k, v in m.caps().items() if k != "wifiName"))
 
 

@@ -40,22 +40,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r laptop/requirements.txt asyncssh==2.24.1
-      - run: python -I -X utf8 -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/selftest.py phone/server.py phone/alert.py phone/dictation.py
+      - run: python -I -X utf8 -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/selftest.py laptop/install.py laptop/tests/test_macos.py phone/server.py phone/alert.py phone/dictation.py
       - run: python -I -X utf8 laptop/selftest.py
         env:
-          CHIP_EXPECT_CAPS: ${{ runner.os == 'Windows' && 'stats,idle,locked,typing' || '' }}
-      - if: failure() && runner.os == 'macOS'
-        shell: bash
-        run: |
-          mkdir -p /tmp/cd /tmp/cc
-          echo '{"rev":1,"values":{"linkPaused":true}}' > /tmp/cc/settings.json
-          CHIP_PORT=18765 CHIP_PAIR_PORT=18766 CHIP_CONFIG_DIR=/tmp/cc CHIP_DATA_DIR=/tmp/cd PYTHONFAULTHANDLER=1 python -I -X utf8 -X faulthandler laptop/bridge.py > /tmp/bridge.log 2>&1 &
-          sleep 12
-          echo "--- curl"; curl -sv -m 10 http://127.0.0.1:18765/caps || true
-          echo "--- lsof"; lsof -nP -iTCP:18765 || true
-          echo "--- log"; cat /tmp/bridge.log
-          kill -ABRT %1 || true; sleep 1
-          echo "--- after abort"; cat /tmp/bridge.log
+          CHIP_EXPECT_CAPS: stats,idle,locked,typing
       - run: python -I -X utf8 laptop/tests/test_link.py
       # S5: the Windows installer, the bridge it starts, typing into a real window, then the uninstall
       - name: Windows - install.py --ci
@@ -106,3 +94,36 @@ jobs:
         if: failure() && runner.os == 'Windows'
         shell: pwsh
         run: Get-Content "$HOME\.local\share\deskbuddy\bridge.log" -Tail 80 -ErrorAction SilentlyContinue
+      # S6: the macOS backend without permissions (ctypes read-back), the installer + LaunchAgent, then the uninstall
+      - name: macOS - ctypes checks (key events read back, idle, lock, caps)
+        if: runner.os == 'macOS'
+        run: python -I -X utf8 laptop/tests/test_macos.py
+      - name: macOS - install.py --ci
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        run: python -I -X utf8 laptop/install.py --ci
+      - name: macOS - install.py --ci again (boots the old LaunchAgent out, loads it afresh)
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        run: python -I -X utf8 laptop/install.py --ci
+      - name: macOS - the bridge answers, the LaunchAgent is loaded
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        run: |
+          curl -sf -m 10 http://127.0.0.1:8765/stats | python -I -c '
+          import json, sys
+          s = json.load(sys.stdin)
+          print(json.dumps(s["caps"]), "ram", s["ram"], "uptime", s["uptime"], "load", s["load"], "idle_ms", s["idle_ms"], "locked", s["locked"])
+          assert s["caps"]["stats"] and s["ram"] is not None and s["uptime"] is not None, "the bridge has no PC stats"
+          assert s["caps"]["typing"] and isinstance(s["locked"], bool), "no lock state: typing would be refused"'
+          plutil -p ~/Library/LaunchAgents/org.deskbuddy.bridge.plist
+          launchctl print gui/$(id -u)/org.deskbuddy.bridge | grep -E 'state|pid|program' | head
+      - name: macOS - install.py --uninstall
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        run: python -I -X utf8 laptop/install.py --uninstall
+      - name: macOS - Chip is gone
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        run: |
+          test ! -e ~/Library/LaunchAgents/org.deskbuddy.bridge.plist || { echo "the plist is still there"; exit 1; }
+          if launchctl print gui/$(id -u)/org.deskbuddy.bridge >/dev/null 2>&1; then echo "the LaunchAgent is still loaded"; exit 1; fi
+          if curl -s -m 3 http://127.0.0.1:8765/caps >/dev/null; then echo "the bridge still answers"; exit 1; fi
+      - name: macOS - bridge log
+        if: failure() && runner.os == 'macOS'
+        run: tail -n 80 ~/Library/Logs/deskbuddy-bridge.log || true

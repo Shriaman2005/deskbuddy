@@ -7,13 +7,12 @@ import re
 import socket
 import sys
 import time
-import unicodedata
 
-from . import base
+from . import base, psstats
 from .base import *  # noqa: F401,F403
-from .base import Sampler as _BaseSampler, TypingError, caps as _none, interface
+from .base import TypingError, caps as _none, interface
 from .proc import run
-from textclean import clean  # laptop/textclean.py (every entry point has laptop/ on sys.path)
+from textclean import typable, utf16_units  # noqa: F401  laptop/textclean.py (every entry point has laptop/ on sys.path)
 
 IS_WIN = sys.platform == "win32"
 
@@ -57,80 +56,11 @@ def wifi_ssid(iface):
     return None, None
 
 
-# ---------------------------------------------------------------- stats (psutil)
+# ---------------------------------------------------------------- stats (psutil, platforms/psstats.py)
 
-def _psutil():
-    try:
-        import psutil
-        return psutil
-    except ImportError:
-        return None
-
-
-def _try(fn, default=None):
-    try:
-        return fn()
-    except Exception:  # noqa: BLE001  (one sensor failing must not blank the others)
-        return default
-
-
-class Sampler:
-    """CPU, RAM, battery, network rates, uptime, disk from psutil. No load average, GPU or temperatures on Windows."""
-
-    def __init__(self):
-        self.ps = _psutil()
-        self._net = None
-        if self.ps:
-            _try(lambda: self.ps.cpu_percent(None))      # the first reading of each is meaningless
-            _try(lambda: self.ps.cpu_percent(None, percpu=True))
-
-    def net(self):
-        counters = self.ps.net_io_counters(pernic=True)
-        rx = sum(c.bytes_recv for n, c in counters.items() if not re.search(r"loopback", n, re.I))
-        tx = sum(c.bytes_sent for n, c in counters.items() if not re.search(r"loopback", n, re.I))
-        t = time.monotonic()
-        prev, self._net = self._net, (t, rx, tx)
-        if not prev or t == prev[0]:
-            return 0, 0
-        return max(0, round((rx - prev[1]) / (t - prev[0]))), max(0, round((tx - prev[2]) / (t - prev[0])))
-
-    def battery(self):
-        """(percent, charging, {status, minutes_left?}) or (None, None, {}) on a desktop."""
-        b = self.ps.sensors_battery()
-        if b is None:
-            return None, None, {}
-        plugged = bool(b.power_plugged)
-        full = plugged and round(b.percent) >= 100
-        info = {"status": "Full" if full else "Charging" if plugged else "Discharging"}
-        if not plugged and isinstance(b.secsleft, (int, float)) and b.secsleft >= 0:
-            info["minutes_left"] = round(b.secsleft / 60)
-        return round(b.percent), plugged, info
-
-    def sample(self):
-        out = _BaseSampler().sample()
-        ps = self.ps
-        if not ps:
-            return out
-        vm = _try(ps.virtual_memory)
-        if vm:
-            out.update(ram=round(vm.percent), ram_used_gb=round((vm.total - vm.available) / 2**30, 1),
-                       ram_total_gb=round(vm.total / 2**30, 1))
-        cores = _try(lambda: ps.cpu_percent(None, percpu=True), [])
-        cpu = _try(lambda: ps.cpu_percent(None))
-        out.update(cpu=None if cpu is None else round(cpu), cores=[round(c) for c in cores])
-        bat, charging, info = _try(self.battery, (None, None, {}))
-        out.update(battery=bat, charging=charging, bat=info)
-        rx_tx = _try(self.net)
-        if rx_tx:
-            out.update(net_rx=rx_tx[0], net_tx=rx_tx[1])
-        out["uptime"] = _try(lambda: int(time.time() - ps.boot_time()))
-        sw = _try(ps.swap_memory)
-        if sw:
-            out["swap"] = round(sw.percent)
-        disk = _try(lambda: ps.disk_usage(os.environ.get("SystemDrive", "C:") + "\\"))
-        if disk:
-            out.update(disk=round(disk.percent), disk_free_gb=round(disk.free / 1e9))
-        return out
+class Sampler(psstats.Sampler):
+    """No load average, GPU or temperatures on Windows; the disk is the system drive."""
+    disk_root = os.environ.get("SystemDrive", "C:") + "\\"
 
 
 # ---------------------------------------------------------------- idle time and the lock screen (user32)
@@ -222,17 +152,6 @@ def input_size_ok():
     return ctypes.sizeof(INPUT) == (40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28)
 
 
-def utf16_units(text):
-    """The UTF-16 code units of text (a character outside the BMP is two), lone surrogates dropped."""
-    data = text.encode("utf-16-le", "ignore")
-    return [int.from_bytes(data[i:i + 2], "little") for i in range(0, len(data), 2)]
-
-
-def typable(text):
-    """text as one line with no control characters (a U+0008 sent as a Unicode "key" would act as Backspace)."""
-    return clean("".join(ch for ch in text if ch.isspace() or unicodedata.category(ch) != "Cc"))
-
-
 def type_text(text):
     """Types text into the focused window and returns what was typed. Never sends Enter (newlines and tabs become
     spaces), refuses while locked. Each UTF-16 unit goes as a KEYEVENTF_UNICODE key down + up, so any language and
@@ -279,9 +198,9 @@ def caps():
     iface = interface()[0]
     out = dict(_none(), wifiName=bool(iface) and (not is_wireless(iface) or wifi_ssid(iface)[0] is not None))
     if IS_WIN:
-        ps = _psutil()
+        ps = psstats.psutil_or_none()
         is_locked = locked()
-        out.update(stats=ps is not None, battery=bool(ps) and _try(ps.sensors_battery) is not None,
+        out.update(stats=ps is not None, battery=bool(ps) and psstats.attempt(ps.sensors_battery) is not None,
                    idle=idle_ms() is not None, locked=is_locked is not None,
                    typing=input_size_ok() and is_locked is not None)
     return out

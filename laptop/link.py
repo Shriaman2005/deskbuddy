@@ -12,6 +12,7 @@ import os
 import re
 import secrets
 import socket
+import socketserver
 import tarfile
 import threading
 import time
@@ -29,6 +30,15 @@ PORT = int(os.environ.get("CHIP_PORT") or 8765)  # the bridge's port (CHIP_PORT 
 REMOTE_PORT = int(os.environ.get("CHIP_TUNNEL_REMOTE_PORT") or PORT)
 PAIR_PORT = int(os.environ.get("CHIP_PAIR_PORT") or 8766)  # the one-shot download server for pairing a new phone (laptop's LAN address only)
 STATE_FILE = paths.config("state.json")
+
+
+class QuickServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer without the socket.getfqdn() in HTTPServer.server_bind: that reverse DNS lookup can hang
+    for a long time on macOS (the bridge then never listens). The bridge and the pairing download use it."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 def load_state():
@@ -519,7 +529,7 @@ exit
             def log_message(self, *args):  # the request line carries the URL: never log it
                 pass
 
-        class PairServer(ThreadingHTTPServer):
+        class PairServer(QuickServer):
             daemon_threads = True
             request_queue_size = 8
 

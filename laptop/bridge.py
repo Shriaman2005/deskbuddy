@@ -1398,7 +1398,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-class BridgeServer(ThreadingHTTPServer):
+class BridgeServer(link.QuickServer):
     allow_reuse_address = False  # platforms.prepare_listener sets the right option (Windows: exclusive bind)
 
     def server_bind(self):

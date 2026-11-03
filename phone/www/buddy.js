@@ -511,10 +511,13 @@
     }
     const text = r.text;
     if (!state.laptopOnline) { express("worried", 2500); return bubbleNow(`💻 Laptop not connected. Heard: “${text}”`, 9000, true); }
-    const res = await fetch(C.laptop + "/type", { method: "POST", body: text }).then((x) => x.status).catch(() => 0);  // any language: the bridge pastes non-ASCII text
-    if (res === 200) { express("happy", 1800); anim("hop", 550); bubbleNow(`✓ Typed: “${text}”`, 6000, true); }
-    else if (res === 423) { express("worried", 2500); bubbleNow(`🔒 Unlock the laptop first. Heard: “${text}”`, 9000, true); }
-    else { express("worried", 2500); bubbleNow(`💻 Couldn't type it. Heard: “${text}”`, 9000, true); }
+    // any language: the bridge types or pastes non-ASCII text. A 409 says why it couldn't (macOS: allow Python in Accessibility)
+    const res = await fetch(C.laptop + "/type", { method: "POST", body: text })
+      .then(async (x) => ({ status: x.status, message: x.status === 409 ? ((await x.json().catch(() => ({}))).message || "") : "" }))
+      .catch(() => ({ status: 0, message: "" }));
+    if (res.status === 200) { express("happy", 1800); anim("hop", 550); bubbleNow(`✓ Typed: “${text}”`, 6000, true); }
+    else if (res.status === 423) { express("worried", 2500); bubbleNow(`🔒 Unlock the laptop first. Heard: “${text}”`, 9000, true); }
+    else { express("worried", 2500); bubbleNow(`💻 ${res.message || "Couldn't type it"}. Heard: “${text}”`, 12000, true); }
   }
 
   // ---------------------------------------------------------------- screens

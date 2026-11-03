@@ -82,7 +82,9 @@ def laptop_macos():
     check(bool(run("launchctl", "print", f"gui/{os.getuid()}/{macos.LAUNCH_AGENT}")),
           f"LaunchAgent {macos.LAUNCH_AGENT} loaded", "run laptop/install.py again")
     ssh_and_key()
-    print("  · Accessibility (typing dictated text) isn't checked yet")
+    # Accessibility can't be checked from here: macOS would answer for Terminal, not for the bridge's Python
+    print("  · typing dictated text needs Python switched on in System Settings → Privacy & Security → Accessibility"
+          " (laptop/install.py prints which Python)")
 
 
 print("Laptop")
