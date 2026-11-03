@@ -12,7 +12,7 @@ echo "[setup] started $(date)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -y -o Dpkg::Options::=--force-confnew upgrade
-apt-get -y -o Dpkg::Options::=--force-confnew install python openssh termux-api procps
+apt-get -y -o Dpkg::Options::=--force-confnew install python openssh termux-api procps pulseaudio
 
 # ssh: the laptop's key only, and nothing it doesn't need. It uses a shell (deploy.sh, doctor.py) and a remote
 # forward (-R 8765, the tunnel); no passwords, no agent/X11/tun, no local forwards into the phone, -R on loopback only.
@@ -40,10 +40,11 @@ ClientAliveCountMax 3
 SSHD
 sshd -t  # a broken config would lock the laptop out: stop here instead (set -e)
 
-# buddy files + autostart (Termux:Boot if installed, otherwise whenever Termux opens)
+# buddy files + autostart (Termux:Boot if installed, otherwise whenever Termux opens) + chip-start / chip-stop
 mkdir -p ~/deskbuddy ~/.termux/boot
 cp -r "$SRC/phone/." ~/deskbuddy/
-chmod +x ~/deskbuddy/services.sh ~/deskbuddy/server.py
+chmod +x ~/deskbuddy/services.sh ~/deskbuddy/server.py ~/deskbuddy/chip-start ~/deskbuddy/chip-stop ~/deskbuddy/stt-setup.sh
+ln -sf ~/deskbuddy/chip-start ~/deskbuddy/chip-stop "$PREFIX/bin/"   # deploys replace the targets, so these stay current
 printf '#!/data/data/com.termux/files/usr/bin/bash\nexec ~/deskbuddy/services.sh\n' >~/.termux/boot/deskbuddy
 chmod +x ~/.termux/boot/deskbuddy
 grep -q "deskbuddy/services.sh" ~/.bashrc 2>/dev/null || echo '~/deskbuddy/services.sh >/dev/null 2>&1' >>~/.bashrc
@@ -52,6 +53,25 @@ pkill -f deskbuddy/server.py || true
 ~/deskbuddy/services.sh
 sleep 2
 pgrep -a sshd && pgrep -af deskbuddy/server.py
+
+# Termux:API is a separate app (F-Droid, same source as Termux): the battery reading, torch and speech go through it.
+# Its first call can take a few seconds (it starts the app), so the answer is waited for, not assumed.
+if timeout 25 termux-battery-status 2>/dev/null | grep -q percentage; then
+  echo "[setup] Termux:API answers"
+else
+  echo "[setup] !! Termux:API did not answer. Install the Termux:API app from F-Droid (same source as Termux), open it once,"
+  echo "[setup]    then check with: termux-battery-status   (Chip works without it but shows no battery, torch or voice)"
+fi
+echo
+echo "[setup] Android permissions (Settings → Apps → ...), granted by you, never by this script:"
+echo "[setup]   Termux → Permissions → Microphone                dictation (hold with two fingers)"
+echo "[setup]   Termux → Notifications: allowed                  its notification holds the wake lock; its Exit stops Chip"
+echo "[setup]   Termux → Battery: Unrestricted                   so Android doesn't suspend the link when the screen is off"
+echo "[setup]   Termux:API → Modify system settings              ONLY on a phone that is Chip's own screen, for brightness control"
+echo "[setup]   Termux:Boot and kiFOSSk are optional: only for an always-on phone (start at boot, kiosk). Otherwise open"
+echo "[setup]   Termux to start Chip (chip-start / chip-stop), and open http://127.0.0.1:8080 in Chrome."
+echo "[setup]   Offline dictation on the phone: bash ~/deskbuddy/stt-setup.sh (optional, builds whisper.cpp, ~10 minutes)"
+echo
 # the pairing code: type it into the laptop's dashboard (it pins only the key that matches; never type it anywhere else)
 FP=$(ssh-keygen -lf "$PREFIX/etc/ssh/ssh_host_ed25519_key.pub" | cut -d' ' -f2)
 CODE=${FP#SHA256:}; CODE=${CODE:0:16}

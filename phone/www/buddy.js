@@ -47,6 +47,7 @@
     phonesFollowSkin: true, phonesDefault: "",  // a skin's own headphones when it has a pair; else "" = Chip's own, or an installed skin id to borrow from
     eyeStyle: "", pupilSize: "M", showPupils: true, skin: "", locName: "", locLat: 0, locLon: 0,  // weather place from the dashboard ("" = config.js); eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
     brightnessDay: C.brightness.day,
+    personalPhone: false,  // the phone is also in use (Chrome web app): never touch its screen brightness
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
   };
   const prefs = Object.assign({}, DEFAULT_PREFS,
@@ -74,9 +75,12 @@
   }
   const post = (url) => fetch(url, { method: "POST" }).then((r) => r.ok).catch(() => false);
   const phone = {
-    brightness: (level) => post(`/api/brightness?level=${level}`),
+    brightness: (level) => (prefs.personalPhone ? Promise.resolve(false) : post(`/api/brightness?level=${level}`)),
     say: (text) => { if (prefs.talk && !state.night) post(`/api/say?text=${encodeURIComponent(text)}`); },
     launch: (id) => post(`/api/launch?app=${id}`),
+    // Android blocks `am start` from Termux unless Termux is in front, which it isn't in Chrome (the installed web app too):
+    // apps are only offered in kiFOSSk, a WebView ("; wv)"), and never on a personal phone
+    get canLaunch() { return !prefs.personalPhone && !(/Chrome\//.test(navigator.userAgent) && !/; wv\)/.test(navigator.userAgent)); },
   };
   const laptop = (path) => post(C.laptop + path);
 
@@ -138,8 +142,13 @@
   }
   let tempMood = null, tempUntil = 0, tempTimer = 0, mood = "neutral";
 
+  // What the laptop can do (bridge /stats caps, laptop/platforms): a feature whose cap is missing stays hidden, whatever
+  // the pref says. No caps yet (laptop away, an older bridge) = everything as before.
+  const NEEDS = { ringGpu: "gpu", mediaCard: "media", tabViz: "visualizer", typingScene: "typingRate", gazeFollow: "gaze" };
+  const capOk = (k) => !NEEDS[k] || !state.laptop || !state.laptop.caps || state.laptop.caps[NEEDS[k]] !== false;
+  const want = (k) => !!prefs[k] && capOk(k);
   // You've been typing on the laptop for a while (bridge.py counts key presses, not which keys): Chip types along.
-  const typingNow = () => prefs.typingScene && state.laptopOnline && !!state.laptop && state.laptop.typing_for >= prefs.typingAfter;
+  const typingNow = () => want("typingScene") && state.laptopOnline && !!state.laptop && state.laptop.typing_for >= prefs.typingAfter;
   function baseMood() {
     if (dict.phase === "listening") return "listen";
     if (dict.phase === "thinking") return "think";
@@ -502,17 +511,20 @@
     }
     const text = r.text;
     if (!state.laptopOnline) { express("worried", 2500); return bubbleNow(`💻 Laptop not connected. Heard: “${text}”`, 9000, true); }
-    const res = await fetch(C.laptop + "/type", { method: "POST", body: text }).then((x) => x.status).catch(() => 0);  // any language: the bridge pastes non-ASCII text
-    if (res === 200) { express("happy", 1800); anim("hop", 550); bubbleNow(`✓ Typed: “${text}”`, 6000, true); }
-    else if (res === 423) { express("worried", 2500); bubbleNow(`🔒 Unlock the laptop first. Heard: “${text}”`, 9000, true); }
-    else { express("worried", 2500); bubbleNow(`💻 Couldn't type it. Heard: “${text}”`, 9000, true); }
+    // any language: the bridge types or pastes non-ASCII text. A 409 says why it couldn't (macOS: allow Python in Accessibility)
+    const res = await fetch(C.laptop + "/type", { method: "POST", body: text })
+      .then(async (x) => ({ status: x.status, message: x.status === 409 ? ((await x.json().catch(() => ({}))).message || "") : "" }))
+      .catch(() => ({ status: 0, message: "" }));
+    if (res.status === 200) { express("happy", 1800); anim("hop", 550); bubbleNow(`✓ Typed: “${text}”`, 6000, true); }
+    else if (res.status === 423) { express("worried", 2500); bubbleNow(`🔒 Unlock the laptop first. Heard: “${text}”`, 9000, true); }
+    else { express("worried", 2500); bubbleNow(`💻 ${res.message || "Couldn't type it"}. Heard: “${text}”`, 12000, true); }
   }
 
   // ---------------------------------------------------------------- screens
   const screens = $$(".screen");
   const TABS = 4, VIZ = 4;  // face, clock, laptop, timer; the visualizer opens from the laptop page
   const TAB_PREFS = [null, "tabClock", "tabLaptop", "tabTimer", "tabViz"];  // the face can't be hidden
-  const tabOn = (i) => !TAB_PREFS[i] || prefs[TAB_PREFS[i]];
+  const tabOn = (i) => !TAB_PREFS[i] || want(TAB_PREFS[i]);
   let screenIdx = 0;
   function nextTab(dir) {
     let i = screenIdx;
@@ -614,6 +626,7 @@
   function onLaptop(d, wasOnline) {
     const prev = state.laptop, t = now(), alerts = prefs.laptopAlerts;
     state.laptop = d;
+    if (JSON.stringify(d.caps || null) !== JSON.stringify((prev && prev.caps) || null)) applyPrefs({});  // show/hide what the laptop can do
     if (Object.keys(pendingPrefs).length) pushPrefs();
     else if (d.settingsRev != null && d.settingsRev !== prefsRev) syncPrefs();
     if (d.skinsRev != null) {   // an installed skin's file changed on the laptop (renamed, new headphones): read the one in use again
@@ -1218,8 +1231,8 @@
 
   // ---------------------------------------------------------------- drawer (apps + toggles)
   const APPS = [
-    ["brave", "🦁", "Brave"], ["termux", "⌨️", "Termux"],
-    ["files", "📁", "Files"], ["settings", "⚙️", "Settings"], ["launcher", "🏠", "All apps"],
+    ["browser", "🌐", "Browser"], ["termux", "⌨️", "Termux"],
+    ["files", "📁", "Files"], ["settings", "⚙️", "Settings"], ["home", "🏠", "Home"],
   ];
   $("#tiles").innerHTML = APPS.map(([id, ic, label]) => `<button class="tile" data-app="${id}"><i>${ic}</i>${label}</button>`).join("");
   function renderToggles() {
@@ -1230,7 +1243,7 @@
     set("dictEngine", prefs.dictEngine !== "phone", `${ENGINE_ICON[prefs.dictEngine] || "📱"} Dictation: ${ENGINE_NAME[prefs.dictEngine] || "Phone"}`);
     set("flashlight", !!state.flashlight, state.flashlight ? "🔦 Torch on" : "🔦 Torch off");
   }
-  function openDrawer() { renderToggles(); $("#drawer").classList.add("open"); }
+  function openDrawer() { renderToggles(); $("#tiles").style.display = phone.canLaunch ? "" : "none"; $("#drawer").classList.add("open"); }
   $("#drawer").addEventListener("click", async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
@@ -1433,7 +1446,7 @@
     for (const k in DEFAULT_PREFS) if (typeof p[k] === typeof DEFAULT_PREFS[k]) prefs[k] = p[k];
     if (preview.get("accent")) prefs.accent = preview.get("accent");
     store.set("prefs", prefs);
-    if (prefs.gazeFollow && !preview.has("gaze")) gazeOpen();
+    if (want("gazeFollow") && !preview.has("gaze")) gazeOpen();
     else if (gazeSrc) gazeClose();
     paintAccent();
     app.dataset.chipGlow = prefs.chipGlow;
@@ -1448,9 +1461,9 @@
     if (isPomo() && !timerActive() && !alarmUntil && focus.total !== prefs[POMO[focus.mode]] * 60000) {
       focus.total = focus.left = prefs[POMO[focus.mode]] * 60000; saveFocus();
     }
-    for (const [k, sel] of Object.entries(SHOWS)) $$(sel).forEach((el) => el.classList.toggle("off", !prefs[k]));
+    for (const [k, sel] of Object.entries(SHOWS)) $$(sel).forEach((el) => el.classList.toggle("off", !want(k)));
     $("#c-panel").classList.toggle("off", !prefs.clockNow && !prefs.clockHours && !prefs.clockAir);
-    $(".rings").classList.toggle("off", !prefs.ringCpu && !prefs.ringRam && !prefs.ringGpu && !prefs.ringBattery);
+    $(".rings").classList.toggle("off", !want("ringCpu") && !want("ringRam") && !want("ringGpu") && !want("ringBattery"));
     $$("#dots i").forEach((d, k) => d.classList.toggle("off", !tabOn(k)));
     $("#dots").classList.toggle("off", !prefs.dots || [1, 2, 3].every((k) => !tabOn(k)));
     if (!tabOn(screenIdx)) go(screenIdx);  // go() moves off a tab that was just hidden
@@ -1561,5 +1574,18 @@
   setInterval(fetchWeather, 20 * 60000);
   setInterval(checkVersion, 60000);
   fetchWeather(); pollLaptop(); pollPhone(); checkVersion();
+
+  // Chrome web app: the screen stays on while Chip is showing (kiFOSSk keeps it on itself; a browser without the API skips this).
+  // The lock is released whenever the page is hidden, so it is asked for again each time it is visible.
+  let wakeLock = null;
+  async function keepAwake() {
+    if (!onPhone || !navigator.wakeLock || document.visibilityState !== "visible" || wakeLock) return;
+    try { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); }
+    catch (e) { wakeLock = null; }  // refused (battery saver): tried again at the next visibilitychange
+  }
+  document.addEventListener("visibilitychange", keepAwake);
+  keepAwake();
+  // a service worker that does nothing, only so Chrome offers "Install app" (it must cache nothing: deploys rely on reloads)
+  if (onPhone && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   if (!state.night && prefs.greetings) setTimeout(() => { express("surprised", 700); setTimeout(() => { anim("hop", 500); express("joy", 1500); say(`Hi! I'm ${buddyName()} 👋`, 2500); }, 700); }, 900);
 })();

@@ -2,7 +2,7 @@
 """Desk buddy phone server (runs in Termux).
 
 Serves the buddy UI from ./www on 127.0.0.1:8080 and does the few things a WebView
-can't: set screen brightness, speak, launch apps, read the battery, take dictation, and blink the torch
+can't: set screen brightness, speak, open apps, read the battery, take dictation, and blink the torch
 and play an alert sound (alert.py).
 """
 import json
@@ -19,13 +19,15 @@ from dictation import Dictation
 WWW = os.path.join(os.path.dirname(os.path.abspath(__file__)), "www")
 PORT = 8080
 
-# Launcher activities for the buddy's app drawer, resolved on this phone.
+# What the buddy's app drawer opens: generic intents any Android answers (no vendor apps), or a component that is the
+# same on every phone (Termux). `am start` from Termux is blocked while another app is in front (Android 10+), so the
+# page only offers these in kiFOSSk, where it works.
 APPS = {
-    "brave": "com.brave.browser/com.google.android.apps.chrome.Main",
-    "termux": "com.termux/.app.TermuxActivity",
-    "files": "com.google.android.apps.nbu.files/.home.HomeActivity",
-    "settings": "com.android.settings/.Settings",
-    "launcher": "com.sec.android.app.launcher/com.android.launcher3.infra.activity.Launcher",
+    "browser": ["-a", "android.intent.action.MAIN", "-c", "android.intent.category.APP_BROWSER"],
+    "termux": ["-n", "com.termux/.app.TermuxActivity"],
+    "files": ["-a", "android.intent.action.VIEW_DOWNLOADS"],
+    "settings": ["-a", "android.settings.SETTINGS"],
+    "home": ["-a", "android.intent.action.MAIN", "-c", "android.intent.category.HOME"],
 }
 
 battery = {}
@@ -64,6 +66,8 @@ def wifi_loop():
 
 
 class Handler(SimpleHTTPRequestHandler):
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webmanifest": "application/manifest+json"}
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=WWW, **kwargs)
 
@@ -123,10 +127,10 @@ class Handler(SimpleHTTPRequestHandler):
         elif url.path == "/api/torch":  # the drawer's flashlight switch
             alert.set_flashlight(q.get("on") == "1")
         elif url.path == "/api/launch":
-            component = APPS.get(q.get("app", ""))
-            if not component:
+            intent = APPS.get(q.get("app", ""))
+            if not intent:
                 return self.send_json({"error": "unknown app"}, 404)
-            spawn(["am", "start", "-n", component])
+            spawn(["am", "start", *intent])
         elif url.path in ("/api/dictate/start", "/api/dictate/stop", "/api/dictate/cancel"):
             action = url.path.rsplit("/", 1)[1]
             try:

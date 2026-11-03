@@ -1,375 +1,417 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chip Dashboard</title>
+<title>Chip settings</title>
+<link rel="icon" href="/logo/chip-dark.png">
+<script>
+  // the theme before the first paint: the one picked on this page, else the system's
+  (() => {
+    let t = null;
+    try { t = localStorage.getItem("deskbuddy.theme"); } catch (e) { /* storage blocked */ }
+    if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
-@font-face { font-family: "VT323"; src: url("/preview/fonts/vt323.woff2") format("woff2"); font-display: swap; }
-:root {
+:root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #04080b; --panel: #0a131a; --panel2: #0e1a23; --line: #16252f; --line2: #22394a;
-  --fg: #e9f7ff; --soft: #a9c2d1; --muted: #6f8796; --faint: #3f5666;
-  --eye: #4de8ff; --good: #5dffa8; --warn: #ffb347; --bad: #ff5d6c; --pink: #ff6fb1; --night: #8c8dff;
-  --pixel: "VT323", ui-monospace, monospace;
+  --bg: #000; --side: #000; --panel: #0b0b0b; --sunk: #050505; --hover: #131313; --active: #1b1b1b;
+  --line: #1d1d1d; --line2: #2e2e2e; --fg: #f3f3f3; --soft: #c9c9c9; --muted: #8e8e8e;
+  --accent: #2ee6f2; --accent-soft: #0d3a3d; --track: #2e2e2e; --knob: #9a9a9a; --knob-on: #000;
+  --good: #4ade80; --warn: #f5c04a; --warn-line: #5a4716; --bad: #ff6b6b; --bad-line: #5c2222; --shadow: rgba(0, 0, 0, .6);
 }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f5f4; --side: #efefed; --panel: #fff; --sunk: #f5f5f4; --hover: #e6e6e3; --active: #dcdcd8;
+  --line: #e6e6e3; --line2: #cfcfcb; --fg: #111; --soft: #333; --muted: #5f5f5f;
+  --accent: #00737b; --accent-soft: #c9ecee; --track: #c8c8c4; --knob: #fff; --knob-on: #fff;
+  --good: #15803d; --warn: #a16207; --warn-line: #e8d39a; --bad: #c62828; --bad-line: #efb4b4; --shadow: rgba(0, 0, 0, .18);
+}
+:root { --chip: #2ee6f2; --custom: #2ee6f2; --mono: ui-monospace, "Ubuntu Mono", "SF Mono", Menlo, Consolas, monospace; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { background: var(--bg); }
-body {
-  margin: 0; min-height: 100vh; color: var(--fg); font: 15px/1.45 system-ui, "Ubuntu", "Cantarell", sans-serif;
-  background: radial-gradient(1200px 500px at 20% -10%, rgba(77, 232, 255, .08), transparent 60%),
-              radial-gradient(900px 500px at 100% 0%, rgba(255, 111, 177, .06), transparent 60%), var(--bg);
-}
-button, input { font: inherit; color: inherit; }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 15px/1.45 system-ui, "Ubuntu", "Cantarell", "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
-h1, h2, .pixel { font-family: var(--pixel); font-weight: 400; letter-spacing: .04em; }
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: .92em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:root[data-theme="dark"] .only-light, :root[data-theme="light"] .only-dark { display: none !important; }
 
-/* ---------- header */
-header {
-  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  flex-wrap: wrap; padding: 14px clamp(16px, 4vw, 40px); background: rgba(4, 8, 11, .82); backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--line);
+/* ---------- layout: the sidebar of topics and one page at a time */
+.shell { display: flex; align-items: flex-start; min-height: 100vh; }
+.side {
+  position: sticky; top: 0; flex: none; width: 272px; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; gap: 18px;
+  padding: 20px 14px 16px; background: var(--side); border-right: 1px solid var(--line); scrollbar-width: thin; scrollbar-color: var(--line2) transparent;
 }
-.brand { display: flex; align-items: center; gap: 14px; }
-.logo {
-  width: 54px; height: 38px; border-radius: 8px; background: #000; border: 1px solid var(--line2);
-  display: flex; align-items: center; justify-content: center; gap: 9px; box-shadow: 0 0 18px rgba(77, 232, 255, .15);
+.brand { display: flex; align-items: center; gap: 14px; padding: 0 6px; color: inherit; text-decoration: none; }
+.brand img { width: 70px; height: auto; display: block; }
+.brand b { display: block; font-size: 15px; font-weight: 600; }
+.brand small { display: block; font-size: 12.5px; color: var(--muted); }
+.search { position: relative; display: block; }
+.search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.field, .search input {
+  width: 100%; min-height: 40px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line2); background: var(--sunk);
+  color: var(--fg); font-size: 14px; min-width: 0;
 }
-.logo i { width: 11px; height: 16px; background: var(--eye); box-shadow: 0 0 8px var(--eye); animation: blink 5s infinite; }
-@keyframes blink { 0%, 46%, 50%, 100% { transform: scaleY(1); } 48% { transform: scaleY(.1); } }
-.brand h1 { margin: 0; font-size: 34px; line-height: .9; color: var(--eye); text-shadow: 0 0 14px rgba(77, 232, 255, .45); }
-.brand p { margin: 0; color: var(--muted); font-size: 13px; }
-.status {
-  display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 12px; border-radius: 12px;
-  background: var(--panel); border: 1px solid var(--line); min-width: 0;
+.search input { padding-left: 38px; background: var(--panel); }
+::placeholder { color: var(--muted); opacity: 1; }
+.navwrap { display: flex; flex-direction: column; gap: 12px; }
+.navgrp { display: flex; flex-direction: column; gap: 2px; }
+.navlabel { padding: 0 12px 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.nav {
+  display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 7px 12px; border-radius: 10px;
+  color: var(--soft); text-decoration: none; font-size: 14.5px;
 }
-.status .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
-.status.on .dot { background: var(--good); box-shadow: 0 0 10px var(--good); animation: pulse 2s infinite; }
-@keyframes pulse { 50% { opacity: .45; } }
-.status b { display: block; font-weight: 600; font-size: 14px; }
-.status span { display: block; color: var(--soft); font-size: 12.5px; }
-.status .sync { color: var(--muted); }
+.nav svg { flex: none; }
+.nav:hover { background: var(--hover); color: var(--fg); }
+.nav[aria-current="page"] { background: var(--active); color: var(--fg); font-weight: 500; }
+.nomatch { margin: 0; padding: 0 12px; font-size: 13.5px; color: var(--muted); }
+.sidestatus { margin-top: auto; display: block; color: inherit; text-decoration: none; border-radius: 12px; }
+.status { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); }
+.sidestatus:hover .status { background: var(--hover); }
+.status .dot { flex: none; width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--muted); }
+.status.on .dot { background: var(--good); }
+.status b { display: block; font-weight: 500; font-size: 13.5px; }
+.status span { display: block; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
 .status .sync.ok { color: var(--good); }
 .status .sync.wait { color: var(--warn); }
 
-/* ---------- layout */
-main { padding: 24px clamp(16px, 4vw, 40px) 40px; max-width: 1480px; margin: 0 auto; }
-.hero { margin-bottom: 20px; }
-.grid { columns: 3 340px; column-gap: 20px; }
-.grid .card { break-inside: avoid; margin-bottom: 20px; }
-.card { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 16px; padding: 18px 18px 8px; }
-.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
-.card-head h2 { flex: 1; margin: 0; font-size: 25px; line-height: 1; color: var(--fg); text-transform: uppercase; }
-.card-head .ic { font-size: 19px; }
-.card > .note { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
-.card.dim > :not(.card-head):not(.needs) { opacity: .45; }
-.card .needs { display: none; margin: 4px 0 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08);
-  border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); font-size: 13px; }
-.card.dim .needs { display: block; }
+.main { flex: 1; min-width: 0; padding: 0 40px; }
+.topbar { display: flex; justify-content: flex-end; padding: 16px 0 0; }
+.themebtn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 7px 16px 7px 13px; border-radius: 20px;
+  border: 1px solid var(--line2); background: transparent; font-size: 14px;
+}
+.themebtn:hover { border-color: var(--muted); }
+.page { max-width: 760px; margin: 0 auto; padding: 0 0 72px; display: flex; flex-direction: column; gap: 30px; }
+.phead h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
+.phead p { margin: 6px 0 0; max-width: 640px; color: var(--muted); }
 
-/* ---------- rows, switches, sliders */
-.row { display: flex; align-items: center; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); cursor: pointer; }
-.card-head + .row, .card > .note + .row, .needs + .row { border-top: 0; }
-.row .txt { flex: 1; min-width: 0; }
-.row .txt b { display: block; font-weight: 550; font-size: 14.5px; }
-.row .txt small { display: block; color: var(--muted); font-size: 12.5px; }
-.row.sub { padding-left: 18px; }
-.row.dim { opacity: .4; cursor: default; }
-.row[hidden] { display: none; }
-.row.range { cursor: default; flex-wrap: wrap; }
-.row.range .txt { flex: 0 0 auto; }
-.row.range input { flex: 1; min-width: 90px; }
-.row.choice { cursor: default; flex-wrap: wrap; }
-.picker { width: 40px; height: 28px; padding: 0; border: 1px solid var(--line2); border-radius: 8px; background: none; cursor: pointer; }
-.row.multi { flex-direction: column; align-items: stretch; gap: 6px; cursor: default; }
-.row.multi .pick { flex-wrap: wrap; }
-.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 6px currentColor; }
-.pick { display: flex; gap: 4px; padding: 3px; border-radius: 11px; background: #0b161e; border: 1px solid var(--line2); }
-.pick .chip { border-color: transparent; background: transparent; padding: 7px 13px; white-space: nowrap; }
-.pick .chip:disabled { cursor: default; }
-.row.range output { min-width: 66px; text-align: right; font-family: var(--pixel); font-size: 21px; color: var(--eye); }
+/* ---------- groups: a heading over a boxed list of rows */
+.grp { display: flex; flex-direction: column; gap: 10px; }
+.grp > h2 { margin: 0; padding: 0 4px; font-size: 14px; font-weight: 600; }
+.grp > .gnote { margin: -4px 0 0; padding: 0 4px; font-size: 13.5px; color: var(--muted); }
+.grp > .blocked { display: none; margin: 0; padding: 14px 20px; border: 1px dashed var(--line2); border-radius: 14px; font-size: 13.5px; color: var(--muted); }
+.grp.dim > .panel { display: none; }
+.grp.dim > .blocked { display: block; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.panel > * { padding: 14px 20px; }
+.panel > :not(:first-child) { border-top: 1px solid var(--line); }
+.panel > .flush { padding: 0; }
+
+/* ---------- rows, switches, sliders, choices */
+.row { display: flex; align-items: center; gap: 10px 20px; min-height: 62px; margin: 0; cursor: pointer; }
+.row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row .txt b { font-weight: 500; font-size: 15px; }
+.row .txt small { color: var(--muted); font-size: 13px; }
+.row.big .txt b { font-size: 16px; font-weight: 600; }
+.panel > .row.sub { padding-left: 44px; }
+.row.sub.dim { display: none; }
+.dim { opacity: .45; }
+.grp.dim { opacity: 1; }
+.row.nocap { opacity: .45; cursor: default; }
+.row .only { align-self: flex-start; margin-top: 2px; font-size: 11.5px; font-style: normal; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--line2); color: var(--muted); }
+.row.range, .row.choice, .row.multi { cursor: default; flex-wrap: wrap; }
+.row.range .txt, .row.choice .txt { flex: 1 1 200px; }
+.row.range .ctl { display: flex; align-items: center; gap: 14px; }
+.row.range input { width: 220px; max-width: 100%; }
+.row.range output { min-width: 74px; text-align: right; font-family: var(--mono); font-size: 13.5px; color: var(--soft); }
+.row.multi { flex-direction: column; align-items: stretch; gap: 12px; }
 .sw {
-  appearance: none; flex: none; margin: 0; width: 48px; height: 26px; border-radius: 7px; position: relative; cursor: pointer;
-  background: #13212b; border: 1px solid var(--line2); transition: background .2s, border-color .2s;
+  appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 44px; height: 26px; margin: 0; border: 0; border-radius: 13px;
+  background: var(--track); cursor: pointer; transition: background .15s;
 }
 .sw::after {
-  content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 4px;
-  background: var(--muted); transition: transform .18s, background .18s, box-shadow .18s;
+  content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--knob); box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .15s, background .15s;
 }
-.sw:checked { background: #10382a; border-color: #1f7a55; }
-.sw:checked::after { transform: translateX(22px); background: var(--good); box-shadow: 0 0 10px rgba(93, 255, 168, .55); }
+.sw:checked { background: var(--accent); }
+.sw:checked::after { transform: translateX(18px); background: var(--knob-on); }
 .sw:disabled { cursor: default; }
-:focus-visible { outline: 2px solid var(--eye); outline-offset: 2px; }
-input[type=range] { accent-color: var(--eye); cursor: pointer; }
+input[type=range] { accent-color: var(--accent); cursor: pointer; margin: 0; }
 input[type=range]:disabled { cursor: default; }
+.picker { width: 44px; height: 32px; padding: 0; border: 1px solid var(--line2); border-radius: 8px; background: none; cursor: pointer; }
+.pick, .seg, .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
-.seg { display: flex; flex-wrap: wrap; gap: 6px; }
-.seg button, .chip {
-  padding: 7px 12px; border-radius: 9px; background: #101d26; border: 1px solid var(--line2); color: var(--soft); font-size: 13.5px;
+/* buttons: plain outline; pressed or primary = inverted; danger = red outline */
+.chip {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 9px;
+  border: 1px solid var(--line2); background: transparent; color: var(--fg); font-size: 13.5px; white-space: nowrap;
 }
-.seg button.on, .chip[aria-pressed=true] { background: #12303e; border-color: #2d6a85; color: var(--fg); }
-.seg button:disabled { opacity: .35; cursor: default; }
+.chip:hover { border-color: var(--muted); }
+.chip[aria-pressed="false"] { color: var(--soft); }
+.chip[aria-pressed="true"], .chip.go { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+.chip.danger { color: var(--bad); border-color: var(--bad-line); }
+.chip.danger:hover { border-color: var(--bad); }
+.chip:disabled { opacity: .4; cursor: default; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+.warnbox { margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--warn-line); color: var(--soft); font-size: 13.5px; }
+.warnbox b:first-child { color: var(--warn); font-weight: 600; }
+.lbl { display: block; font-weight: 500; font-size: 15px; }
+.sublbl { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.blk { display: flex; flex-direction: column; gap: 12px; }
+.line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.line > input { flex: 1 1 220px; }
+.line > label { flex: none; width: 80px; color: var(--soft); font-size: 13.5px; }
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+.chev { flex: none; color: var(--muted); transition: transform .15s; }
+details[open] .chev { transform: rotate(180deg); }
+.panel > details { padding: 0; }
+.panel > details > summary { display: flex; align-items: center; gap: 16px; min-height: 62px; padding: 14px 20px; }
+.panel > details > summary .txt { flex: 1; min-width: 0; }
+.panel > details > .body { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 18px; }
 
-/* ---------- sleep */
-.sleep .big { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 2px; }
-.sleep .big b { font-family: var(--pixel); font-weight: 400; font-size: 44px; line-height: 1; color: var(--night); text-shadow: 0 0 16px rgba(140, 141, 255, .35); }
-.sleep .big span { color: var(--soft); font-size: 13.5px; }
-.timeline { position: relative; height: 30px; margin: 30px 0 30px; border-radius: 8px; background: linear-gradient(90deg, #12202a, #1a2f3b 50%, #12202a); border: 1px solid var(--line2); }
-.timeline .span { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgba(140, 141, 255, .5) 0 6px, rgba(140, 141, 255, .32) 6px 12px); }
-.timeline .now { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--warn); box-shadow: 0 0 8px var(--warn); }
-.timeline .now::after { content: "now"; position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--warn); }
-.timeline .ticks { position: absolute; left: 0; right: 0; top: 100%; display: flex; justify-content: space-between; margin-top: 3px; font-size: 11px; color: var(--muted); }
-.times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.times label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12.5px; }
-.times input {
-  padding: 9px 12px; border-radius: 10px; background: #0b161e; border: 1px solid var(--line2); font-size: 20px;
-  font-family: var(--pixel); letter-spacing: .04em;
-}
-.times input:disabled, .chips button:disabled { opacity: .45; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 6px; }
-.sleep .group.dim { opacity: .45; }
-
-/* ---------- dock */
-.dockmock { display: flex; flex-wrap: wrap; gap: 10px 12px; margin: 8px 0 14px; }
-.dockmock.dim { opacity: .4; }
-.pod { display: flex; flex-direction: column; gap: 5px; }
-.pod > small { color: var(--muted); font-size: 11.5px; padding-left: 4px; }
-.pod > div { display: flex; gap: 4px; padding: 4px; border-radius: 22px; background: rgba(14, 26, 34, .9); border: 1px solid rgba(80, 130, 160, .25); }
-.pod .chip { border-radius: 18px; padding: 6px 11px; font-size: 13px; background: transparent; border-color: transparent; color: var(--faint); text-decoration: line-through; }
-.pod .chip[aria-pressed=true] { background: #12303e; border-color: #2d6a85; color: var(--fg); text-decoration: none; }
-
-/* ---------- attention */
-.sec { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-family: var(--pixel);
-  font-size: 18px; letter-spacing: .06em; color: var(--eye); text-transform: uppercase; }
-.sec + .row { border-top: 0; }
-.applist { display: flex; flex-direction: column; max-height: 430px; overflow: auto; margin: 6px -4px 12px; padding: 0 4px; }
-.app { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
-.app:first-child { border-top: 0; }
-.app .nm { flex: 1; min-width: 0; }
-.app .nm b { font-weight: 550; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-.app .nm small { color: var(--muted); font-size: 12px; }
-.app .ai { font-size: 10.5px; padding: 1px 6px; border-radius: 6px; background: #12303e; color: var(--eye); margin-left: 6px; vertical-align: 1px; }
-.app select { flex: none; padding: 6px 8px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--fg); font: inherit; font-size: 13px; }
-.app select.set { border-color: #2d6a85; background: #12303e; }
-.attn { padding: 12px 0 10px; border-top: 1px solid var(--line); }
-.attn .chip { font-size: 14px; }
-.attn ul { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.attn li { display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--soft); min-width: 0; }
-.attn li time { flex: none; width: 62px; color: var(--muted); font-size: 12px; }
-.attn li b { flex: none; font-weight: 600; color: var(--fg); }
-.attn li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attn li.none { color: var(--muted); }
-.attn .kind { flex: none; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: #13212b; color: var(--muted); }
+/* ---------- appearance: accent swatches, eye styles, headphone cards, previews */
+.swatches { display: flex; flex-direction: column; gap: 14px; }
+.swatches .pick { gap: 6px 8px; }
+.swb { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 66px; padding: 6px 4px; border: 0; border-radius: 10px; background: transparent; }
+.swb i { width: 30px; height: 30px; border-radius: 50%; transition: box-shadow .15s; }
+.swb span { font-size: 12.5px; color: var(--muted); }
+.swb[aria-pressed="true"] i { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--fg); }
+.swb[aria-pressed="true"] span { color: var(--fg); }
+.swb:hover span { color: var(--fg); }
+.eyes { display: flex; flex-direction: column; gap: 12px; }
+.eyes.paused .styles { opacity: .45; }
+.styles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.styles .chip { display: block; height: auto; padding: 10px 12px; border-radius: 12px; text-align: left; white-space: normal; }
+.styles .chip b { display: block; font-weight: 600; font-size: 14.5px; }
+.styles .chip small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.styles .chip[aria-pressed="true"] { background: var(--active); color: var(--fg); border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+.phones { display: flex; flex-direction: column; gap: 12px; }
+.phones .styles .chip { padding: 8px; }
+.phones .styles .chip .look { margin: 0 0 8px; }
+.look { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; margin: 4px 0; border-radius: 10px; background: #000; border: 1px solid var(--line2); }
+.look iframe { position: absolute; left: 0; top: 0; width: 640px; height: 360px; border: 0; transform-origin: 0 0; pointer-events: none; background: #000; }
 
 /* ---------- gaze map */
-.gaze { padding: 12px 0 10px; border-top: 1px solid var(--line); }
-.gaze svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+.gaze { display: flex; flex-direction: column; gap: 10px; }
+.gaze svg { display: block; width: 100%; height: auto; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); user-select: none; -webkit-user-select: none; }
 .gaze.off svg { filter: grayscale(1); opacity: .35; pointer-events: none; }
-.gaze .miss { display: none; margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08);
-  border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); font-size: 13px; }
+.gaze .miss { display: none; }
 .gaze.off .miss { display: block; }
-.gaze.dim { opacity: .4; pointer-events: none; }   /* pupils off: greyed and frozen */
-.gaze.dim svg { filter: grayscale(1); }
-.gaze .hint { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; }
-.gaze .mon { fill: #0b161e; stroke: var(--line2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.gaze .mon.pri { stroke: #2d6a85; }
-.gaze .lbl { fill: var(--soft); text-anchor: middle; font-family: var(--pixel); }
+.gaze.dim { display: none; }
+.gaze .mon { fill: var(--panel); stroke: var(--line2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.gaze .mon.pri { stroke: var(--muted); }
+.gaze .lbl { fill: var(--soft); text-anchor: middle; font-family: var(--mono); }
 .gaze .lbl.sub { fill: var(--muted); }
-.gaze .body { fill: #101d26; stroke: #2d6a85; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.gaze .body { fill: #000; stroke: var(--chip); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .gaze .scr { fill: #000; }
-.gaze .eye { fill: var(--eye); }
-.gaze .cur { fill: var(--pink); }
+.gaze .eye { fill: var(--chip); }
+.gaze .cur { fill: var(--fg); }
 .gaze .grab { cursor: grab; touch-action: none; }
 .gaze .grab.on { cursor: grabbing; }
 .gaze .grab .hit { fill: transparent; }
 
-/* ---------- eye styles, preview strips, skins */
-.place { padding: 2px 0 8px; }
-.place .cur { margin: 0 0 8px; color: var(--soft); font-size: 13.5px; }
-.place .find { display: flex; gap: 8px; }
-.place .find input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--fg); }
-.place ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.place li button { width: 100%; text-align: left; }
+/* ---------- sleep */
+.sleephead { display: flex; flex-direction: column; gap: 14px; }
+.sleephead .big { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
+.sleephead .big b { font-family: var(--mono); font-weight: 500; font-size: 22px; }
+.sleephead .big span { color: var(--muted); font-size: 13.5px; }
+.timeline { position: relative; height: 30px; margin-bottom: 20px; border-radius: 8px; background: var(--sunk); border: 1px solid var(--line); }
+.timeline .span { position: absolute; top: 0; bottom: 0; background: var(--accent-soft); }
+.timeline .now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg); z-index: 1; }
+.timeline .ticks { position: absolute; left: 0; right: 0; top: 100%; display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; background: var(--accent-soft); border: 1px solid var(--line2); }
+.legend i.now { width: 2px; border: 0; border-radius: 0; background: var(--fg); }
+.times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.times label { display: flex; flex-direction: column; gap: 6px; color: var(--soft); font-size: 13px; }
+.times input { font-family: var(--mono); font-size: 16px; }
+
+/* ---------- dock */
+.dockmock { display: flex; flex-wrap: wrap; gap: 10px; }
+.pod { flex: 1 1 190px; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); }
+.pod > small { color: var(--muted); font-size: 12.5px; }
+.pod > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.pod .chip[aria-pressed="false"] { color: var(--muted); text-decoration: line-through; }
+
+/* ---------- attention, AI agents, apps */
+.attn ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.attn li { display: flex; gap: 10px; align-items: baseline; font-size: 13.5px; color: var(--soft); min-width: 0; }
+.attn li time { flex: none; width: 66px; color: var(--muted); font-size: 12.5px; }
+.attn li b { flex: none; font-weight: 600; color: var(--fg); }
+.attn li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attn li.none { color: var(--muted); }
+.attn .kind { flex: none; font-size: 11.5px; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--line2); color: var(--muted); }
+.applist { display: flex; flex-direction: column; }
+.applist:empty::before { content: "No apps yet. They show up here once they've sent a notification."; padding: 16px 20px; color: var(--muted); font-size: 13.5px; }
+.applist > .none { padding: 16px 20px; color: var(--muted); font-size: 13.5px; }
+.app { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; min-height: 64px; padding: 12px 20px; }
+.app + .app { border-top: 1px solid var(--line); }
+.app .nm { flex: 1 1 200px; min-width: 0; }
+.app .nm b { display: block; font-weight: 500; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app .nm small { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.app .ai { font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--line2); color: var(--soft); margin-left: 8px; vertical-align: 1px; }
+.app select { flex: none; min-height: 36px; padding: 6px 10px; border-radius: 9px; background: var(--sunk); border: 1px solid var(--line2); color: var(--fg); font-size: 13.5px; }
+.app select.set { border-color: var(--fg); }
+
+/* ---------- weather place */
+.place { display: flex; flex-direction: column; gap: 12px; }
+.place .cur { margin: 0; color: var(--soft); font-size: 14.5px; }
+.place .find { display: flex; flex-wrap: wrap; gap: 8px; }
+.place .find input { flex: 1 1 240px; }
+.place ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.place ul:empty { display: none; }
+.place li button { width: 100%; justify-content: flex-start; }
 .place li small { color: var(--muted); margin-left: 6px; }
-.place .none { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
-/* ---------- voice dictation */
-.stt .grp { padding: 10px 0 4px; border-top: 1px solid var(--line); }
-.stt .grp > b { display: block; font-weight: 550; font-size: 14.5px; }
-.stt .grp > small, .stt .cur, .stt .priv, .stt .res { display: block; color: var(--muted); font-size: 12.5px; margin: 2px 0 6px; }
-.stt input[type=search] { width: 100%; box-sizing: border-box; }
-.stt input[type=search], .stt input[type=text], .stt input[type=password] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--fg); font: inherit; font-size: 13.5px; }
-.stt .line { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
-.stt .line label { flex: none; width: 74px; color: var(--soft); font-size: 13px; }
-.stt .langs { max-height: 190px; overflow: auto; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; padding: 2px; }
-.stt .langs button { font-size: 12.5px; padding: 5px 9px; }
-.stt .langs button.off { opacity: .45; }
-.stt .warn { margin: 8px 0 4px; padding: 7px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08); border: 1px solid rgba(255, 179, 71, .25); color: #ffcf8a; font-size: 12.5px; }
-.stt .missing { display: flex; gap: 8px; align-items: baseline; opacity: .5; font-size: 12.5px; margin: 3px 0; flex-wrap: wrap; }
-.stt .missing b { font-weight: 550; flex: none; min-width: 120px; }
-.stt code { font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--soft); word-break: break-all; user-select: all; }
+.place .none { margin: 0; color: var(--muted); font-size: 13px; }
+
+/* ---------- dictation */
+.stt .cur { color: var(--muted); font-size: 13px; }
+.stt .langs { max-height: 200px; overflow: auto; display: flex; flex-wrap: wrap; gap: 6px; padding: 2px; }
+.stt .langs .chip { min-height: 32px; padding: 4px 11px; font-size: 13px; }
+.stt .langs .chip.off { opacity: .45; }
+.stt .warn { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--warn-line); color: var(--soft); font-size: 13px; }
+.stt .missing { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; opacity: .6; font-size: 12.5px; margin: 4px 0; }
+.stt .missing b { font-weight: 500; flex: none; min-width: 130px; }
+.stt code { font-size: 11.5px; color: var(--soft); word-break: break-all; user-select: all; }
+.stt .res { display: block; color: var(--muted); font-size: 13px; }
 .stt .res.ok { color: var(--good); }
-.stt .res.bad { color: #ff8a8a; }
-.stt [hidden] { display: none !important; }
-.eyes { padding: 2px 0 8px; }
-.eyes .skinnote, .mk .note { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
-.eyes .skinnote { padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08); border: 1px solid rgba(255, 179, 71, .25); color: var(--warn); }
-.eyes.paused .styles { opacity: .45; }
-.styles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 6px 0 4px; }
-.styles .chip { display: block; text-align: left; padding: 10px 12px; border-radius: 12px; }
-.styles .chip b { display: block; font-weight: 600; font-size: 14.5px; }
-.styles .chip small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
-.phones { padding: 2px 0 8px; }
-.phones .styles .chip { padding: 8px; }
-.phones .styles .chip .look { margin: 0 0 6px; }
-.phones .styles .chip[aria-pressed="true"] .look { border-color: var(--eye); }
-.look { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; margin: 10px 0 6px; border-radius: 10px; background: #000; border: 1px solid var(--line2); }
-.look iframe { position: absolute; left: 0; top: 0; width: 640px; height: 360px; border: 0; transform-origin: 0 0; pointer-events: none; background: #000; }
-.mk .step { padding: 12px 0 10px; border-top: 1px solid var(--line); }
-.mk .step:first-of-type { border-top: 0; }
-.mk h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14.5px; font-weight: 600; }
-.mk h3 i { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #12303e; border: 1px solid #2d6a85; font: 400 17px/1 var(--pixel); font-style: normal; color: var(--eye); }
-.mk .pick.wrap { flex-wrap: wrap; margin-bottom: 8px; }
-.mk textarea { display: block; width: 100%; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--soft);
-  font: 12px/1.4 ui-monospace, "Ubuntu Mono", monospace; resize: vertical; }
-.mk .acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
-.mk ol.howto { margin: 0 0 10px; padding-left: 20px; color: var(--soft); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
-.mk .hint { margin: 8px 0 2px; color: var(--muted); font-size: 12.5px; }
-.mk input[type=file] { max-width: 100%; margin-bottom: 8px; color: var(--soft); font-size: 13px; }
-.mk input[type=file]::file-selector-button { padding: 6px 12px; margin-right: 10px; border-radius: 9px; background: #101d26; border: 1px solid var(--line2); color: var(--soft); font: inherit; cursor: pointer; }
+.stt .res.bad { color: var(--bad); }
+
+/* ---------- skins */
+.mk .step { display: flex; flex-direction: column; gap: 12px; }
+.mk h3 { display: flex; align-items: center; gap: 12px; margin: 0; font-size: 15px; font-weight: 500; }
+.mk h3 i {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--line2); font: 500 12.5px/1 var(--mono); font-style: normal; color: var(--soft);
+}
+.mk textarea {
+  display: block; width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line2); color: var(--soft);
+  font: 12.5px/1.45 var(--mono); resize: vertical;
+}
+.mk ol.howto { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
+.mk input[type=file] { max-width: 100%; color: var(--soft); font-size: 13.5px; }
+.mk input[type=file]::file-selector-button {
+  min-height: 36px; padding: 6px 14px; margin-right: 12px; border-radius: 9px; background: transparent; border: 1px solid var(--line2); color: var(--fg); cursor: pointer;
+}
+.mk .res-head { margin: 0; font-weight: 600; }
+.mk .res-head.good { color: var(--good); }
+.mk .res-head.bad { color: var(--bad); }
+.mk ol.errs { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; color: var(--soft); }
+.mk ol.errs code { color: var(--fg); font-size: 12px; overflow-wrap: anywhere; }
+.mk ol.errs span, .mk ol.errs small { overflow-wrap: anywhere; }
+.mk ol.errs small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.mk details { color: var(--soft); font-size: 13px; }
+.mk details summary { color: var(--muted); }
+.mk details ul { margin: 6px 0 0; padding-left: 20px; overflow-wrap: anywhere; }
+#mk-out { display: flex; flex-direction: column; gap: 10px; }
+.skin-row { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 8px 0; flex-wrap: wrap; }
+.skin-row + .skin-row, .hp-maker + .skin-row, .skin-row + .hp-maker { border-top: 1px solid var(--line); }
+.skin-row .txt { flex: 1; min-width: 140px; }
+.skin-row b { display: block; font-weight: 500; font-size: 15px; overflow-wrap: anywhere; }
+.skin-row small { display: block; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.skin-row .tag { font-size: 11.5px; font-weight: 500; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--line2); color: var(--soft); }
+.skin-row .ask { color: var(--bad); font-size: 13.5px; }
+.skin-row input, .mk .name input { flex: 1; min-width: 140px; min-height: 36px; padding: 6px 10px; border-radius: 9px; background: var(--sunk); border: 1px solid var(--line2); color: var(--fg); max-width: 320px; }
+.mk .name { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--soft); }
+.hp-maker { display: flex; flex-direction: column; gap: 14px; padding: 14px 0 16px; }
+.mk .empty { margin: 0; color: var(--muted); font-size: 13.5px; }
+
 /* ---------- connections */
 .conn.mask dd.sens, .conn.mask #conn-why, .conn.mask #conn-msg, .conn.mask #conn-nets, .conn.mask #conn-ip, .conn.mask #conn-pre, .conn.mask #conn-origin { filter: blur(6px); user-select: none; transition: filter .15s; }
 .conn.mask #conn-ip::placeholder { color: transparent; }
-.eye { flex: none; width: 34px; height: 34px; padding: 0; border-radius: 10px; border: 1px solid var(--line2); background: transparent; color: var(--soft); font-size: 17px; cursor: pointer; }
-.eye:hover { color: var(--fg); border-color: var(--soft); }
-.conn .st { margin: 4px 0 10px; padding: 11px 12px; border-radius: 12px; background: #0b161e; border: 1px solid var(--line2); }
-.conn .st-head { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; }
-.conn .st-head i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 8px var(--bad); }
-.conn .st.up .st-head i { background: var(--good); box-shadow: 0 0 8px var(--good); }
-.conn .st.wait .st-head i { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
-.conn .st-why { margin: 5px 0 0; color: var(--soft); font-size: 13px; overflow-wrap: anywhere; }
-.conn dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 10px 0 0; font-size: 13px; }
+.conn .st { display: flex; flex-direction: column; gap: 6px; }
+.conn .st-head { display: flex; align-items: center; gap: 10px; }
+.conn .st-head i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
+.conn .st.up .st-head i { background: var(--good); }
+.conn .st.wait .st-head i { background: var(--warn); }
+.conn .st-head span { flex: 1; font-weight: 600; font-size: 17px; }
+#conn-eye { background: transparent; border-color: var(--line2); color: var(--fg); }
+#conn-eye:hover { border-color: var(--muted); }
+.conn .st-why { margin: 0; color: var(--muted); font-size: 13.5px; overflow-wrap: anywhere; }
+.conn .st-why:empty { display: none; }
+.conn dl { display: grid; grid-template-columns: minmax(110px, 150px) minmax(0, 1fr); gap: 8px 16px; margin: 8px 0 0; padding: 12px 14px; border-radius: 10px;
+  background: var(--sunk); border: 1px solid var(--line); font-size: 13.5px; }
+.conn dl:empty { display: none; }
 .conn dt { color: var(--muted); }
 .conn dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
 .conn dd small { color: var(--muted); font-size: 12px; }
-.conn dd code, .conn .cmd { font: 12px/1.4 ui-monospace, "Ubuntu Mono", monospace; color: var(--eye); }
-.conn dd.good { color: var(--good); } .conn dd.warn { color: var(--warn); } .conn dd.bad { color: #ff8a8a; }
-.conn .acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
-.conn .acts .chip { min-width: 0; }
-.conn .chip:disabled { opacity: .4; cursor: default; }
-.conn .chip.go { background: #12303e; border-color: var(--good); color: var(--fg); }
-.conn .chip.danger { border-color: #7a2f38; color: #ff9aa4; }
-.conn pre { margin: 0 0 10px; padding: 9px 11px; border-radius: 10px; background: #060d12; border: 1px solid var(--line); color: var(--soft);
-  font: 12px/1.45 ui-monospace, "Ubuntu Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
-.conn pre[hidden], .conn [hidden] { display: none; }
-.conn .line { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }
-.conn input[type=text], .conn input[type=number] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2);
-  color: var(--fg); font: inherit; font-size: 13.5px; }
-.conn input[type=number] { flex: none; width: 110px; }
-.conn .nets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
-.conn .nets .chip { display: inline-flex; align-items: center; gap: 6px; }
+.conn dd code, .conn .cmd { font: 12.5px/1.45 var(--mono); color: var(--fg); }
+.conn dd.good { color: var(--good); } .conn dd.warn { color: var(--warn); } .conn dd.bad { color: var(--bad); }
+.conn pre { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); color: var(--soft);
+  font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
+.conn .ipline { display: flex; gap: 8px; flex: 1 1 260px; justify-content: flex-end; }
+.conn .ipline input { flex: 1 1 auto; max-width: 240px; font-family: var(--mono); }
+.conn input[type=number] { width: 140px; font-family: var(--mono); }
+.conn .nets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .conn .nets .chip b { font-weight: 400; color: var(--muted); }
-.conn .nets .none { color: var(--muted); font-size: 12.5px; }
-.conn .row.netrow { flex-direction: column; align-items: stretch; gap: 0; cursor: default; }
-.conn details { margin: 0 0 10px; border-top: 1px solid var(--line); padding-top: 9px; }
-.conn details > summary { cursor: pointer; color: var(--soft); font-size: 14px; font-weight: 550; padding: 3px 0; }
-.conn details[open] > summary { margin-bottom: 8px; }
-.conn .warnbox { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 179, 71, .08);
-  border: 1px solid rgba(255, 179, 71, .25); color: #ffcf8a; font-size: 12.5px; }
-.conn .hint { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
-.conn .ask { margin: 0 0 10px; padding: 9px 10px; border-radius: 10px; background: rgba(255, 93, 108, .08); border: 1px solid rgba(255, 93, 108, .3);
-  color: var(--soft); font-size: 13px; }
-.conn .ask .acts { margin: 8px 0 0; }
-.conn .count { font-family: var(--pixel); font-size: 22px; color: var(--eye); }
-.conn .code { letter-spacing: .12em; font-family: ui-monospace, "Ubuntu Mono", monospace; }
-.conn .step { margin: 0 0 10px; color: var(--soft); font-size: 13px; }
-.conn .cmdbox { margin: 0 0 8px; padding: 9px 11px; border-radius: 10px; background: #060d12; border: 1px solid var(--line2); overflow-wrap: anywhere; user-select: all; }
-.mk .chip:disabled { opacity: .4; cursor: default; }
-.mk .chip.go { background: #12303e; border-color: var(--good); color: var(--fg); }
-.mk .res-head { margin: 0 0 8px; font-weight: 600; }
-.mk .res-head.good { color: var(--good); }
-.mk .res-head.bad { color: var(--bad); }
-.mk ol.errs { margin: 0 0 8px; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--soft); }
-.mk ol.errs code { color: var(--eye); font-size: 12px; overflow-wrap: anywhere; }
-.mk ol.errs span, .mk ol.errs small { overflow-wrap: anywhere; }
-.mk ol.errs small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; }
-.mk details { margin: 0 0 8px; color: var(--soft); font-size: 13px; }
-.mk details summary { cursor: pointer; color: var(--muted); }
-.mk details ul { margin: 6px 0 0; padding-left: 20px; overflow-wrap: anywhere; }
-.mk .skin-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
-.mk .skin-row:first-child { border-top: 0; }
-.mk .skin-row .txt { flex: 1; min-width: 120px; }
-.mk .skin-row b { display: block; font-weight: 550; font-size: 14px; overflow-wrap: anywhere; }
-.mk .skin-row small { display: block; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
-.mk .skin-row .tag { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #12303e; color: var(--good); }
-.mk .skin-row .ask { color: var(--bad); font-size: 13px; }
-.mk .name { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; font-size: 13px; color: var(--soft); }
-.mk .name input, .mk .skin-row input { padding: 7px 10px; border-radius: 9px; background: #0b161e; border: 1px solid var(--line2); color: var(--fg); font: inherit; max-width: 320px; }
-.mk .skin-row input { flex: 1; min-width: 120px; }
-.mk .empty { color: var(--muted); font-size: 13px; margin: 0 0 4px; }
+.conn .nets .none { color: var(--muted); font-size: 13.5px; }
+.conn .row.netrow { flex-direction: column; align-items: stretch; gap: 12px; cursor: default; }
+.conn .ask { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--bad-line); color: var(--soft); font-size: 13.5px; }
+.conn .count { font-family: var(--mono); font-size: 18px; color: var(--fg); }
+.conn .code { letter-spacing: .12em; font-family: var(--mono); }
+.conn .step { margin: 0; color: var(--soft); font-size: 13.5px; }
+.conn .cmdbox { padding: 10px 12px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line2); overflow-wrap: anywhere; user-select: all; }
+#conn-wiz { display: flex; flex-direction: column; gap: 12px; }
+#conn-wiz:empty { display: none; }
 
-/* ---------- footer + toast */
-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 4px clamp(16px, 4vw, 40px) 40px;
-  max-width: 1480px; margin: 0 auto; color: var(--muted); font-size: 13px; }
-footer code { color: var(--soft); }
-#reset { padding: 8px 14px; border-radius: 10px; background: transparent; border: 1px solid var(--line2); color: var(--soft); }
-#reset.armed { border-color: var(--bad); color: var(--bad); }
+/* ---------- toast */
 #toast {
-  position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: .25s;
-  padding: 10px 16px; border-radius: 10px; background: #102331; border: 1px solid #2d6a85; font-size: 14px; z-index: 9;
+  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 16px); opacity: 0; pointer-events: none; transition: .2s; z-index: 9;
+  max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 10px; background: var(--fg); color: var(--bg); font-size: 14px; box-shadow: 0 8px 28px var(--shadow);
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
-#toast.bad { background: #2a1015; border-color: var(--bad); }
-@media (max-width: 560px) {
+#toast.bad { background: var(--bad); color: #fff; }
+#reset.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
+
+@media (max-width: 820px) {
+  .shell { flex-direction: column; align-items: stretch; }
+  .side { position: static; width: auto; height: auto; overflow: visible; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; gap: 14px; }
+  .navwrap { flex-direction: row; gap: 4px; overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px; }
+  .navgrp { display: contents; }
+  .navlabel { display: none; }
+  .nav { flex: none; white-space: nowrap; }
+  .sidestatus { margin-top: 0; }
+  .main { padding: 0 16px; }
+  .topbar { padding-top: 12px; }
+  .panel > * { padding-left: 16px; padding-right: 16px; }
+  .panel > .row.sub { padding-left: 32px; }
   .times { grid-template-columns: 1fr; }
-  .status { width: 100%; }
+  .conn dl { grid-template-columns: 1fr; gap: 2px; }
+  .conn dd { margin-bottom: 6px; }
 }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">
-    <div class="logo" aria-hidden="true"><i></i><i></i></div>
-    <div><h1>CHIP</h1><p>Desk buddy dashboard</p></div>
-  </div>
-  <div class="status" id="status" role="status">
-    <i class="dot"></i>
-    <div><b id="st-main">Looking for Chip…</b><span id="st-sub"></span><span class="sync" id="st-sync"></span></div>
-  </div>
-</header>
-
-<main>
-  <section class="hero">
-    <div class="card sleep">
-      <div class="card-head"><span class="ic">😴</span><h2>Sleep</h2><input type="checkbox" class="sw" data-k="sleep" aria-label="Sleep at night"></div>
-      <p class="note">Asleep, Chip closes its eyes, dims the screen and stays quiet. A tap wakes it for 20 seconds.</p>
-      <div class="group" data-needs="sleep">
-        <div class="big"><b id="sl-range">11:00 PM → 6:30 AM</b><span id="sl-len"></span></div>
-        <div class="timeline" id="timeline" aria-hidden="true">
-          <i class="now" id="tl-now"></i>
-          <div class="ticks"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span></div>
-        </div>
-        <div class="times">
-          <label>Goes to sleep<input type="time" data-k="sleepAt" required></label>
-          <label>Wakes up<input type="time" data-k="wakeAt" required></label>
-        </div>
-        <div class="chips" id="presets"></div>
-        <div class="row range"><span class="txt"><b>Screen while asleep</b></span>
-          <input type="range" data-k="brightnessNight" min="0" max="100" step="1"><output></output></div>
-      </div>
-      <label class="row"><span class="txt"><b>Get drowsy when you're away</b><small>Heavy eyelids and yawns when nobody has touched it and the laptop is idle or locked</small></span>
-        <input type="checkbox" class="sw" data-k="drowsy"></label>
-      <div class="row range sub" data-needs="drowsy"><span class="txt"><b>After</b></span>
-        <input type="range" data-k="drowsyMin" min="5" max="240" step="5"><output></output></div>
+<div class="shell">
+<aside class="side">
+  <a class="brand" href="#appearance">
+    <img class="only-dark" src="/logo/chip-dark.png" alt="Chip">
+    <img class="only-light" src="/logo/chip-light.png" alt="Chip">
+    <span><b>Settings</b><small>Your desk buddy</small></span>
+  </a>
+  <label class="search">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 0 0 0-13zM15.5 15.5L20 20"/></svg>
+    <input type="search" id="nav-q" placeholder="Search settings" aria-label="Search settings" autocomplete="off" spellcheck="false">
+  </label>
+  <nav class="navwrap" id="nav" aria-label="Settings topics"></nav>
+  <p class="nomatch" id="nav-none" hidden></p>
+  <a class="sidestatus" href="#connections" title="Connections">
+    <div class="status" id="status" role="status">
+      <i class="dot"></i>
+      <div><b id="st-main">Looking for Chip…</b><span id="st-sub"></span><span class="sync" id="st-sync"></span></div>
     </div>
-  </section>
-
-  <section class="grid" id="grid"></section>
+  </a>
+</aside>
+<main class="main">
+  <div class="topbar">
+    <button type="button" class="themebtn" id="theme-btn">
+      <svg class="only-dark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8a4 4 0 0 0 0-8zM12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
+      <svg class="only-light" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+      <span id="theme-txt">Light</span>
+    </button>
+  </div>
+  <div id="pages"></div>
 </main>
-
-<footer>
-  <span>Saved on this laptop in <code>~/.config/deskbuddy/settings.json</code>. The drawer toggles on the phone stay in sync with this page.</span>
-  <button id="reset">Reset everything to defaults</button>
-</footer>
+</div>
 <div id="toast" role="status"></div>
 
 <script>
@@ -379,264 +421,438 @@ footer code { color: var(--soft); }
   const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  // ---------------------------------------------------------------- cards
+  // ---------------------------------------------------------------- pages
+  // One page per topic, each a list of groups (a heading over a boxed list of rows). A group with `needs` is replaced by
+  // a line saying what to turn on while that switch is off; a row with `needs` is indented under the switch it depends on
+  // and hidden while it is off. Every input keeps its data-k / id, so the code further down finds it on any page.
   const sw = (k, label, help = "", needs = "") => ({ k, label, help, needs });
-  const range = (k, label, min, max, step, unit, needs = "") => ({ k, label, min, max, step, unit, needs, range: true });
+  const big = (k, label, help) => ({ k, label, help, needs: "", big: true });
+  const range = (k, label, min, max, step, unit, needs = "", unless = false) => ({ k, label, min, max, step, unit, needs, unless, range: true });
   const choice = (k, label, help, options, needs = "") => ({ k, label, help, options, needs });  // a row of buttons, one per value
-  const section = (label) => ({ section: label });
-  const IDLE = [["curious", "🧐 Curious"], ["happyBlip", "😊 Happy"], ["suspicious", "🤨 Suspicious"], ["look", "👀 Look around"],
-    ["wink", "😉 Wink"], ["whistle", "😗 Whistle"], ["sneeze", "🤧 Sneeze"], ["peek", "🫣 Peek"], ["spin", "🌀 Spin"],
-    ["wiggle", "💃 Wiggle"], ["smirkBlip", "😏 Smirk"], ["yawn", "🥱 Yawn (away)"], ["bored", "😑 Bored (away)"], ["nod", "😴 Nod off (away)"]];
-  // the eyes card's look picker and the skin maker's three steps; filled in below (all text from the pack, the bridge or the user via textContent)
-  const EYES_HTML = `<div class="eyes" id="eyes"><p class="skinnote" id="eyes-skin" hidden>A custom skin is on, so Chip's own looks are paused. ` +
-    `Use “Back to Chip's own look” in Make your own Chip to switch them on again.</p><div class="styles" id="eye-styles"></div>` +
-    `<div class="row choice" id="pupil-row" hidden><span class="txt"><b>Pupil size</b><small>The dark centre that follows your cursor</small></span>` +
-    `<div class="pick" id="pupil-pick"></div></div></div>`;
-  const PHONES_HTML = `<div class="phones" id="phones"><div class="row"><span class="txt"><b>Default headphones</b>` +
-    `<small>Worn when following is off, or when the skin has no headphones of its own.</small></span></div><div class="styles" id="phones-pick"></div></div>`;
-  const SKINS_HTML = `<div class="mk" id="mk"><p class="note">Turn your pet, yourself, a character or your own art into Chip. An AI chat does the drawing; Chip checks the result before using it.</p>` +
-    `<div class="step"><h3><i>1</i>Make your own face for any character</h3>` +
+  const raw = (html) => ({ raw: html });
+  const IDLE = [["curious", "Curious"], ["happyBlip", "Happy"], ["suspicious", "Suspicious"], ["look", "Look around"],
+    ["wink", "Wink"], ["whistle", "Whistle"], ["sneeze", "Sneeze"], ["peek", "Peek"], ["spin", "Spin"],
+    ["wiggle", "Wiggle"], ["smirkBlip", "Smirk"], ["yawn", "Yawn (away)"], ["bored", "Bored (away)"], ["nod", "Nod off (away)"]];
+  const SWATCHES = [["cyan", "Cyan", "#2ee6f2"], ["terracotta", "Terracotta", "#ee9358"], ["sage", "Sage", "#b4d38c"], ["violet", "Violet", "#a78bfa"],
+    ["rose", "Rose", "#f472b6"], ["amber", "Amber", "#f5c04a"], ["sky", "Sky", "#6cb8ff"], ["custom", "Custom", "var(--custom)"]];
+  const CHEV = `<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6l6-6"/></svg>`;
+  const summary = (title, sub) => `<summary><span class="txt"><b class="lbl">${title}</b><small class="sublbl">${sub}</small></span>${CHEV}</summary>`;
+  const turnOn = (what, page) => `Turn on ${what}${page ? ` on the <a href="#${page}">${page[0].toUpperCase() + page.slice(1)}</a> page` : " above"} to change these.`;
+
+  // the bits of markup the code below fills in (all text from the pack, the bridge or the user goes in via esc() or textContent)
+  const SWATCH_HTML = `<div class="swatches"><span><b class="lbl">Accent colour</b><small class="sublbl">Eyes, glow and every colour in the pack's art, derived from this one</small></span>` +
+    `<div class="pick" role="group" aria-label="Accent colour">` + SWATCHES.map(([v, label, c]) =>
+      `<button class="swb" data-k="accent" data-v="${v}" aria-pressed="false"><i style="background:${c}"></i><span>${label}</span></button>`).join("") + `</div></div>`;
+  const EYES_HTML = `<div class="eyes" id="eyes"><span><b class="lbl">Eye style</b><small class="sublbl">The looks in Chip's pack</small></span>` +
+    `<p class="warnbox" id="eyes-skin" hidden><b>A custom skin is on,</b> so Chip's own looks are paused. Use “Back to Chip's own look” on the <a href="#skins">Skins</a> page to switch them on again.</p>` +
+    `<div class="styles" id="eye-styles"></div></div>`;
+  const PUPIL_HTML = `<div class="row choice sub" id="pupil-row" hidden><span class="txt"><b>Pupil size</b><small>The dark centre that follows your cursor</small></span>` +
+    `<div class="pick" id="pupil-pick"></div></div>`;
+  const PHONES_HTML = `<div class="phones" id="phones"><span><b class="lbl">Default headphones</b>` +
+    `<small class="sublbl">Worn when following is off, or when the skin has no headphones of its own</small></span><div class="styles" id="phones-pick"></div></div>`;
+  // the monitor setup (filled in by the gaze map code): hidden with the mouse-follow toggle off, and with pupils off
+  const GAZE_HTML = `<div class="gaze off" id="gaze" data-needs="showPupils"><span><b class="lbl">Where the phone sits</b>` +
+    `<small class="sublbl">Arrange your screens in Settings, Displays the way they sit on your desk, then drag Chip to where the phone really is.</small></span>` +
+    `<p class="warnbox miss"><b>The GNOME extension isn't running.</b> Run laptop/install.sh, then log out and back in.</p>` +
+    `<svg id="gaze-map" role="img" aria-label="Your screens and where the phone sits"></svg></div>`;
+  const SLEEP_HTML = `<div class="sleephead">` +
+    `<div class="big"><b id="sl-range">11:00 PM → 6:30 AM</b><span id="sl-len"></span></div>` +
+    `<div class="timeline" id="timeline" aria-hidden="true"><i class="now" id="tl-now"></i>` +
+    `<div class="ticks"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span></div></div>` +
+    `<div class="legend" aria-hidden="true"><span><i></i>Asleep</span><span><i class="now"></i>Now</span></div>` +
+    `<div class="times"><label>Goes to sleep<input type="time" class="field" data-k="sleepAt" required></label>` +
+    `<label>Wakes up<input type="time" class="field" data-k="wakeAt" required></label></div>` +
+    `<div class="chips" id="presets" role="group" aria-label="Sleep presets"></div></div>`;
+  const DOCK = [
+    ["Time & outside", [["dockTime", "Time"], ["dockWeather", "Weather"], ["dockAqi", "AQI"]]],
+    ["Laptop", [["dockCpu", "CPU"], ["dockLaptopTemp", "Temp"], ["dockLaptopBattery", "Battery"]]],
+    ["Phone", [["dockPhoneBattery", "Battery"], ["dockPhoneTemp", "Temp"]]],
+  ];
+  const DOCK_HTML = `<div class="dockmock">` + DOCK.map(([name, items]) =>
+    `<div class="pod" role="group" aria-label="${name}"><small>${name}</small><div>` +
+    items.map(([k, label]) => `<button class="chip" data-k="${k}" aria-pressed="true">${label}</button>`).join("") +
+    `</div></div>`).join("") + `</div>`;
+  const PLACE_HTML = `<div class="place"><p class="cur" id="place-cur"></p><form class="find" id="place-form">` +
+    `<input type="search" class="field" id="place-q" placeholder="Search a city, e.g. Mumbai" autocomplete="off" aria-label="Search for a city">` +
+    `<button class="chip go" id="place-go">Search</button></form><ul id="place-res"></ul><p class="none" id="place-none" hidden></p>` +
+    `<div class="acts"><button class="chip" id="place-reset" type="button">Use the default place</button></div></div>`;
+  const SKIN_STEPS = `<div class="step"><h3><i>1</i>Make a face for any character</h3>` +
     `<ol class="howto"><li>Click <b>Copy prompt</b> below.</li>` +
     `<li>Paste it into any AI chat (ChatGPT, Gemini, Claude…).</li>` +
     `<li>Under it, describe your character, pet or yourself, and attach any pictures or art. Name it if you like.</li>` +
     `<li>Download the JSON file the AI makes (or copy its code block).</li>` +
     `<li>Upload it in step 2, check it, then click <b>Use on Chip</b>.</li></ol>` +
     `<textarea id="mk-prompt" readonly rows="6" aria-label="Master prompt for your AI chat">Loading the prompt…</textarea>` +
-    `<div class="acts"><button class="chip" id="mk-copy" disabled>Copy prompt</button></div>` +
+    `<div class="acts"><button class="chip go" id="mk-copy" disabled>Copy prompt</button></div>` +
     `<p class="hint">Works for phones and tablets, landscape or portrait. Your photos go only to that chatbot; Chip only receives the finished JSON.</p></div>` +
     `<div class="step"><h3><i>2</i>Upload the result</h3><input type="file" id="mk-file" accept=".json,application/json,text/plain" aria-label="Skin JSON file">` +
     `<textarea id="mk-paste" rows="3" spellcheck="false" placeholder="…or paste the JSON your AI sent" aria-label="Paste the skin JSON"></textarea>` +
     `<div class="acts"><button class="chip" id="mk-check">Check it</button></div></div>` +
-    `<div class="step" id="mk-result" hidden><h3><i>3</i>Result</h3><div id="mk-out"></div></div>` +
-    `<div class="step"><h3>Your skins</h3><div id="mk-list"></div><div class="acts"><button class="chip" id="mk-own">Back to Chip's own look</button></div></div></div>`;
-  const PLACE_HTML = `<div class="place"><p class="cur" id="place-cur"></p><form class="find" id="place-form">` +
-    `<input type="search" id="place-q" placeholder="Search a city, e.g. Mumbai" autocomplete="off" aria-label="Search for a city"> ` +
-    `<button class="chip" id="place-go">Search</button></form><ul id="place-res"></ul><p class="none" id="place-none" hidden></p>` +
-    `<div class="acts"><button class="chip" id="place-reset">Use the default place</button></div></div>`;
-  const STT_HTML = `<div class="stt" data-needs="dictation">` +
-    `<div class="grp"><small>📱 Phone: offline, ~6 s a sentence, the laptop stays free. 💻 Laptop: offline, ~2 s, bigger model. ☁️ Cloud API: fastest, but your audio goes to the provider.</small><b>Language</b><small class="cur" id="stt-cur"></small>` +
-    `<input type="search" id="stt-q" placeholder="Search languages, e.g. Hindi or ja" autocomplete="off" aria-label="Search languages">` +
-    `<div class="langs" id="stt-langs"></div><div class="warn" id="stt-warn" hidden></div></div>` +
-    `<div class="grp" data-stt-show="laptop"><b>Laptop model</b><small>Bigger models understand more but are slower. Automatic uses small, or base in fast mode.</small>` +
-    `<div class="seg" id="stt-models"></div><div id="stt-missing"></div></div>` +
-    `<div class="grp" data-stt-show="cloud"><b>Cloud provider</b><div class="seg" id="stt-providers"></div>` +
-    `<div id="stt-model-pick" class="seg" style="margin-top:8px"></div>` +
-    `<div class="line" id="stt-model-free" hidden><label for="stt-model">Model</label><input type="text" id="stt-model" placeholder="e.g. whisper-1" autocomplete="off" spellcheck="false"></div>` +
-    `<div class="line" id="stt-url-row" hidden><label for="stt-url">Base URL</label><input type="text" id="stt-url" placeholder="https://my-server.example/v1" autocomplete="off" spellcheck="false"></div>` +
+    `<div class="step" id="mk-result" hidden><h3><i>3</i>Result</h3><div id="mk-out"></div></div>`;
+  const SKIN_LIST = `<div class="blk"><div id="mk-list"></div><div class="acts"><button class="chip" id="mk-own">Back to Chip's own look</button></div></div>`;
+  const STT_ENGINES = `<p class="hint">Phone: offline, about 6 s a sentence, and the laptop stays free. Laptop: offline, about 2 s, with a bigger model. ` +
+    `Cloud API: the fastest, but your audio goes to the provider.</p>`;
+  const STT_PHONE = `<p class="hint" data-stt-show="phone">Needs the phone's speech engine: once, in Termux on the phone, run <code>bash ~/deskbuddy/stt-setup.sh</code> ` +
+    `(about 10 minutes, optional). Without it, pick Laptop or Cloud API.</p>`;
+  const STT_LANG = `<div class="blk"><span><b class="lbl">Language</b><small class="sublbl cur" id="stt-cur"></small></span>` +
+    `<label class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 0 0 0-13zM15.5 15.5L20 20"/></svg>` +
+    `<input type="search" id="stt-q" placeholder="Search languages, e.g. Hindi or ja" autocomplete="off" aria-label="Search languages" style="background:var(--sunk)"></label>` +
+    `<div class="langs" id="stt-langs"></div><div class="warn" id="stt-warn" hidden></div></div>`;
+  const STT_LAPTOP = `<div class="blk"><span><b class="lbl">Model</b><small class="sublbl">Bigger models understand more but are slower. Automatic uses small, or base in fast mode.</small></span>` +
+    `<div class="seg" id="stt-models"></div><div id="stt-missing"></div></div>`;
+  const STT_CLOUD = `<div class="blk"><span><b class="lbl">Provider</b></span><div class="seg" id="stt-providers"></div>` +
+    `<div id="stt-model-pick" class="seg"></div>` +
+    `<div class="line" id="stt-model-free" hidden><label for="stt-model">Model</label><input type="text" class="field" id="stt-model" placeholder="e.g. whisper-1" autocomplete="off" spellcheck="false"></div>` +
+    `<div class="line" id="stt-url-row" hidden><label for="stt-url">Base URL</label><input type="text" class="field" id="stt-url" placeholder="https://my-server.example/v1" autocomplete="off" spellcheck="false"></div>` +
     `<small class="res bad" id="stt-url-bad" hidden>The URL must start with https://</small>` +
-    `<div class="line" id="stt-region-row" hidden><label for="stt-region">Region</label><input type="text" id="stt-region" placeholder="e.g. westeurope" autocomplete="off" spellcheck="false"></div>` +
-    `<div class="line"><label for="stt-key">API key</label><input type="password" id="stt-key" placeholder="Paste a key to replace it" autocomplete="new-password" spellcheck="false">` +
-    `<button class="chip" id="stt-save">Save</button><button class="chip" id="stt-clear">Clear</button></div>` +
+    `<div class="line" id="stt-region-row" hidden><label for="stt-region">Region</label><input type="text" class="field" id="stt-region" placeholder="e.g. westeurope" autocomplete="off" spellcheck="false"></div></div>` +
+    `<div class="blk"><div class="line"><label for="stt-key">API key</label><input type="password" class="field" id="stt-key" placeholder="Paste a key to replace it" autocomplete="new-password" spellcheck="false">` +
+    `<button class="chip go" id="stt-save">Save</button><button class="chip" id="stt-clear">Clear</button></div>` +
     `<small class="res" id="stt-keystate"></small>` +
-    `<small>Keys are kept only on this laptop (~/.config/deskbuddy/secrets.json, owner-only) and are never sent to the phone or shown again.</small></div>` +
-    `<div class="grp"><small class="priv" id="stt-priv"></small>` +
-    `<div class="line"><button class="chip" id="stt-test">Test</button><span class="res" id="stt-res"></span></div></div></div>`;
-  // the Connections card: link status, actions, the pairing wizard (all dynamic text goes through esc() or textContent)
-  const CONN_TOP = `<p class="note" id="conn-origin" hidden></p><div class="st" id="conn-st"><div class="st-head"><i></i><span id="conn-main">Checking…</span></div>` +
+    `<p class="hint">Keys are kept only on this laptop (<code>~/.config/deskbuddy/secrets.json</code>, owner-only) and are never sent to the phone or shown again.</p></div>`;
+  const STT_TEST = `<div class="row"><span class="txt"><b>Test the engine</b><small class="priv" id="stt-priv"></small></span>` +
+    `<span class="res" id="stt-res"></span><button class="chip" id="stt-test">Test</button></div>`;
+  const ATTN_TRY = `<div class="row"><span class="txt"><b>Test the alert</b><small>Blinks and plays the sound once, the way a real alert would</small></span>` +
+    `<button class="chip" id="torch-test">Test</button></div>` +
+    `<div class="attn"><b class="lbl">Recent alerts</b><ul id="attn-log"><li class="none">No alerts yet</li></ul></div>`;
+  // the Connections page: link status, actions, the pairing wizard (all dynamic text goes through esc() or textContent)
+  const CONN_TOP = `<div class="blk"><p class="warnbox" id="conn-origin" hidden></p>` +
+    `<div class="st" id="conn-st"><div class="st-head"><i></i><span id="conn-main">Checking…</span>` +
+    `<button class="chip" id="conn-eye" aria-pressed="true">Show details</button></div>` +
     `<p class="st-why" id="conn-why"></p><dl id="conn-dl"></dl></div>` +
-    `<div class="acts"><button class="chip" id="conn-reconnect">🔄 Reconnect</button><button class="chip" id="conn-find">📡 Find phone</button>` +
-    `<button class="chip" id="conn-checks">🩺 Run checks</button></div>` +
-    `<pre id="conn-pre" hidden></pre>` +
-    `<div class="line"><input type="text" id="conn-ip" inputmode="decimal" placeholder="Phone IP, e.g. 192.168.1.9" autocomplete="off" spellcheck="false" aria-label="Phone IP address">` +
-    `<button class="chip" id="conn-setip">Set IP</button></div><p class="hint" id="conn-msg" hidden></p>`;
-  const CONN_NETS = `<div class="row netrow" data-needs="linkHomeOnly"><span class="txt"><b>Home networks</b>` +
+    `<div class="acts"><button class="chip" id="conn-reconnect">Reconnect</button><button class="chip" id="conn-find">Find phone</button>` +
+    `<button class="chip" id="conn-checks">Run checks</button></div>` +
+    `<p class="hint" id="conn-msg" hidden></p><pre id="conn-pre" hidden></pre></div>` +
+    `<div class="row range"><label class="txt" for="conn-ip"><b>Phone's address</b><small>Set it by hand when Find phone can't see it</small></label>` +
+    `<span class="ipline"><input type="text" class="field" id="conn-ip" inputmode="decimal" placeholder="e.g. 192.168.1.9" autocomplete="off" spellcheck="false">` +
+    `<button class="chip" id="conn-setip">Set IP</button></span></div>`;
+  const CONN_NETS = `<div class="row netrow sub" data-needs="linkHomeOnly"><span class="txt"><b>Home networks</b>` +
     `<small>Chip only connects (and only scans) on these. “wired” means a cable. Up to 10.</small></span>` +
     `<div class="nets" id="conn-nets"></div></div>`;
-  const CONN_END = `<details id="conn-adv"><summary>Advanced</summary>` +
-    `<div class="warnbox">⚠️ A wrong port stops the tunnel, and nothing here can fix it from the phone. Only change it if you moved sshd in Termux (<code>sshd -p</code>). Range 1024–65535.</div>` +
-    `<div class="line"><label for="conn-port" style="flex:1;color:var(--soft);font-size:13.5px">Phone's ssh port</label>` +
-    `<input type="number" id="conn-port" min="1024" max="65535" step="1" inputmode="numeric"><button class="chip" id="conn-port-save">Save</button></div></details>` +
-    `<details id="conn-rep"><summary>Replace phone</summary>` +
-    `<p class="hint">Pairs a different phone. The new phone is trusted only after you type the code it shows. Do this on your home Wi-Fi.</p>` +
+  // what to do on the phone itself, shown before and during pairing and after it
+  const PHONE_PREP = `<p class="step"><b>First, on the new phone:</b> install <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">Termux</a> ` +
+    `and <a href="https://f-droid.org/packages/com.termux.api/" target="_blank" rel="noopener">Termux:API</a> from F-Droid (the same source for both: mixing sources breaks them; the Play Store's Termux is outdated). ` +
+    `Open Termux once, then do step 1 below.</p>`;
+  const PHONE_FACE = `<p class="step"><b>Then on the phone:</b> open <code>http://127.0.0.1:8080</code> in Chrome, then ⋮ → <b>Install app</b> (or “Add to Home screen”). ` +
+    `Chip then opens full screen and keeps the screen on while it shows. Switch on <b>Personal phone</b> above if it's a phone you also use. ` +
+    `Open Termux to start Chip (or type <code>chip-start</code>); type <code>chip-stop</code>, or tap Exit in Termux's notification, to stop it. ` +
+    `An always-on phone can use Termux:Boot and kiFOSSk instead.</p>`;
+  const CONN_END = `<details id="conn-adv">${summary("Phone's ssh port", "Only change it if you moved sshd in Termux")}<div class="body">` +
+    `<p class="warnbox"><b>Careful.</b> A wrong port stops the tunnel, and nothing here can fix it from the phone. Use the port you gave <code>sshd -p</code>, from 1024 to 65535.</p>` +
+    `<div class="line"><label for="conn-port">Port</label><input type="number" class="field" id="conn-port" min="1024" max="65535" step="1" inputmode="numeric">` +
+    `<button class="chip" id="conn-port-save">Save</button></div></div></details>` +
+    `<details id="conn-rep">${summary("Replace phone", "Pair a different phone with this laptop")}<div class="body">` +
+    `<p class="hint">The new phone is trusted only after you type the code it shows. Do this on your home Wi-Fi.</p>` +
     `<div id="conn-forget"><button class="chip danger" id="conn-forget-btn">Forget this phone…</button></div><div id="conn-ask" hidden></div>` +
-    `<div id="conn-wiz"></div></details>`;
-  const CARDS = [
-    { icon: "🔔", title: "Attention alerts", master: "torch", attention: true,
-      note: "When an AI agent or an app needs you, Chip blinks the phone's torch and/or plays a sound, and says who.", rows: [
-      section("What counts"),
-      sw("torchAsk", "AI agent asks for permission or input", "Claude Code, Gemini CLI or opencode waiting on a question", "torch"),
-      sw("torchDone", "AI agent finished and waiting for you", "An agent's turn has ended", "torch"),
-      sw("torchApps", "AI app notifications", "Claude, ChatGPT, Antigravity, and AI sites open in the browser", "torch"),
-      sw("notifyAllApps", "All other apps' notifications", "Every desktop notification on this PC. Fine-tune each app in the Apps card", "torch"),
-      section("How"),
-      sw("alertTorch", "🔦 Blink the torch", "", "torch"),
-      range("torchSeconds", "For", 1, 60, 1, "sec", "torch alertTorch"),
-      sw("alertSound", "🔔 Play a sound", "From the phone's speaker", "torch"),
-      choice("soundStyle", "Sound", "", [["chime", "Chime"], ["beep", "Beep"], ["alarm", "Alarm"], ["ping", "Ping"]], "torch alertSound"),
-      range("soundSeconds", "For", 1, 60, 1, "sec", "torch alertSound"),
-      range("soundVolume", "Volume", 5, 100, 5, "vol", "torch alertSound"),
-      section("When"),
-      sw("torchAway", "Only when you're away from the laptop", "Idle for a minute, or locked", "torch"),
-      sw("torchRepeat", "Keep reminding until you're back", "Stops when you use the laptop or tap Chip", "torch"),
-      range("remindEvery", "Every", 10, 300, 5, "sec", "torch torchRepeat"),
-      range("remindMinutes", "For up to", 1, 30, 1, "min", "torch torchRepeat"),
-      sw("torchNight", "Also while Chip sleeps", "", "torch"),
-    ] },
-    { icon: "📱", title: "Apps", appList: true,
-      note: "Pick how each app gets your attention. Default follows the Attention alerts card; choosing torch or sound " +
-        "for an app turns it on even when \"All other apps\" is off. Apps appear here once they've sent a notification." },
-    { icon: "🗂️", title: "Screens", note: "The tabs you can swipe to. The face is always there.", rows: [
-      sw("tabClock", "Clock & weather", "Big clock, forecast and air quality"),
-      sw("tabLaptop", "Laptop", "CPU, RAM, GPU and battery rings, music controls"),
-      sw("tabTimer", "Timer", "Focus, break and countdown"),
-      sw("tabViz", "Audio visualizer", "Opens from the Laptop tab or the swipe-up drawer"),
-    ] },
-    { icon: "🙂", title: "Face screen", rows: [
-      sw("timerPill", "Timer pill", "Time left, in the corner while a timer runs"),
-      sw("focusBar", "Timer progress bar", "Thin line across the top while a timer runs"),
-      sw("dots", "Page dots", "Shows which tab you're on"),
-      sw("musicMode", "Music mode", "Headphones, bobbing and notes while music plays"),
-      sw("mask", "Pollution mask", "Puts one on when the AQI is 200 or worse"),
-      sw("typingScene", "Chip types along with you", "While you type on the laptop, it types on one of its own: thinks when you pause, speeds up with you, a big Enter when you stop"),
-      range("typingAfter", "Once you've typed for", 3, 60, 1, "sec", "typingScene"),
-      sw("burnGuard", "OLED burn-in guard", "Every 3 minutes the face screen shifts by up to 2 px, in a small loop, so nothing sits on the same pixels"),
-    ] },
-    { icon: "👀", title: "Eyes follow the cursor", eyes: true, rows: [
-      range("eyeGap", "Gap between the eyes", -14, 24, 1, "px"),
-      range("phonesGap", "Gap between the ear cups", -16, 24, 1, "px"),
-      sw("phonesFollowSkin", "Headphones follow the skin", "A skin that has its own headphones wears them"),
-      { phonesPick: true },   // the default headphones: Chip's own or another skin's
-      sw("showPupils", "Pupils", "The dark centre of each eye. Off, the eyes are plain whites with no centre"),
-      sw("gazeFollow", "Eyes follow the mouse", "Chip looks at your cursor on any monitor", "showPupils"),
-      { gazeMap: true },   // the monitor setup: shown with the mouse-follow toggle on, frozen while pupils are off
-    ] },
-    { icon: "🎨", title: "Make your own Chip", skins: true },
-    { icon: "📍", title: "Floating dock", master: "dock", dock: true,
-      note: "The bar along the bottom of the face. Tap an item to show or hide it." },
-    { icon: "⏳", title: "Timer & Pomodoro", needs: "tabTimer",
-      note: "Also changeable beside the timer's ring. While a timer runs the ring fills the screen; pause it to get the controls back.", rows: [
-      range("pomoFocus", "Focus", 1, 180, 1, "min"),
-      range("pomoShort", "Short break", 1, 60, 1, "min"),
-      range("pomoLong", "Long break", 1, 90, 1, "min"),
-      range("pomoLongEvery", "Long break after", 2, 8, 1, "n"),
-      sw("pomoAutoBreak", "Start breaks automatically", "When a focus session ends"),
-      sw("pomoAutoFocus", "Start the next focus automatically", "When a break ends"),
-      range("pomoGoal", "Daily goal", 1, 24, 1, "n"),
-      sw("workScene", "Focus mode on the face screen", "During a focus session the room dims, a moon comes up and Chip types away; notifications pop up muted"),
-    ] },
-    { icon: "📍", title: "Weather location", place: true,
-      note: "Pick the place Chip shows the weather and air quality for. The forecast is fetched by the phone for that place.", rows: [] },
-    { icon: "🕐", title: "Clock tab", needs: "tabClock", rows: [
-      sw("clockNow", "Weather now", "Temperature, feels like, today's high and low"),
-      sw("clockHours", "Next 6 hours", "Hourly forecast with the chance of rain"),
-      sw("clockAir", "Air & sun", "AQI meter, sunrise and sunset"),
-    ] },
-    { icon: "💻", title: "Laptop tab", needs: "tabLaptop", rows: [
-      sw("ringCpu", "CPU ring"), sw("ringRam", "RAM ring"), sw("ringGpu", "GPU ring"), sw("ringBattery", "Battery ring"),
-      sw("mediaCard", "Music card", "Now playing, play/pause, volume and the visualizer button"),
-    ] },
-    { icon: "🤖", title: "Chip's character", rows: [
-      sw("idle", "Idle animations", "Looks around, whistles and sneezes when left alone"),
-      choice("idleRate", "How often", "", [["rare", "Rarely"], ["normal", "Normal"], ["often", "Often"]], "idle"),
-      { multi: true, k: "idleOff", label: "Which ones", needs: "idle", options: IDLE },
-    ] },
-    { icon: "✨", title: "Behaviour", rows: [
-      sw("sounds", "Sounds", "Chirps when you tap or pet it"),
-      sw("talk", "Talking", "Reads reminders aloud (never at night)"),
-      sw("greetings", "Greetings", "Hello on start, good morning and good night"),
-      sw("hourly", "Hourly chime", "A hop and the time on the hour, 8 AM to 10 PM"),
-      sw("trackToasts", "Song pop-ups", "Shows the title when a new song starts"),
-      sw("laptopAlerts", "Laptop alerts", "Low battery, running hot, welcome back"),
-      sw("phoneAlerts", "Phone battery alert", "Says it's hungry at 15%"),
-      sw("shake", "Shake reaction", "Gets dizzy when you shake the phone"),
-      sw("behaviourTorch", "Torch", "Blinks when a timer ends, at stretch time and for laptop battery or heat warnings"),
-      sw("stretch", "Stretch reminders", "Nudges you after a long time at the laptop"),
-      range("stretchMin", "Every", 10, 180, 5, "min", "stretch"),
-    ] },
-    { icon: "🔌", title: "Connections", conn: true, rows: [
-      sw("linkPaused", "Pause the link", "Closes the tunnel and stops looking for the phone"),
-      sw("linkAutoFind", "Find the phone when it moves", "Scans this Wi-Fi's /24 for the phone's key if its address stops answering"),
-      sw("linkHomeOnly", "Only on home networks", "Never scan or connect elsewhere (cafés, hotspots)"),
-      { raw: CONN_NETS },
-      range("linkKeepAlive", "Keep-alive", 5, 60, 5, "sec"),
-      range("linkRetry", "Retry every", 5, 60, 5, "sec"),
-    ] },
-    { icon: "🎙️", title: "Voice dictation", stt: true, rows: [
-      sw("dictation", "Hold with two fingers to dictate", "Your speech is turned into text and typed on the laptop, in any language"),
-      choice("dictEngine", "Speech model runs on",
-        "No fallback: if the chosen engine fails, nothing is typed",
-        [["phone", "📱 Phone"], ["laptop", "💻 Laptop"], ["cloud", "☁️ Cloud API"]], "dictation"),
-      sw("fastDictation", "Fast mode", "A smaller model: phone ~3 s, laptop under 1 s, but weaker with Hinglish", "dictation"),
-    ] },
-    { icon: "🎨", title: "Look", rows: [
-      choice("accent", "Accent colour", "Eyes, glow and every colour in the pack's art, derived from this one",
-        [["cyan", '<i class="swatch" style="background:#2ee6f2"></i>Cyan'], ["terracotta", '<i class="swatch" style="background:#ee9358"></i>Terracotta'],
-         ["sage", '<i class="swatch" style="background:#b4d38c"></i>Sage'], ["violet", '<i class="swatch" style="background:#a78bfa"></i>Violet'],
-         ["rose", '<i class="swatch" style="background:#f472b6"></i>Rose'], ["amber", '<i class="swatch" style="background:#f5c04a"></i>Amber'],
-         ["sky", '<i class="swatch" style="background:#6cb8ff"></i>Sky'], ["custom", "🎨 Custom"]]),
-      { color: true, k: "accentColor", label: "Custom colour", help: "Pick any colour; Chip's palette follows it (very dark colours are lightened)" },
-      range("chipGlow", "Chip's glow", 0, 200, 10, "vol"),
-      range("brightnessDay", "Daytime brightness", 5, 255, 5, "pct"),
-    ] },
-  ];
-  const DOCK = [
-    ["Time & outside", [["dockTime", "🕐 Time"], ["dockWeather", "⛅ Weather"], ["dockAqi", "AQI"]]],
-    ["Laptop", [["dockCpu", "💻 CPU"], ["dockLaptopTemp", "🌡 Temp"], ["dockLaptopBattery", "🔋 Battery"]]],
-    ["Phone", [["dockPhoneBattery", "📱 Battery"], ["dockPhoneTemp", "🌡 Temp"]]],
-  ];
-  const TAB_NAMES = { tabClock: "Clock", tabLaptop: "Laptop", tabTimer: "Timer" };
+    `<div id="conn-wiz"></div></div></details>`;
+  const THEME_HTML = `<div class="row choice"><span class="txt"><b>Theme</b><small>Pitch black or light, for this page only. Chip's face on the phone is not affected</small></span>` +
+    `<div class="pick" id="theme-pick" role="group" aria-label="Theme"><button class="chip" data-theme-pick="system">System</button>` +
+    `<button class="chip" data-theme-pick="light">Light</button><button class="chip" data-theme-pick="dark">Dark</button></div></div>`;
+  const STORE_HTML = `<div class="blk"><span><b class="lbl">Saved on this laptop</b><small class="sublbl">The drawer toggles on the phone stay in sync with this page.</small></span>` +
+    `<code style="align-self:flex-start;padding:6px 10px;border-radius:8px;background:var(--sunk);border:1px solid var(--line);overflow-wrap:anywhere">~/.config/deskbuddy/settings.json</code></div>`;
+  const RESET_HTML = `<div class="row"><span class="txt"><b>Reset everything to defaults</b><small>Every setting on every page. Your skins and the paired phone stay</small></span>` +
+    `<button class="chip danger" id="reset">Reset…</button></div>`;
 
-  // the monitor setup (filled in by the gaze map code): hidden with the mouse-follow toggle off, dimmed and frozen with pupils off
-  const GAZE_HTML = `<div class="gaze off" id="gaze" data-needs="showPupils"><p class="miss">Install the extension: run laptop/install.sh, then log out and back in.</p>` +
-    `<svg id="gaze-map" role="img" aria-label="Your screens and where the phone sits"></svg>` +
-    `<p class="hint">Arrange your screens in Settings → Displays the way they sit on your desk, then drag Chip to where the phone really is.</p></div>`;
+  const ICONS = {
+    appearance: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 3v18M12 8h6.5M12 12h9M12 16h6.5",
+    skins: "M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zM9.5 9.5v2.5M14.5 9.5v2.5M9 15.5c1.8 1.2 4.2 1.2 6 0",
+    behaviour: "M3 12h4l3-7l4 14l3-7h4",
+    sleep: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z",
+    screens: "M12 3l9 5l-9 5l-9-5zM3 13l9 5l9-5",
+    dock: "M5 4h14v9H5zM4 16.5h16a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-1.5a1 1 0 0 1 1-1z",
+    clock: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 7.5V12l3 2",
+    timer: "M7 3h10M7 21h10M8 3c0 4 8 5 8 9s-8 5-8 9M16 3c0 4-8 5-8 9s8 5 8 9",
+    attention: "M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0",
+    agents: "M8 9l-4 3l4 3M16 9l4 3l-4 3M13.5 6l-3 12",
+    apps: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
+    dictation: "M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21",
+    connections: "M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01",
+    about: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 11v5.5M12 7.8h.01",
+  };
+  const PAGES = [
+    { id: "appearance", nav: "Chip", title: "Appearance", desc: "How Chip looks on the phone: its colour, its eyes and its headphones.", groups: [
+      { title: "Colour and light", rows: [
+        raw(SWATCH_HTML),
+        { color: true, k: "accentColor", id: "accent-custom", label: "Custom colour", help: "Pick any colour; Chip's palette follows it (very dark colours are lightened)" },
+        range("chipGlow", "Chip's glow", 0, 200, 10, "vol"),
+        range("brightnessDay", "Daytime brightness", 5, 255, 5, "pct", "", true),
+      ] },
+      { title: "Eyes", rows: [
+        raw(EYES_HTML),
+        sw("showPupils", "Pupils", "The dark centre of each eye. Off, the eyes are plain whites with no centre"),
+        raw(PUPIL_HTML),
+        range("eyeGap", "Gap between the eyes", -14, 24, 1, "px"),
+        sw("gazeFollow", "Eyes follow the mouse", "Chip looks at your cursor on any monitor", "showPupils"),
+        raw(GAZE_HTML),
+      ] },
+      { title: "Headphones", note: "Chip wears them while music plays.", rows: [
+        sw("phonesFollowSkin", "Headphones follow the skin", "A skin that has its own headphones wears them"),
+        raw(PHONES_HTML),
+        range("phonesGap", "Gap between the ear cups", -16, 24, 1, "px"),
+      ] },
+    ] },
+    { id: "skins", nav: "Chip", title: "Skins", cls: "mk",
+      desc: "Turn your pet, yourself, a character or your own art into Chip. An AI chat does the drawing; Chip checks the result before using it.", groups: [
+      { title: "Make a new skin", rows: [raw(SKIN_STEPS)] },
+      { title: "Your skins", note: "A skin's name is what Chip calls itself: “Hi! I'm …”", rows: [raw(SKIN_LIST)] },
+    ] },
+    { id: "behaviour", nav: "Chip", title: "Behaviour", desc: "What Chip does on its own: idle habits, reactions, little scenes and reminders.", groups: [
+      { title: "When left alone", rows: [
+        sw("idle", "Idle animations", "Looks around, whistles and sneezes when left alone"),
+        choice("idleRate", "How often", "", [["rare", "Rarely"], ["normal", "Normal"], ["often", "Often"]], "idle"),
+        { multi: true, k: "idleOff", label: "Which ones", needs: "idle", options: IDLE },
+      ] },
+      { title: "Reactions", rows: [
+        sw("sounds", "Sounds", "Chirps when you tap or pet it"),
+        sw("talk", "Talking", "Reads reminders aloud (never at night)"),
+        sw("greetings", "Greetings", "Hello on start, good morning and good night"),
+        sw("hourly", "Hourly chime", "A hop and the time on the hour, 8 AM to 10 PM"),
+        sw("trackToasts", "Song pop-ups", "Shows the title when a new song starts"),
+        sw("shake", "Shake reaction", "Gets dizzy when you shake the phone"),
+      ] },
+      { title: "Scenes", rows: [
+        sw("typingScene", "Chip types along with you", "While you type on the laptop, it types on one of its own: thinks when you pause, speeds up with you, a big Enter at the end"),
+        range("typingAfter", "Once you've typed for", 3, 60, 1, "sec", "typingScene"),
+        sw("musicMode", "Music mode", "Headphones, bobbing and notes while music plays"),
+        sw("mask", "Pollution mask", "Puts one on when the AQI is 200 or worse"),
+      ] },
+      { title: "Reminders", rows: [
+        sw("laptopAlerts", "Laptop alerts", "Low battery, running hot, welcome back"),
+        sw("phoneAlerts", "Phone battery alert", "Says it's hungry at 15%"),
+        sw("behaviourTorch", "Torch", "Blinks when a timer ends, at stretch time and for laptop battery or heat warnings"),
+        sw("stretch", "Stretch reminders", "Nudges you after a long time at the laptop"),
+        range("stretchMin", "Every", 10, 180, 5, "min", "stretch"),
+      ] },
+    ] },
+    { id: "sleep", nav: "Chip", title: "Sleep", desc: "Asleep, Chip closes its eyes, dims the screen and stays quiet. A tap wakes it for 20 seconds.", groups: [
+      { rows: [big("sleep", "Sleep at night", "Follows the schedule below, every day")] },
+      { title: "Schedule", needs: "sleep", blocked: turnOn("Sleep at night"), rows: [
+        raw(SLEEP_HTML),
+        range("brightnessNight", "Screen while asleep", 0, 100, 1, "pct", "", true),
+      ] },
+      { title: "Drowsiness", rows: [
+        sw("drowsy", "Get drowsy when you're away", "Heavy eyelids and yawns when nobody has touched it and the laptop is idle or locked"),
+        range("drowsyMin", "After", 5, 240, 5, "min", "drowsy"),
+      ] },
+    ] },
+    { id: "screens", nav: "Phone screen", title: "Screens", desc: "The tabs you can swipe to on the phone, and what sits on top of them. The face is always there.", groups: [
+      { title: "Tabs", rows: [
+        sw("tabClock", "Clock & weather", "Big clock, forecast and air quality"),
+        sw("tabLaptop", "Laptop", "CPU, RAM, GPU and battery rings, music controls"),
+        sw("tabTimer", "Timer", "Focus, break and countdown"),
+        sw("tabViz", "Audio visualizer", "Opens from the Laptop tab or the swipe-up drawer"),
+      ] },
+      { title: "On the face", rows: [
+        sw("timerPill", "Timer pill", "Time left, in the corner while a timer runs"),
+        sw("focusBar", "Timer progress bar", "Thin line across the top while a timer runs"),
+        sw("dots", "Page dots", "Shows which tab you're on"),
+      ] },
+      { title: "Laptop tab", needs: "tabLaptop", blocked: turnOn("the Laptop tab"), rows: [
+        sw("ringCpu", "CPU ring"), sw("ringRam", "RAM ring"), sw("ringGpu", "GPU ring"), sw("ringBattery", "Battery ring"),
+        sw("mediaCard", "Music card", "Now playing, play/pause, volume and the visualizer button"),
+      ] },
+      { title: "Screen care", rows: [
+        sw("burnGuard", "OLED burn-in guard", "Every 3 minutes the face screen shifts by up to 2 px, in a small loop, so nothing sits on the same pixels"),
+      ] },
+    ] },
+    { id: "dock", nav: "Phone screen", title: "Dock", desc: "The floating bar along the bottom of the face.", groups: [
+      { rows: [big("dock", "Floating dock", "Time, weather and live stats under Chip")] },
+      { title: "Items", note: "Tap an item to show or hide it.", needs: "dock", blocked: turnOn("the dock"), rows: [raw(DOCK_HTML)] },
+    ] },
+    { id: "clock", nav: "Phone screen", title: "Clock & weather", desc: "The Clock tab, and the place its forecast comes from.", groups: [
+      { title: "Weather location", note: "The phone fetches the forecast and air quality for this place.", rows: [raw(PLACE_HTML)] },
+      { title: "Clock tab", needs: "tabClock", blocked: turnOn("the Clock tab", "screens"), rows: [
+        sw("clockNow", "Weather now", "Temperature, feels like, today's high and low"),
+        sw("clockHours", "Next 6 hours", "Hourly forecast with the chance of rain"),
+        sw("clockAir", "Air & sun", "AQI meter, sunrise and sunset"),
+      ] },
+    ] },
+    { id: "timer", nav: "Phone screen", title: "Timer",
+      desc: "Focus, break and countdown. You can also change these beside the timer's ring; while a timer runs the ring fills the screen, so pause it to get the controls back.", groups: [
+      { title: "Pomodoro", needs: "tabTimer", blocked: turnOn("the Timer tab", "screens"), rows: [
+        range("pomoFocus", "Focus", 1, 180, 1, "min"),
+        range("pomoShort", "Short break", 1, 60, 1, "min"),
+        range("pomoLong", "Long break", 1, 90, 1, "min"),
+        range("pomoLongEvery", "Long break after", 2, 8, 1, "n"),
+        range("pomoGoal", "Daily goal", 1, 24, 1, "n"),
+      ] },
+      { title: "Starting", needs: "tabTimer", blocked: turnOn("the Timer tab", "screens"), rows: [
+        sw("pomoAutoBreak", "Start breaks automatically", "When a focus session ends"),
+        sw("pomoAutoFocus", "Start the next focus automatically", "When a break ends"),
+      ] },
+      { title: "Focus mode", needs: "tabTimer", blocked: turnOn("the Timer tab", "screens"), rows: [
+        sw("workScene", "Focus mode on the face screen", "During a focus session the room dims, a moon comes up and Chip types away; notifications pop up muted"),
+      ] },
+    ] },
+    { id: "attention", nav: "Alerts", title: "Attention", desc: "When an AI agent or an app needs you, Chip blinks the phone's torch, plays a sound, or both, and says who.", groups: [
+      { rows: [big("torch", "Attention alerts", "Only the app's name is kept, never what the notification says")] },
+      { title: "What counts", needs: "torch", blocked: turnOn("Attention alerts"), rows: [
+        sw("torchAsk", "AI agent asks for permission or input", "Claude Code, Gemini CLI or opencode waiting on a question"),
+        sw("torchDone", "AI agent finished and waiting for you", "An agent's turn has ended"),
+        sw("torchApps", "AI app notifications", "Claude, ChatGPT, Antigravity, and AI sites open in the browser"),
+        sw("notifyAllApps", "All other apps' notifications", "Every desktop notification on this PC. Fine-tune each app on the Apps page"),
+      ] },
+      { title: "How", needs: "torch", blocked: turnOn("Attention alerts"), rows: [
+        sw("alertTorch", "Blink the torch"),
+        range("torchSeconds", "For", 1, 60, 1, "sec", "alertTorch"),
+        sw("alertSound", "Play a sound", "From the phone's speaker"),
+        choice("soundStyle", "Sound", "", [["chime", "Chime"], ["beep", "Beep"], ["alarm", "Alarm"], ["ping", "Ping"]], "alertSound"),
+        range("soundSeconds", "For", 1, 60, 1, "sec", "alertSound"),
+        range("soundVolume", "Volume", 5, 100, 5, "vol", "alertSound"),
+      ] },
+      { title: "When", needs: "torch", blocked: turnOn("Attention alerts"), rows: [
+        sw("torchAway", "Only when you're away from the laptop", "Idle for a minute, or locked"),
+        sw("torchRepeat", "Keep reminding until you're back", "Stops when you use the laptop or tap Chip"),
+        range("remindEvery", "Every", 10, 300, 5, "sec", "torchRepeat"),
+        range("remindMinutes", "For up to", 1, 30, 1, "min", "torchRepeat"),
+        sw("torchNight", "Also while Chip sleeps"),
+      ] },
+      { title: "Try it", needs: "torch", blocked: turnOn("Attention alerts"), rows: [raw(ATTN_TRY)] },
+    ] },
+    { id: "agents", nav: "Alerts", title: "AI agents",
+      desc: "Adds Chip's hook to each agent's own settings so Chip knows when it needs you. Only Chip's lines are added or removed; the file is backed up once to settings.json.chip-bak.", groups: [
+      { title: "Agents on this laptop", rows: [{ raw: `<div class="applist flush" id="agents"><div class="none">Loading…</div></div>` }] },
+    ] },
+    { id: "apps", nav: "Alerts", title: "Apps",
+      desc: "Pick how each app gets your attention. Default follows the Attention page; choosing torch or sound for an app turns it on even when “All other apps” is off.", groups: [
+      { title: "Apps that sent a notification", note: "Apps show up here once they've sent one.", rows: [{ raw: `<div class="applist flush" id="applist"></div>` }] },
+    ] },
+    { id: "dictation", nav: "Laptop", title: "Dictation", cls: "stt",
+      desc: "Hold Chip with two fingers and speak: your words are typed on the laptop, in any language. Enter is never pressed, and nothing is typed while the laptop is locked.", groups: [
+      { rows: [big("dictation", "Hold with two fingers to dictate", "The mic is on only while you hold")] },
+      { title: "Speech model", needs: "dictation", blocked: turnOn("dictation"), rows: [
+        choice("dictEngine", "Runs on", "No fallback: if the chosen engine fails, nothing is typed", [["phone", "Phone"], ["laptop", "Laptop"], ["cloud", "Cloud API"]]),
+        raw(`<div class="blk">${STT_ENGINES}${STT_PHONE}</div>`),
+        sw("fastDictation", "Fast mode", "A smaller model: phone about 3 s, laptop under 1 s, but weaker with Hinglish"),
+      ] },
+      { title: "Language", needs: "dictation", blocked: turnOn("dictation"), rows: [raw(STT_LANG)] },
+      { title: "Laptop model", needs: "dictation", attrs: ' data-stt-show="laptop"', blocked: turnOn("dictation"), rows: [raw(STT_LAPTOP)] },
+      { title: "Cloud provider", needs: "dictation", attrs: ' data-stt-show="cloud"', blocked: turnOn("dictation"), rows: [raw(STT_CLOUD)] },
+      { title: "Try it", needs: "dictation", blocked: turnOn("dictation"), rows: [raw(STT_TEST)] },
+    ] },
+    { id: "connections", nav: "Laptop", title: "Connections", cls: "conn",
+      desc: "The Wi-Fi link between this laptop and the phone. Everything goes over an ssh tunnel, and these settings can only be changed on this page.", groups: [
+      { title: "Status", rows: [raw(CONN_TOP)] },
+      { title: "This phone", rows: [
+        sw("personalPhone", "Personal phone", "A phone you also use: Chip never changes its screen brightness and hides the app buttons. Chip runs as an installed web app (open Termux first)"),
+      ] },
+      { title: "Link", rows: [
+        sw("linkPaused", "Pause the link", "Closes the tunnel and stops looking for the phone"),
+        sw("linkAutoFind", "Find the phone when it moves", "Scans this Wi-Fi's /24 for the phone's key if its address stops answering"),
+        sw("linkHomeOnly", "Only on home networks", "Never scan or connect elsewhere (cafés, hotspots)"),
+        raw(CONN_NETS),
+        range("linkKeepAlive", "Keep-alive", 5, 60, 5, "sec"),
+        range("linkRetry", "Retry every", 5, 60, 5, "sec"),
+      ] },
+      { title: "Advanced", rows: [raw(CONN_END)] },
+    ] },
+    { id: "about", nav: "Laptop", title: "About", desc: "Where your settings live, and how to start over.", groups: [
+      { title: "This page", rows: [raw(THEME_HTML)] },
+      { title: "Storage", rows: [raw(STORE_HTML)] },
+      { title: "Start over", rows: [raw(RESET_HTML)] },
+    ] },
+  ];
+
   function rowHTML(r) {
-    if (r.section) return `<div class="sec">${esc(r.section)}</div>`;
     if (r.raw) return r.raw;
-    const needs = r.needs ? ` data-needs="${r.needs}"` : "";
+    const needs = r.needs ? ` data-needs="${r.needs}"` : "", sub = r.needs ? " sub" : "";
     if (r.multi) {  // a chip per option, lit when it is on (S[k] lists the ones that are off)
-      return `<div class="row multi sub" data-needs="${r.needs}"><span class="txt"><b>${esc(r.label)}</b>` +
+      return `<div class="row multi${sub}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
         `<small>Tap to switch one off. The last three only play when you're away</small></span><div class="pick">` +
         r.options.map(([v, label]) => `<button class="chip" data-multi="${r.k}" data-v="${v}" aria-pressed="true">${label}</button>`).join("") +
         `</div></div>`;
     }
     if (r.options) {
-      return `<div class="row choice${r.needs && !r.help ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
-        (r.help ? `<small>${esc(r.help)}</small>` : "") + `</span><div class="pick">` +
+      return `<div class="row choice${sub}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
+        (r.help ? `<small>${esc(r.help)}</small>` : "") + `</span><div class="pick" role="group" aria-label="${esc(r.label)}">` +
         r.options.map(([v, label]) => `<button class="chip" data-k="${r.k}" data-v="${v}" aria-pressed="false">${label}</button>`).join("") +
         `</div></div>`;
     }
     if (r.color) {
-      return `<div class="row"><span class="txt"><b>${esc(r.label)}</b><small>${esc(r.help)}</small></span>` +
-        `<input type="color" class="picker" data-k="${r.k}"></div>`;
+      return `<label class="row sub" id="${r.id}"><span class="txt"><b>${esc(r.label)}</b><small>${esc(r.help)}</small></span>` +
+        `<input type="color" class="picker" data-k="${r.k}"></label>`;
     }
     if (r.range) {
-      return `<div class="row range${r.needs ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b></span>` +
-        `<input type="range" data-k="${r.k}" data-unit="${r.unit}" min="${r.min}" max="${r.max}" step="${r.step}"><output></output></div>`;
+      const id = "rg-" + r.k;
+      return `<div class="row range${sub}"${needs}${r.unless ? ' data-unless="personalPhone"' : ""}><label class="txt" for="${id}"><b>${esc(r.label)}</b></label>` +
+        `<span class="ctl"><input type="range" id="${id}" data-k="${r.k}" data-unit="${r.unit}" min="${r.min}" max="${r.max}" step="${r.step}"><output for="${id}"></output></span></div>`;
     }
-    return `<label class="row${r.needs ? " sub" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
+    return `<label class="row${sub}${r.big ? " big" : ""}"${needs}><span class="txt"><b>${esc(r.label)}</b>` +
       (r.help ? `<small>${esc(r.help)}</small>` : "") + `</span><input type="checkbox" class="sw" data-k="${r.k}"></label>`;
   }
-  $("#grid").innerHTML = CARDS.map((c) => {
-    let body = c.note ? `<p class="note">${esc(c.note)}</p>` : "";
-    if (c.conn) body += CONN_TOP;
-    if (c.needs) body += `<div class="needs">The ${TAB_NAMES[c.needs]} tab is hidden. Turn it on under Screens to see these.</div>`;
-    if (c.dock) {
-      body += `<div class="dockmock" data-needs="dock">` + DOCK.map(([name, items]) =>
-        `<div class="pod"><small>${name}</small><div>` +
-        items.map(([k, label]) => `<button class="chip" data-k="${k}" aria-pressed="true">${label}</button>`).join("") +
-        `</div></div>`).join("") + `</div>`;
+  $("#pages").innerHTML = PAGES.map((p) => `<section class="page${p.cls ? " " + p.cls : ""}" id="page-${p.id}" data-page="${p.id}" aria-labelledby="h-${p.id}" hidden>` +
+    `<header class="phead"><h1 id="h-${p.id}">${esc(p.title)}</h1><p>${esc(p.desc)}</p></header>` +
+    p.groups.map((g) => `<section class="grp"${g.needs ? ` data-needs="${g.needs}"` : ""}${g.attrs || ""}>` +
+      (g.title ? `<h2>${esc(g.title)}</h2>` : "") + (g.note ? `<p class="gnote">${esc(g.note)}</p>` : "") +
+      (g.needs ? `<p class="blocked">${g.blocked}</p>` : "") +
+      `<div class="panel">${g.rows.map(rowHTML).join("")}</div></section>`).join("") + `</section>`).join("");
+  const NAV = [...new Set(PAGES.map((p) => p.nav))];
+  $("#nav").innerHTML = NAV.map((n) => `<div class="navgrp"><span class="navlabel">${esc(n)}</span>` +
+    PAGES.filter((p) => p.nav === n).map((p) => `<a class="nav" href="#${p.id}" data-page="${p.id}">` +
+      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[p.id]}"/></svg>` +
+      `<span>${esc(p.title)}</span></a>`).join("") + `</div>`).join("");
+
+  // the page in the address (#connections), else the last one shown in this browser
+  function showPage() {
+    let id = location.hash.slice(1);
+    if (!PAGES.some((p) => p.id === id)) {
+      try { id = localStorage.getItem("deskbuddy.page"); } catch (e) { id = ""; }
+      if (!PAGES.some((p) => p.id === id)) id = PAGES[0].id;
     }
-    if (c.place) body += PLACE_HTML;
-    if (c.eyes) body += EYES_HTML;
-    if (c.skins) body += SKINS_HTML;
-    body += (c.rows || []).map((r) => (r.gazeMap ? GAZE_HTML : r.phonesPick ? PHONES_HTML : rowHTML(r))).join("");
-    if (c.attention) {
-      body += `<div class="attn" data-needs="torch"><button class="chip" id="torch-test">🔔 Test the alert</button>` +
-        `<ul id="attn-log"><li class="none">No alerts yet</li></ul></div>`;
+    const was = $(".page:not([hidden])");
+    for (const s of $$(".page")) s.hidden = s.dataset.page !== id;
+    for (const a of $$(".nav")) { if (a.dataset.page === id) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
+    $(`.nav[data-page="${id}"]`).scrollIntoView({ block: "nearest", inline: "nearest" });   // at phone width the topics scroll sideways
+    document.title = `${PAGES.find((p) => p.id === id).title} · Chip settings`;
+    try { localStorage.setItem("deskbuddy.page", id); } catch (e) { /* storage blocked */ }
+    if (was && was.dataset.page !== id) window.scrollTo(0, 0);
+  }
+  addEventListener("hashchange", showPage);
+  showPage();
+
+  // search: keeps the topics whose page mentions every word typed; Enter opens the first one
+  function filterNav() {
+    const words = $("#nav-q").value.toLowerCase().split(/\s+/).filter(Boolean);
+    let first = null;
+    for (const g of $$(".navgrp")) {
+      let any = false;
+      for (const a of $$(".nav", g)) {
+        const text = $("#page-" + a.dataset.page).textContent.toLowerCase();
+        const hit = words.every((w) => text.includes(w));
+        a.hidden = !hit; any = any || hit; if (hit && !first) first = a;
+      }
+      g.hidden = !any;
     }
-    if (c.stt) body += STT_HTML;
-    if (c.conn) body += CONN_END;
-    if (c.appList) body += `<div class="applist" id="applist"></div>`;
-    const eye = c.conn ? `<button class="eye" id="conn-eye" aria-pressed="true" aria-label="Show connection details" title="Show connection details">🙈</button>` : "";
-    const master = c.master ? `<input type="checkbox" class="sw" data-k="${c.master}" aria-label="${esc(c.title)}">` : "";
-    return `<div class="card${c.conn ? " conn" : ""}"${c.needs ? ` data-card-needs="${c.needs}"` : ""}><div class="card-head"><span class="ic">${c.icon}</span>` +
-      `<h2>${esc(c.title)}</h2>${eye}${master}</div>${body}</div>`;
-  }).join("");
+    $("#nav-none").hidden = !!first;
+    $("#nav-none").textContent = first ? "" : `No settings match “${$("#nav-q").value.trim()}”.`;
+    return first;
+  }
+  $("#nav-q").addEventListener("input", filterNav);
+  $("#nav-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { const a = filterNav(); if (a) location.hash = a.dataset.page; } });
+
+  // theme: System follows the computer; Light or Dark is remembered in this browser
+  const lightMq = matchMedia("(prefers-color-scheme: light)");
+  const themeMode = () => { try { const t = localStorage.getItem("deskbuddy.theme"); return t === "light" || t === "dark" ? t : "system"; } catch (e) { return "system"; } };
+  function applyTheme() {
+    const mode = themeMode(), t = mode === "system" ? (lightMq.matches ? "light" : "dark") : mode;
+    document.documentElement.dataset.theme = t;
+    $("#theme-txt").textContent = t === "dark" ? "Light" : "Dark";
+    $("#theme-btn").setAttribute("aria-label", `Switch to the ${t === "dark" ? "light" : "dark"} theme`);
+    $("link[rel=icon]").href = `/logo/chip-${t}.png`;
+    for (const b of $$("#theme-pick .chip")) b.setAttribute("aria-pressed", String(b.dataset.themePick === mode));
+  }
+  function setTheme(mode) {
+    try { if (mode === "system") localStorage.removeItem("deskbuddy.theme"); else localStorage.setItem("deskbuddy.theme", mode); } catch (e) { /* storage blocked */ }
+    applyTheme();
+  }
+  $("#theme-btn").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+  $("#theme-pick").addEventListener("click", (e) => { const b = e.target.closest("[data-theme-pick]"); if (b) setTheme(b.dataset.themePick); });
+  lightMq.addEventListener("change", applyTheme);
+  applyTheme();
 
   const PRESETS = [["22:00", "06:00"], ["23:00", "06:30"], ["00:00", "07:00"], ["01:00", "08:00"]];
   $("#presets").innerHTML = PRESETS.map(([a, b]) =>
-    `<button class="chip" data-sleep="${a}" data-wake="${b}">${t12(a, true)} – ${t12(b, true)}</button>`).join("");
+    `<button class="chip" data-sleep="${a}" data-wake="${b}" aria-pressed="false">${t12(a, true)} – ${t12(b, true)}</button>`).join("");
 
   // ---------------------------------------------------------------- helpers
   function t12(hhmm, short) {
@@ -674,12 +890,19 @@ footer code { color: var(--soft); }
       el.classList.toggle("dim", !on);
       $$("input, button", el).forEach((i) => { i.disabled = !on; });
     }
-    for (const el of $$("[data-card-needs]")) el.classList.toggle("dim", !S[el.dataset.cardNeeds]);
+    for (const el of $$("[data-unless]")) {   // greyed while that switch is on (a personal phone: Chip doesn't touch the brightness)
+      el.classList.toggle("dim", !!S[el.dataset.unless]);
+      $$("input, button", el).forEach((i) => { i.disabled = !!S[el.dataset.unless]; });
+    }
+    renderCaps();
     const gazeEl = $("#gaze");
-    if (gazeEl) { gazeEl.hidden = !S.gazeFollow; pollGaze(); }   // no monitor setup, and no pointer polling, while the toggle is off
-    renderApps();
+    if (gazeEl) { gazeEl.hidden = !S.gazeFollow || !capOk("gazeFollow"); pollGaze(); }   // no monitor setup, and no pointer polling, while the toggle is off
+    renderApps(); if (typeof loadAgents === "function" && $("#agents")) loadAgents();
     renderPlace();
-    document.documentElement.style.setProperty("--eye", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);  // the page follows Chip's accent
+    // Chip's accent colours its previews (the gaze map's phone); the custom swatch and colour row show only with Custom
+    document.documentElement.style.setProperty("--chip", (S.accent === "custom" ? S.accentColor : ACCENTS[S.accent]) || ACCENTS.cyan);
+    document.documentElement.style.setProperty("--custom", S.accentColor || ACCENTS.cyan);
+    $("#accent-custom").hidden = S.accent !== "custom";
     renderSleep();
     renderStatus();
     renderConn();
@@ -695,7 +918,7 @@ footer code { color: var(--soft); }
     const d = new Date(), t = d.getHours() * 60 + d.getMinutes();
     const asleep = S.sleep && len > 0 && (s < e ? t >= s && t < e : t >= s || t < e);
     $("#sl-len").textContent = !S.sleep ? "Sleep is off: Chip stays awake all night" :
-      len === 0 ? "Same time twice, so Chip never sleeps" : `${fmtMin(len)} of sleep · ${asleep ? "asleep right now 💤" : "awake right now"}`;
+      len === 0 ? "Same time twice, so Chip never sleeps" : `${fmtMin(len)} of sleep · ${asleep ? "asleep right now" : "awake right now"}`;
     const tl = $("#timeline");
     $$(".span", tl).forEach((x) => x.remove());
     const spans = len === 0 ? [] : s < e ? [[s, e]] : [[s, 1440], [0, e]];
@@ -709,17 +932,14 @@ footer code { color: var(--soft); }
     $$("#presets .chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sleep === S.sleepAt && b.dataset.wake === S.wakeAt)));
   }
 
-  const MOOD = { neutral: "🙂", happy: "😊", joy: "😄", drowsy: "🥱", sleepy: "😪", asleep: "😴", angry: "😠", focus: "🎯",
-    strain: "😣", sad: "😢", worried: "😟", surprised: "😮", suspicious: "🤨", curious: "🧐", wink: "😉", love: "😍",
-    dizzy: "😵", yawn: "🥱", whistle: "😗", bored: "😑", smirk: "😏", star: "🤩", listen: "👂", think: "🤔" };
   const SCREENS = ["Face", "Clock", "Laptop", "Timer", "Visualizer"];
   function renderStatus() {
     const p = phoneInfo, online = !!(p && p.seen && p.age < 15), sync = $("#st-sync");
     $("#status").classList.toggle("on", online);
     if (online) {
       $("#st-main").textContent = "Chip is online";
-      $("#st-sub").textContent = [`${MOOD[p.mood] || "🙂"} ${p.mood || "neutral"}`, `${SCREENS[p.screen] || "Face"} tab`,
-        p.battery != null ? `📱 ${Math.round(p.battery)}%${p.charging ? " ⚡" : ""}` : ""].filter(Boolean).join(" · ");
+      $("#st-sub").textContent = [`Feeling ${p.mood || "neutral"}`, `${SCREENS[p.screen] || "Face"} tab`,
+        p.battery != null ? `phone ${Math.round(p.battery)}%${p.charging ? ", charging" : ""}` : ""].filter(Boolean).join(" · ");
     } else {
       $("#st-main").textContent = p && p.seen ? "Chip is offline" : "Waiting for Chip";
       const L = linkInfo, seen = p && p.seen ? `Last seen ${ago(p.age)}. ` : "";
@@ -730,7 +950,7 @@ footer code { color: var(--soft); }
     if (!S) return;
     const applied = online && p.rev === S.rev;
     sync.className = "sync " + (applied ? "ok" : online ? "wait" : "");
-    sync.textContent = applied ? "✓ Using these settings" : online ? "⏳ Sending changes to Chip…" : "Changes are saved and reach Chip when it's back";
+    sync.textContent = applied ? "Using these settings" : online ? "Sending changes to Chip…" : "Changes are saved and reach Chip when it's back";
   }
 
   // ---------------------------------------------------------------- talking to the bridge
@@ -743,6 +963,32 @@ footer code { color: var(--soft); }
     if (!r) return toast("Couldn't save. Is the desk buddy bridge running?", true);
     if (!saving) { S = r; render(); }
     toast("Saved ✓");
+  }
+  // What this laptop can do (GET /caps, laptop/platforms): rows for missing features are dimmed and say so.
+  const CAP_NEEDS = { ringGpu: "gpu", mediaCard: "media", trackToasts: "nowPlaying", tabViz: "visualizer", typingScene: "typingRate",
+    typingAfter: "typingRate", gazeFollow: "gaze", torchApps: "notifications", notifyAllApps: "notifications", linkHomeOnly: "wifiName" };
+  const CAP_WHY = { linkHomeOnly: "This computer doesn't show apps the Wi-Fi name (allow location access for Python to use it)" };
+  let CAPS = null;
+  const capOk = (k) => !CAP_NEEDS[k] || !CAPS || CAPS[CAP_NEEDS[k]] !== false;
+  function renderCaps() {
+    for (const k in CAP_NEEDS) {
+      const row = $(`.row [data-k="${k}"]`)?.closest(".row");
+      if (!row) continue;
+      const off = !capOk(k);
+      row.classList.toggle("nocap", off);
+      // a switch that is on stays usable, so it can be turned off (e.g. home networks only on a laptop that hides the name)
+      if (off) $$("input, button", row).forEach((i) => { i.disabled = !(S && S[k] === true); });
+      let tag = $(".only", row);
+      if (off && !tag) {
+        tag = document.createElement("em"); tag.className = "only"; tag.textContent = CAP_WHY[k] || "Linux only for now";
+        $(".txt b", row).after(tag);
+      }
+      if (tag) tag.hidden = !off;
+    }
+  }
+  async function loadCaps() {
+    CAPS = await fetch("/caps", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    render();
   }
   async function loadSettings() {
     if (saving) return;
@@ -823,7 +1069,7 @@ footer code { color: var(--soft); }
     $("#stt-clear").disabled = !prov.keySet;
     // privacy line
     const where = prov.needsUrl ? ((() => { try { return new URL(S.dictCloudUrl).host; } catch (e) { return prov.label; } })()) : prov.label;
-    $("#stt-priv").textContent = eng === "cloud" ? `☁️ your audio goes to ${where}` : "🔒 stays on your devices";
+    $("#stt-priv").textContent = eng === "cloud" ? `Your audio goes to ${where}` : "Your audio stays on your devices";
   }
   document.addEventListener("click", (e) => {
     const b = e.target.closest("button");
@@ -895,12 +1141,12 @@ footer code { color: var(--soft); }
   $("#place-reset").addEventListener("click", () => save({ locName: "", locLat: 0, locLon: 0 }));
 
   const KIND = { ask: "asks", done: "done", app: "app", notify: "app", test: "test" };
-  const RULES = [["both", "🔦 + 🔔"], ["torch", "🔦 Torch"], ["sound", "🔔 Sound"], ["off", "Off"]];
+  const RULES = [["both", "Torch and sound"], ["torch", "Torch"], ["sound", "Sound"], ["off", "Off"]];
   let appRows = [];
   function renderApps() {
     const list = $("#applist");
     if (!S || !list || list.contains(document.activeElement)) return;  // don't close a dropdown that's open
-    const how = S.alertTorch && S.alertSound ? "🔦 + 🔔" : S.alertTorch ? "🔦" : S.alertSound ? "🔔" : "nothing";
+    const how = S.alertTorch && S.alertSound ? "torch and sound" : S.alertTorch ? "torch" : S.alertSound ? "sound" : "nothing";
     list.innerHTML = appRows.map((a) => {
       const rule = S.apps[a.name] || "default", def = a.ai || S.notifyAllApps ? how : "off";
       const seen = a.age == null ? "no notifications yet" : `${a.count} time${a.count === 1 ? "" : "s"} · last ${ago(a.age)}`;
@@ -910,6 +1156,29 @@ footer code { color: var(--soft); }
         RULES.map(([v, l]) => `<option value="${v}"${rule === v ? " selected" : ""}>${l}</option>`).join("") + `</select></div>`;
     }).join("");
   }
+  // ---------------------------------------------------------------- AI agents card (GET /hooks, POST /hooks/install|remove|test)
+  async function loadAgents() {
+    const box = $("#agents");
+    if (!box) return;
+    const r = await fetch("/hooks", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!r) { box.textContent = "Couldn't read the agents' settings. Is the bridge running?"; return; }
+    box.innerHTML = r.agents.map((a) => {
+      const state = a.installed ? (a.current ? "Installed" : "Installed (will refresh)") : "Not installed";
+      return `<div class="app"><span class="nm"><b>${esc(a.label)}</b><small>${state} · ${esc(a.file)}${a.note ? " · " + esc(a.note) : ""}</small></span>` +
+        (a.installed ? `<button class="chip" data-hook="test" data-agent="${a.id}">Test</button>` : "") +
+        `<button class="chip${a.installed && a.current ? " danger" : ""}" data-hook="${a.installed && a.current ? "remove" : "install"}" data-agent="${a.id}">${a.installed ? (a.current ? "Remove" : "Refresh") : "Install"}</button></div>`;
+    }).join("");
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-hook]");
+    if (!b) return;
+    b.disabled = true;
+    const r = await fetch("/hooks/" + b.dataset.hook, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: b.dataset.agent }) }).then((x) => x.json()).catch(() => null);
+    toast(!r ? "Couldn't reach the bridge" : r.ok ? (b.dataset.hook === "test" ? "Sent. Chip should alert within a few seconds" : "Done ✓") : r.message, !r || !r.ok);
+    loadAgents();
+  });
+
   async function loadAttention() {
     const r = await fetch("/attention", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
     if (!r) return;
@@ -959,10 +1228,10 @@ footer code { color: var(--soft); }
   $("#reset").addEventListener("click", async () => {
     const b = $("#reset");
     if (Date.now() - resetArmed > 4000) {
-      resetArmed = Date.now(); b.classList.add("armed"); b.textContent = "Click again to reset all settings";
-      return setTimeout(() => { b.classList.remove("armed"); b.textContent = "Reset everything to defaults"; }, 4000);
+      resetArmed = Date.now(); b.classList.add("armed"); b.textContent = "Click again to reset";
+      return setTimeout(() => { b.classList.remove("armed"); b.textContent = "Reset…"; }, 4000);
     }
-    resetArmed = 0; b.classList.remove("armed"); b.textContent = "Reset everything to defaults";
+    resetArmed = 0; b.classList.remove("armed"); b.textContent = "Reset…";
     const r = await fetch("/settings/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
       .then((x) => (x.ok ? x.json() : null)).catch(() => null);
     if (!r) return toast("Couldn't reset. Is the desk buddy bridge running?", true);
@@ -972,7 +1241,7 @@ footer code { color: var(--soft); }
   $("#torch-test").addEventListener("click", async () => {
     const ok = await fetch("/attention", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source: "Dashboard", kind: "test", text: "alert test" }) }).then((x) => x.ok).catch(() => false);
-    toast(ok ? "Sent. The phone blinks and plays within a few seconds 🔔" : "Couldn't reach the bridge", !ok);
+    toast(ok ? "Sent. The phone blinks and plays within a few seconds" : "Couldn't reach the bridge", !ok);
     loadAttention();
   });
 
@@ -1417,7 +1686,7 @@ footer code { color: var(--soft); }
   const connMsg = (text, kind = "") => {
     const m = $("#conn-msg");
     m.hidden = !text; m.textContent = text || "";
-    m.style.color = kind === "bad" ? "#ff8a8a" : kind === "good" ? "var(--good)" : "";
+    m.style.color = kind === "bad" ? "var(--bad)" : kind === "good" ? "var(--good)" : "";
   };
   async function linkPost(path, body) {
     try {
@@ -1453,7 +1722,7 @@ footer code { color: var(--soft); }
   function applyMask() {
     const card = $("#conn-st").closest(".conn"), eye = $("#conn-eye");
     card.classList.toggle("mask", connMask);
-    eye.textContent = connMask ? "🙈" : "👁";
+    eye.textContent = connMask ? "Show details" : "Hide details";
     eye.setAttribute("aria-pressed", String(connMask));
     const t = connMask ? "Show connection details" : "Hide connection details";
     eye.title = t; eye.setAttribute("aria-label", t);
@@ -1463,7 +1732,7 @@ footer code { color: var(--soft); }
     applyMask();
     const bad = location.origin !== HOME_ORIGIN, o = $("#conn-origin");
     o.hidden = !bad;
-    if (bad) o.textContent = `⚠️ You opened this page at ${location.origin}. Link buttons and link settings only work at ${HOME_ORIGIN}; the bridge ignores them from anywhere else.`;
+    if (bad) o.textContent = `You opened this page at ${location.origin}. Link buttons and link settings only work at ${HOME_ORIGIN}; the bridge ignores them from anywhere else.`;
     if (S) {
       const port = $("#conn-port");
       if (document.activeElement !== port) port.value = S.sshPort;
@@ -1478,7 +1747,7 @@ footer code { color: var(--soft); }
       });
       const add = document.createElement("button");
       add.className = "chip go"; add.id = "conn-addnet";
-      add.textContent = here ? `＋ Add this network (${here})` : "＋ Add this network";
+      add.textContent = here ? `Add this network (${here})` : "Add this network";
       add.disabled = !here || nets.includes(here) || nets.length >= 10;
       if (!nets.length) { const none = document.createElement("span"); none.className = "none"; none.textContent = "None yet. "; list.push(none); }
       $("#conn-nets").replaceChildren(...list, add);
@@ -1506,6 +1775,10 @@ footer code { color: var(--soft); }
       if (w.speed || band) row("Link speed", [w.speed ? `${Math.round(w.speed)} Mbps` : "", band].filter(Boolean).join(" · "));
     }
     sens("Laptop", esc([lap.ssid, lap.ip].filter(Boolean).join(" · ") || "—") + (lap.subnet ? ` <small>${esc(lap.iface || "")} ${esc(lap.subnet)}</small>` : ""));
+    if (L.files) {  // PhoneLink.sync_files: compared with the laptop's phone/ each time the tunnel comes up
+      const F = { "up to date": ["Up to date", "good"], "updating": ["Updating…", "warn"], "checking": ["Checking…", ""], "failed": ["Failed", "bad"] }[L.files] || [L.files, ""];
+      row("Phone files", esc(F[0]) + (L.files === "failed" && L.files_detail ? ` <small>${esc(L.files_detail)}. Run ./deploy.sh to see why</small>` : ""), F[1]);
+    }
     sens("Phone's ssh key", L.fingerprint ? `<code${connMask ? "" : ` title="${esc(L.fingerprint)}"`}>${esc(shortFp(L.fingerprint))}</code> <small>${esc(L.key_type || "")}</small>` : "not pinned yet");
     $("#conn-dl").innerHTML = rows.join("");
   }
@@ -1586,34 +1859,35 @@ footer code { color: var(--soft); }
     if (sig === wizSig) return updateCount();
     const keep = $("#wiz-code") ? $("#wiz-code").value : "";
     wizSig = sig;
-    const msg = wizMsg ? `<p class="hint" style="color:${wizMsg.bad ? "#ff8a8a" : "var(--good)"}">${esc(wizMsg.text)}</p>` : "";
+    const msg = wizMsg ? `<p class="hint" style="color:${wizMsg.bad ? "var(--bad)" : "var(--good)"}">${esc(wizMsg.text)}</p>` : "";
     let h = "";
     if (pairResult) {
       const r = pairResult;
       h = `<p class="step"><b style="color:var(--good)">✓ Paired with ${esc(r.ip)}</b><br><small>Key ${esc(shortFp(r.fingerprint))}</small></p>` +
-        `<p class="step">${r.deploy.ok ? "Chip's files were sent to the new phone. The face loads within a minute." : "The key is pinned, but sending Chip's files failed. Run ./deploy.sh on the laptop:"}</p>` +
-        (r.deploy.ok ? "" : `<pre>${esc((r.deploy.lines || []).join("\n"))}</pre>`) +
+        `<p class="step">${r.deploy.ok ? "Chip's files were sent to the new phone." : "The key is pinned, but sending Chip's files failed. Run ./deploy.sh on the laptop:"}</p>` +
+        (r.deploy.ok ? PHONE_FACE : `<pre>${esc((r.deploy.lines || []).join("\n"))}</pre>`) +
         `<div class="acts"><button class="chip go" id="wiz-done">Done</button></div>`;
     } else if (!p.active) {
-      h = (p.expired ? `<p class="hint">The last pairing ran out of time.</p>` : "") +
+      h = (p.expired ? `<p class="hint">The last pairing ran out of time.</p>` : "") + PHONE_PREP +
         `<p class="step">Pairing opens a one-time download on this laptop for 10 minutes, for one phone only. Nothing is trusted until you type the code the phone shows.</p>` +
+        (CAPS && CAPS.os && CAPS.os !== "linux" ? `<p class="hint">Your computer may ask to allow Python on the network: allow it (private networks).</p>` : "") +
         `<div class="acts"><button class="chip go" id="wiz-start">Start pairing</button></div>` + msg;
     } else {
       const fw = p.firewall && p.firewall.match(/^(.*?pairing only), (sudo .*?)\s+\(after: (sudo .*)\)$/);
-      h = `<p class="step">Expires in <span class="count" id="conn-count"></span></p>`;
+      h = `<p class="step">Expires in <span class="count" id="conn-count"></span></p>` + (p.serving ? PHONE_PREP : "");
       if (p.serving) {
         h += `<p class="step"><b>1.</b> In Termux on the new phone, paste this one line (it checks the script before running it):</p>` +
           `<div class="cmdbox cmd" id="wiz-cmd">${esc(p.command)}</div><div class="acts"><button class="chip" id="wiz-copy">Copy command</button></div>`;
-        if (p.firewall) h += `<div class="warnbox">🛡 The laptop's firewall blocks the phone from this port. Allow it for this pairing only:` +
+        if (p.firewall) h += `<div class="warnbox"><b>Firewall.</b> The laptop's firewall blocks the phone from this port. Allow it for this pairing only:` +
           (fw ? `<div class="cmdbox cmd" style="margin-top:6px">${esc(fw[2])}</div>Then remove it afterwards:<div class="cmdbox cmd" style="margin-top:6px">${esc(fw[3])}</div>` : `<div class="cmdbox cmd">${esc(p.firewall)}</div>`) + `</div>`;
-        h += `<p class="step">${p.script_by ? `⏳ ${esc(p.script_by)} got the script and is fetching the files…` : "⏳ Waiting for the phone to run the command…"}</p>`;
+        h += `<p class="step">${p.script_by ? `${esc(p.script_by)} got the script and is fetching the files…` : "Waiting for the phone to run the command…"}</p>`;
       } else if (p.fetched_by) {
         const c = p.candidate;
-        h += `<p class="step">${c && c.ready ? `✓ ${esc(p.fetched_by)} finished setup and its ssh is up.` : `⏳ Setup is running on ${esc(p.fetched_by)} (installing packages, a few minutes)…`}</p>` +
+        h += `<p class="step">${c && c.ready ? `✓ ${esc(p.fetched_by)} finished setup and its ssh is up.` : `Setup is running on ${esc(p.fetched_by)} (installing packages, a few minutes)…`}</p>` +
           `<p class="step"><b>2.</b> When it ends, the phone prints <b>PAIRING CODE</b> (4 groups of 4). Type it here. The laptop doesn't show the phone's key on purpose, so a look-alike device can't be approved by mistake.</p>` +
           `<div class="line"><input type="text" id="wiz-code" class="code" maxlength="24" placeholder="xxxx xxxx xxxx xxxx" autocomplete="off" spellcheck="false" aria-label="Pairing code from the phone">` +
           `<button class="chip go" id="wiz-confirm">Pin this phone</button></div>` +
-          (p.wrong_codes ? `<p class="hint" style="color:#ff8a8a">${p.wrong_codes} of 5 wrong codes used. The fifth ends pairing.</p>` : "");
+          (p.wrong_codes ? `<p class="hint" style="color:var(--bad)">${p.wrong_codes} of 5 wrong codes used. The fifth ends pairing.</p>` : "");
       }
       if (p.error) h += `<div class="warnbox">${esc(p.error)}</div>`;
       h += msg + `<div class="acts"><button class="chip danger" id="wiz-cancel">Cancel pairing</button></div>`;
@@ -1666,7 +1940,7 @@ footer code { color: var(--soft); }
   $("#conn-rep").addEventListener("toggle", () => { if ($("#conn-rep").open) loadPair(); });
   setInterval(updateCount, 1000);
 
-  loadSettings(); loadPhone(); loadAttention();
+  loadSettings(); loadCaps(); loadPhone(); loadAttention(); loadAgents();
   setInterval(loadAttention, 4000);
   setInterval(loadSettings, 4000);
   setInterval(loadPhone, 2000);

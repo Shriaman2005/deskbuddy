@@ -16,7 +16,6 @@ import math
 import os
 import re
 import socket
-import subprocess
 import tempfile
 import threading
 import time
@@ -26,9 +25,13 @@ import urllib.request
 import uuid
 import wave
 
-SECRETS_FILE = os.path.expanduser("~/.config/deskbuddy/secrets.json")
-STT = os.path.expanduser("~/.local/share/deskbuddy/stt")
-WHISPER = os.path.join(STT, "whisper-cli")
+import platforms
+from platforms import paths
+from platforms.proc import SubprocessError, TimeoutExpired
+
+SECRETS_FILE = paths.config("secrets.json")
+STT = paths.data("stt")
+WHISPER = platforms.WHISPER  # STT/whisper-cli
 MODELS_DIR = os.path.join(STT, "models")
 # today's laptop models: small (best with Hinglish), base in fast mode
 AUTO_MODELS = {False: "small-q8_0", True: "base-q8_0"}
@@ -198,11 +201,11 @@ def run_laptop(audio, lang, model, fast):
         f.write(audio)
         f.flush()
         try:
-            out = subprocess.run([WHISPER, "-m", path, "-f", f.name, "-t", "4", "-nt", "-np", "-bs", "1", "-bo", "1",
-                                  "-ac", str(audio_ctx), *args], capture_output=True, timeout=60, check=True)
-        except subprocess.TimeoutExpired:
+            out = platforms.proc.complete([WHISPER, "-m", path, "-f", f.name, "-t", "4", "-nt", "-np", "-bs", "1", "-bo", "1",
+                                  "-ac", str(audio_ctx), *args], timeout=60, text=False, check=True)
+        except TimeoutExpired:
             raise SttError("timeout") from None
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, SubprocessError):
             raise SttError("provider_error", "whisper.cpp failed on the laptop") from None
     # bytes, decoded here: whisper.cpp can print half of a multi-byte character (Hindi, Japanese...), which must
     # not crash the request; the broken piece becomes U+FFFD and is dropped.

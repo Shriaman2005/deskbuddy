@@ -21,15 +21,15 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
     to that phase; then Start/Reset/Skip, this round's 🍅 (tap twice to start a new round), today's sessions
     against the daily goal, auto-start breaks/focus and "long break after N". Countdown has presets and
     −5/−1/+1/+5. While a timer runs, the controls slide away and the ring fills the middle of the screen; pause it
-    (tap the ring) or let it finish to get them back. The pomodoro settings are also on the dashboard (Timer &
-    Pomodoro). A running or paused timer shows as a pill on the face; tap it to open the timer. A finished
+    (tap the ring) or let it finish to get them back. The pomodoro settings are also on the dashboard (Timer
+    page). A running or paused timer shows as a pill on the face; tap it to open the timer. A finished
     countdown rings for up to 30 s — tap to stop it.
   - Chip's two scenes are from the Claude Design project "Robot Focus" / "Robot Typing", now carried by
     `pack.json` (pixel art, in the accent colour):
-    - Focus mode, while a focus session runs (dashboard > Timer & Pomodoro > "Focus mode on the face screen"):
+    - Focus mode, while a focus session runs (dashboard > Timer > "Focus mode on the face screen"):
       the room dims, a moon comes up and Chip types away on a laptop; it gets into flow (closer camera) while you
       type fast, and notifications that arrive meanwhile pop up as muted bubbles. It lets go when the session ends.
-    - Typing along, once you've been typing on the laptop for 10 s (dashboard > Face screen > "Chip types along
+    - Typing along, once you've been typing on the laptop for 10 s (dashboard > Behaviour > "Chip types along
       with you", 3–60 s): Chip boots up a laptop of its own and types at your pace, thinks when you pause for 2 s,
       gets an idea when you carry on, bursts into sparks above 60 wpm, hits a big Enter when you stop (8 s
       without a key) and powers down. The bridge only counts key presses (the USB keyboard's transfer count in
@@ -38,10 +38,9 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
       `&accent=sage`.
     - Cost on the phone: ~80% of a core for kiFOSSk during a scene (8 fps while a section loops, 12 for the
       moves; the canvas is drawn at the design's grid size and scaled up by CSS).
-  - Accent colour (dashboard > Look): cyan, terracotta, sage, violet, rose, amber, sky, or any colour from the
-    picker (the pack derives its whole palette from one accent). It colours Chip's eyes and glow, the scenes and
-    the dashboard itself.
-  - Chip's character (dashboard): idle animations on/off, how often (rarely/normal/often) and which of the pack's
+  - Accent colour (dashboard > Appearance): cyan, terracotta, sage, violet, rose, amber, sky, or any colour from the
+    picker (the pack derives its whole palette from one accent). It colours Chip's eyes and glow and the scenes.
+  - Chip's character (dashboard > Behaviour): idle animations on/off, how often (rarely/normal/often) and which of the pack's
     14 idle clips may play (the last three only while you're away).
   - Rotates with the phone (kiFOSSk orientation: Auto-rotate); every screen has a portrait layout.
   - swipe up: apps (Brave, Termux, Files, Settings, All apps) and toggles (sounds, talking,
@@ -75,7 +74,7 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
   (Notification, AfterAgent in `~/.gemini/settings.json`), both running `laptop/attention.py`; an opencode plugin
   (`~/.config/opencode/plugin/deskbuddy-attention.js`); and desktop notifications, which the bridge watches on the
   session bus (only the sending app's name, or a browser notification's site, is kept). AI apps count by default;
-  "All other apps" makes every notification count, and the dashboard's Apps card sets torch / sound / both / off
+  "All other apps" makes every notification count, and the dashboard's Apps page sets torch / sound / both / off
   per app (`~/.config/deskbuddy/apps.json` lists the apps seen). Durations, sound, volume, reminders, away-only
   and night are all on the dashboard, with a test button and the last alerts.
 - **Torch in Chip's behaviour** (Behaviour > Torch on the dashboard): blinks when a focus session or break ends,
@@ -99,7 +98,7 @@ The old Samsung Galaxy M01 Core (SM-M013F) as an animated desk companion for thi
 
 ## Eyes follow the cursor
 Chip's eyes can follow the laptop's mouse pointer across all monitors. Off by default.
-- Turn it on in the dashboard's **Eyes follow the cursor** card. The card also shows your monitors and where the
+- Turn it on in the dashboard (Appearance > Eyes > **Eyes follow the mouse**). It then also shows your monitors and where the
   phone sits; drag Chip's phone to where the phone really is. The spot is saved per monitor setup, so each
   arrangement (say, with and without the HDMI screen) remembers its own spot.
 - Wayland doesn't let apps read the pointer, so a small GNOME Shell extension
@@ -113,17 +112,17 @@ Chip's eyes can follow the laptop's mouse pointer across all monitors. Off by de
 ## Eye styles
 Chip's eyes come in three styles from its pack (`phone/www/pack.json`, `eyes.styles`): **Classic** (its own scanline
 eyes), **Toon** (big bright eyes with an accent-coloured iris) and **Button** (round accent eyes with a big black pupil).
-- Pick one in the dashboard's **Eyes follow the cursor** card. The
+- Pick one in the dashboard (Appearance > Eyes). The
   setting is `eyeStyle` (empty = the pack's default, Classic).
 - The pupil is S, M or L (`pupilSize`, default M). Only styles that offer a size show the choice.
 - The pupil follows the cursor: it moves inside its box, converges a little when the pointer is near the phone,
   and returns to the centre after a while without movement.
-- While a custom skin is on, its own eye style replaces these and the card says so.
+- While a custom skin is on, its own eye style replaces these and the page says so.
 
 ## Make your own Chip
 A skin changes Chip's art only: its eyes, mouth, and the face plate and ears, plus its accent and colours.
 Animation, moods and timing stay Chip's. You make it with any AI chat (ChatGPT, Gemini, Claude…), and the dashboard's
-**Make your own Chip** card checks the result before Chip uses it.
+**Skins** page checks the result before Chip uses it.
 1. **Get the prompt.** Pick what it's based on (my pet, me, a character or theme, my concept art, or just an idea).
    Copy the prompt and paste it into the chat, and attach your pictures there. Your photos go only to that chatbot.
 2. **Upload the result.** Save the JSON the chat gives you and pick the file, or paste it into the box.
@@ -140,7 +139,7 @@ Animation, moods and timing stay Chip's. You make it with any AI chat (ChatGPT, 
   already has a pair): it gives you a prompt fitted to that skin (its colours and face plate), you upload what the AI draws
   (`chip-phones/1`), Chip checks it on that skin's head and previews it, and **Save** adds the pair to the skin
   (`laptop/skin.js prompt-phones` / `check-phones`).
-- Your skins are listed below, with **Use** and **Delete** (Delete asks first, inside the card). **Back to Chip's
+- Your skins are listed below, with **Use** and **Delete** (Delete asks first, in the row). **Back to Chip's
   own look** switches the skin off.
 - A skin is one JSON file under 600 KB (`chip-skin/1`). Only that file reaches the laptop, never the pictures.
   The phone keeps a copy of the skin it is using, so it still shows it when the laptop is away.
@@ -159,7 +158,7 @@ Animation, moods and timing stay Chip's. You make it with any AI chat (ChatGPT, 
 | `phone/services.sh`, `phone/supervisor.sh` | Termux:Boot (or any new Termux session) starts them; the supervisor restarts sshd and the server within 10 s if they die |
 | `laptop/doctor.py`, `laptop/install.sh` | link health check; (re)installs the bridge as a boot-time systemd user service |
 | `laptop/bridge.py` | `deskbuddy-bridge.service`: stats/media API, Wi-Fi ssh tunnel (finds the phone again if its IP changes), settings and the dashboard, dictation transcription (`POST /transcribe`, `/stt/*`, via `laptop/stt.py`) |
-| `laptop/dashboard.html` | the dashboard page (its preview is `phone/www` served by the bridge) |
+| `laptop/dashboard.html` | the dashboard: a settings page per topic in a left sidebar, light/dark theme, logos in `laptop/logo/` (its preview is `phone/www` served by the bridge) |
 
 Phone apps: kiFOSSk, Termux, Termux:API (F-Droid); Brave (official GitHub release).
 (The phone used to double as a webcam via Android IP Camera; that was removed on 2026-10-28 because it lagged.)
@@ -177,7 +176,7 @@ afterwards; `~/stt/whisper-cli` needs only Termux's libc++. Models: `~/stt/model
 Everything runs over the home Wi-Fi: the laptop keeps one `ssh -R 8765` tunnel open to Termux (port 8022); the
 phone's face page (served from Termux on 127.0.0.1:8080) reaches the bridge through it. Stats, music, typing,
 settings, alerts and dictation all use that one tunnel. The face page itself, timers and clock work without it.
-- **Connections card (dashboard):** shows whether the tunnel is up, the phone's address, why it's down, and
+- **Connections page (dashboard):** shows whether the tunnel is up, the phone's address, why it's down, and
   buttons: Reconnect, Find phone, Replace phone (pairing wizard), Forget this phone, and Doctor (runs doctor.py).
 - **Link settings:** `linkPaused` (close the tunnel and stop looking), `linkAutoFind` (scan the Wi-Fi /24 when the
   saved address stops answering), `linkHomeOnly` + `linkNetworks` (only scan or connect on the listed network
@@ -187,7 +186,11 @@ settings, alerts and dictation all use that one tunnel. The face page itself, ti
   sites can't pause or redirect the link.
 - **Phone key pinning:** the bridge pins the phone's ssh host key under the alias `chip-phone` in
   `~/.config/deskbuddy/known_hosts`. If the phone's IP changes, the bridge scans the /24 for `sshPort` and accepts
-  only the host that presents that key, then saves the new IP.
+  only the host that presents that key, then saves the new IP. Every ssh call (tunnel, deploy, doctor) uses the
+  same strict options from `laptop/sshlink.py`; if `~/.config/deskbuddy/id_ed25519` exists, it is the only key offered.
+- **Phone files:** each time the tunnel comes up, the bridge compares the phone's copy of `phone/` (the hash
+  `~/deskbuddy/.chip-hash` that `laptop/deploy.py` leaves there) with the laptop's and deploys once if they differ;
+  the Connections page shows "Phone files: Up to date / Updating / Failed". `./deploy.sh` still deploys by hand.
 - **Pairing a new phone** (or after Termux is reinstalled): dashboard, Connections, Replace phone. The laptop shows a
   one-time download for 10 minutes; the new phone runs the pairing script from Termux and shows a code, and you
   type that code on the laptop. Nothing is trusted before that. Don't edit known_hosts by hand.
