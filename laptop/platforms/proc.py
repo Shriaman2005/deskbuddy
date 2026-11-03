@@ -32,6 +32,11 @@ def which(name):
     return path if os.path.isfile(path) else None
 
 
-def popen(cmd, text=True, **kw):
-    """subprocess.Popen for long-running helpers (ssh, busctl monitor, parec); text=False for raw bytes."""
-    return subprocess.Popen(cmd, **(_TEXT if text else {}), **_FLAGS, **kw)
+def popen(cmd, text=True, detached=False, **kw):
+    """subprocess.Popen for long-running helpers (ssh, busctl monitor, parec); text=False for raw bytes.
+    detached=True: a program that outlives this one (install.py starting supervise.py); on Windows it gets no
+    console and is not part of this one's process group."""
+    flags = dict(_FLAGS)
+    if detached and os.name == "nt":
+        flags["creationflags"] |= subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    return subprocess.Popen(cmd, **(_TEXT if text else {}), **flags, **kw)

@@ -1,9 +1,21 @@
-"""Windows backend: the network for the phone link (S2); everything else is S5 (psutil). Imports cleanly on every OS."""
+"""Windows backend: PC stats (psutil), the network for the phone link, idle time and the lock state (user32), and
+typing into the focused window (SendInput). ctypes + psutil only. Imports cleanly on every OS (the ctypes structs are
+laid out explicitly, so their sizes can be tested anywhere); the calls themselves only work on Windows."""
+import ctypes
+import os
 import re
+import socket
+import sys
+import time
+import unicodedata
 
+from . import base
 from .base import *  # noqa: F401,F403
-from .base import caps as _none, interface
+from .base import Sampler as _BaseSampler, TypingError, caps as _none, interface
 from .proc import run
+from textclean import clean  # laptop/textclean.py (every entry point has laptop/ on sys.path)
+
+IS_WIN = sys.platform == "win32"
 
 NAME = "windows"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"  # HKCU: install.py's start-at-login value (doctor checks it)
@@ -45,7 +57,231 @@ def wifi_ssid(iface):
     return None, None
 
 
+# ---------------------------------------------------------------- stats (psutil)
+
+def _psutil():
+    try:
+        import psutil
+        return psutil
+    except ImportError:
+        return None
+
+
+def _try(fn, default=None):
+    try:
+        return fn()
+    except Exception:  # noqa: BLE001  (one sensor failing must not blank the others)
+        return default
+
+
+class Sampler:
+    """CPU, RAM, battery, network rates, uptime, disk from psutil. No load average, GPU or temperatures on Windows."""
+
+    def __init__(self):
+        self.ps = _psutil()
+        self._net = None
+        if self.ps:
+            _try(lambda: self.ps.cpu_percent(None))      # the first reading of each is meaningless
+            _try(lambda: self.ps.cpu_percent(None, percpu=True))
+
+    def net(self):
+        counters = self.ps.net_io_counters(pernic=True)
+        rx = sum(c.bytes_recv for n, c in counters.items() if not re.search(r"loopback", n, re.I))
+        tx = sum(c.bytes_sent for n, c in counters.items() if not re.search(r"loopback", n, re.I))
+        t = time.monotonic()
+        prev, self._net = self._net, (t, rx, tx)
+        if not prev or t == prev[0]:
+            return 0, 0
+        return max(0, round((rx - prev[1]) / (t - prev[0]))), max(0, round((tx - prev[2]) / (t - prev[0])))
+
+    def battery(self):
+        """(percent, charging, {status, minutes_left?}) or (None, None, {}) on a desktop."""
+        b = self.ps.sensors_battery()
+        if b is None:
+            return None, None, {}
+        plugged = bool(b.power_plugged)
+        full = plugged and round(b.percent) >= 100
+        info = {"status": "Full" if full else "Charging" if plugged else "Discharging"}
+        if not plugged and isinstance(b.secsleft, (int, float)) and b.secsleft >= 0:
+            info["minutes_left"] = round(b.secsleft / 60)
+        return round(b.percent), plugged, info
+
+    def sample(self):
+        out = _BaseSampler().sample()
+        ps = self.ps
+        if not ps:
+            return out
+        vm = _try(ps.virtual_memory)
+        if vm:
+            out.update(ram=round(vm.percent), ram_used_gb=round((vm.total - vm.available) / 2**30, 1),
+                       ram_total_gb=round(vm.total / 2**30, 1))
+        cores = _try(lambda: ps.cpu_percent(None, percpu=True), [])
+        cpu = _try(lambda: ps.cpu_percent(None))
+        out.update(cpu=None if cpu is None else round(cpu), cores=[round(c) for c in cores])
+        bat, charging, info = _try(self.battery, (None, None, {}))
+        out.update(battery=bat, charging=charging, bat=info)
+        rx_tx = _try(self.net)
+        if rx_tx:
+            out.update(net_rx=rx_tx[0], net_tx=rx_tx[1])
+        out["uptime"] = _try(lambda: int(time.time() - ps.boot_time()))
+        sw = _try(ps.swap_memory)
+        if sw:
+            out["swap"] = round(sw.percent)
+        disk = _try(lambda: ps.disk_usage(os.environ.get("SystemDrive", "C:") + "\\"))
+        if disk:
+            out.update(disk=round(disk.percent), disk_free_gb=round(disk.free / 1e9))
+        return out
+
+
+# ---------------------------------------------------------------- idle time and the lock screen (user32)
+
+_u32 = _k32 = None
+
+
+def _libs():
+    """(user32, kernel32) with argument types set, loaded on first use. Windows only."""
+    global _u32, _k32
+    if _u32 is None:
+        from ctypes import c_int, c_uint, c_uint32, c_void_p, POINTER
+        u, k = ctypes.WinDLL("user32", use_last_error=True), ctypes.WinDLL("kernel32", use_last_error=True)
+        u.GetLastInputInfo.argtypes, u.GetLastInputInfo.restype = [POINTER(LASTINPUTINFO)], c_int
+        u.OpenInputDesktop.argtypes, u.OpenInputDesktop.restype = [c_uint32, c_int, c_uint32], c_void_p
+        u.SwitchDesktop.argtypes, u.SwitchDesktop.restype = [c_void_p], c_int
+        u.CloseDesktop.argtypes, u.CloseDesktop.restype = [c_void_p], c_int
+        u.SendInput.argtypes, u.SendInput.restype = [c_uint, POINTER(INPUT), c_int], c_uint
+        k.GetTickCount.argtypes, k.GetTickCount.restype = [], c_uint32
+        _u32, _k32 = u, k
+    return _u32, _k32
+
+
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint32), ("dwTime", ctypes.c_uint32)]
+
+
+def idle_ms():
+    """Milliseconds since the last keyboard/mouse input (GetLastInputInfo), None if Windows won't say."""
+    if not IS_WIN:
+        return None
+    u, k = _libs()
+    info = LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO), 0)
+    if not u.GetLastInputInfo(ctypes.byref(info)):
+        return None
+    return (k.GetTickCount() - info.dwTime) & 0xFFFFFFFF  # both are 32-bit tick counts that wrap
+
+
+DESKTOP_SWITCHDESKTOP = 0x0100
+ERROR_ACCESS_DENIED = 5
+
+
+def locked():
+    """True while the lock screen (or the sign-in screen, a UAC prompt) is in front: the input desktop is Winlogon's
+    and can't be opened. None when Windows says something else (no interactive session): then nothing is typed."""
+    if not IS_WIN:
+        return None
+    u, _ = _libs()
+    desk = u.OpenInputDesktop(0, False, DESKTOP_SWITCHDESKTOP)
+    if not desk:
+        return True if ctypes.get_last_error() == ERROR_ACCESS_DENIED else None
+    try:
+        return not u.SwitchDesktop(desk)
+    finally:
+        u.CloseDesktop(desk)
+
+
+# ---------------------------------------------------------------- typing (SendInput)
+
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [("dx", ctypes.c_int32), ("dy", ctypes.c_int32), ("mouseData", ctypes.c_uint32),
+                ("dwFlags", ctypes.c_uint32), ("time", ctypes.c_uint32), ("dwExtraInfo", ctypes.c_size_t)]
+
+
+class KEYBDINPUT(ctypes.Structure):
+    _fields_ = [("wVk", ctypes.c_uint16), ("wScan", ctypes.c_uint16), ("dwFlags", ctypes.c_uint32),
+                ("time", ctypes.c_uint32), ("dwExtraInfo", ctypes.c_size_t)]
+
+
+class HARDWAREINPUT(ctypes.Structure):
+    _fields_ = [("uMsg", ctypes.c_uint32), ("wParamL", ctypes.c_uint16), ("wParamH", ctypes.c_uint16)]
+
+
+class _InputUnion(ctypes.Union):  # MOUSEINPUT is the largest member: without it INPUT would be 32 bytes, not 40
+    _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT), ("hi", HARDWAREINPUT)]
+
+
+class INPUT(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_uint32), ("u", _InputUnion)]
+
+
+INPUT_KEYBOARD, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE = 1, 0x0002, 0x0004
+BATCH = 32          # characters per SendInput call (2 events each)
+BATCH_PAUSE = 0.004  # s between calls, so a slow app keeps up
+
+
+def input_size_ok():
+    """sizeof(INPUT) must be 40 on 64-bit Windows (28 on 32-bit): SendInput refuses any other cbSize."""
+    return ctypes.sizeof(INPUT) == (40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28)
+
+
+def utf16_units(text):
+    """The UTF-16 code units of text (a character outside the BMP is two), lone surrogates dropped."""
+    data = text.encode("utf-16-le", "ignore")
+    return [int.from_bytes(data[i:i + 2], "little") for i in range(0, len(data), 2)]
+
+
+def typable(text):
+    """text as one line with no control characters (a U+0008 sent as a Unicode "key" would act as Backspace)."""
+    return clean("".join(ch for ch in text if ch.isspace() or unicodedata.category(ch) != "Cc"))
+
+
+def type_text(text):
+    """Types text into the focused window and returns what was typed. Never sends Enter (newlines and tabs become
+    spaces), refuses while locked. Each UTF-16 unit goes as a KEYEVENTF_UNICODE key down + up, so any language and
+    emoji work without touching the clipboard."""
+    if not IS_WIN:
+        return base.type_text(text)
+    text = typable(text)
+    if not text:
+        return ""
+    text += " "  # so back-to-back dictations don't run together
+    if locked() is not False:
+        raise TypingError("locked", "The laptop is locked")
+    u, _ = _libs()
+    units = utf16_units(text)
+    for i in range(0, len(units), BATCH):
+        events = []
+        for unit in units[i:i + BATCH]:
+            for flags in (KEYEVENTF_UNICODE, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP):
+                e = INPUT(type=INPUT_KEYBOARD)
+                e.u.ki = KEYBDINPUT(0, unit, flags, 0, 0)
+                events.append(e)
+        arr = (INPUT * len(events))(*events)
+        if u.SendInput(len(events), arr, ctypes.sizeof(INPUT)) != len(events):
+            raise TypingError("blocked", "Windows didn't accept the typing: the focused window may be running as "
+                                         "administrator (Windows lets a normal program type only into normal windows)")
+        time.sleep(BATCH_PAUSE)
+    return text
+
+
+# ---------------------------------------------------------------- the port, caps
+
+def prepare_listener(sock):
+    """SO_EXCLUSIVEADDRUSE instead of SO_REUSEADDR: with SO_REUSEADDR another program could bind the same port on
+    Windows and take Chip's connections."""
+    if IS_WIN:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+
 def caps():
-    """wifiName: Windows shows the Wi-Fi name (or the laptop is wired, where "wired" is the network's name)."""
+    """What this Windows can do. wifiName: Windows shows the Wi-Fi name (or the laptop is wired, where "wired" is the
+    network's name). On another OS (the selftest imports this everywhere) only wifiName can be true."""
     iface = interface()[0]
-    return dict(_none(), wifiName=bool(iface) and (not is_wireless(iface) or wifi_ssid(iface)[0] is not None))
+    out = dict(_none(), wifiName=bool(iface) and (not is_wireless(iface) or wifi_ssid(iface)[0] is not None))
+    if IS_WIN:
+        ps = _psutil()
+        is_locked = locked()
+        out.update(stats=ps is not None, battery=bool(ps) and _try(ps.sensors_battery) is not None,
+                   idle=idle_ms() is not None, locked=is_locked is not None,
+                   typing=input_size_ok() and is_locked is not None)
+    return out

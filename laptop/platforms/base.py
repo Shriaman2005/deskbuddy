@@ -25,6 +25,11 @@ class Sampler:
                 "load": None, "wifi": None, "bat": {}}
 
 
+def prepare_listener(sock):
+    """Socket options for the bridge's listening socket, before bind (SO_REUSEADDR: restart without waiting)."""
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+
 def volume():
     """(volume 0-100, muted) of the default output, None where unknown."""
     return None, None

@@ -58,6 +58,9 @@ def caps():
     }
 
 
+prepare_listener = base.prepare_listener
+
+
 # ---------------------------------------------------------------- stats
 
 class Sampler:

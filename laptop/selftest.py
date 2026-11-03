@@ -4,6 +4,7 @@ scans or calls the phone) and checks that the main GET routes answer with their 
 bridge still refuses what it must. Prints a JSON report; exit status 1 if any check failed.
 Needs no GNOME, D-Bus or phone (CI): those caps are then simply false.
 Run: python3 -I laptop/selftest.py"""
+import ctypes
 import http.client
 import inspect
 import json
@@ -77,8 +78,13 @@ def check_backends():
             check(f"platforms.{mod} imports", False, f"{type(e).__name__}: {e}")
             continue
         check(f"platforms.{mod} offers the base.py set", not names - set(vars(m)), sorted(names - set(vars(m))))
-        if mod != "linux":
-            # wifiName may be true where the OS shows the Wi-Fi name (S2); the rest waits for S5/S6
+        if mod == "windows":
+            check("windows INPUT struct is 40 bytes on 64-bit (28 on 32-bit)", m.input_size_ok(), ctypes.sizeof(m.INPUT))
+            check("windows splits characters outside the BMP into two UTF-16 units", m.utf16_units("a\U0001F600") == [97, 0xD83D, 0xDE00])
+            check("windows typing never sends Enter, Tab or control keys", m.typable("a\nb\tc\r\n\x08d\x1b") == "a b c d")
+        if mod != "linux" and not (mod == "windows" and sys.platform == "win32"):
+            # wifiName may be true where the OS shows the Wi-Fi name (S2); macOS waits for S6, and Windows' own
+            # caps only exist on Windows (there CHIP_EXPECT_CAPS and the bridge's /caps below are the test)
             check(f"platforms.{mod} caps are all false", not any(v for k, v in m.caps().items() if k != "wifiName"))
 
 
@@ -117,6 +123,8 @@ def main():
             k, _, v = item.partition("=")
             if k in caps and v in ("0", "1"):
                 check(f"CHIP_FAKE_CAPS sets {k}={v}", caps[k] is (v == "1"))
+        expect = [k for k in os.environ.get("CHIP_EXPECT_CAPS", "").split(",") if k]  # CI: what this runner must do
+        check("CHIP_EXPECT_CAPS are all true", all(caps.get(k) is True for k in expect), [k for k in expect if not caps.get(k)])
         check("termuxLink = ssh found", caps.get("termuxLink") == bool(shutil.which("ssh")) or "termuxLink" in fake)
         check("skins = node found", caps.get("skins") == bool(shutil.which("node")) or "skins" in fake)
         check("laptopStt = false with an empty data dir", caps.get("laptopStt") is False or "laptopStt" in fake)

@@ -15,12 +15,10 @@ import gi
 
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
+from textclean import clean, is_plain  # noqa: E402,F401  (typer.clean / typer.is_plain stay)
 
 BUS_NAME = "org.gnome.Mutter.RemoteDesktop"
 GAZE_BUS = ("org.deskbuddy.Gaze", "/org/deskbuddy/Gaze", "org.deskbuddy.Gaze")  # chip-gaze extension
-
-# Typographic punctuation whisper likes, mapped so ordinary English stays on the key-by-key path.
-_ASCII = {"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", "…": "...", " ": " "}
 
 TEXT_MIMES = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain", "STRING", "TEXT"]
 SECRET_HINT = "x-kde-passwordManagerHint"  # clipboard-history tools skip entries offering this ("secret")
@@ -38,15 +36,6 @@ class TypingError(Exception):
     def __init__(self, code, message):
         super().__init__(message)
         self.code = code
-
-
-def clean(text):
-    """One line, typographic punctuation made plain. Unicode letters stay."""
-    return " ".join("".join(_ASCII.get(ch, ch) for ch in text).split())
-
-
-def is_plain(text):
-    return all(0x20 <= ord(ch) < 0x7F for ch in text)
 
 
 def focused_app():

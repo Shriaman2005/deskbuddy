@@ -44,9 +44,13 @@ volume, idle_ms, locked, type_text = backend.volume, backend.idle_ms, backend.lo
 media_status, media_control, volume_control = backend.media_status, backend.media_control, backend.volume_control
 watch_notifications, audio_monitor = backend.watch_notifications, backend.audio_monitor
 gaze_call, gaze_pointer, gaze_monitors = backend.gaze_call, backend.gaze_pointer, backend.gaze_monitors
+prepare_listener = backend.prepare_listener
 interface, is_wireless, wifi_ssid, firewall_on = backend.interface, backend.is_wireless, backend.wifi_ssid, backend.firewall_on
 
-WHISPER = paths.data("stt", "whisper-cli.exe" if os.name == "nt" else "whisper-cli")
+_WHISPER_EXE = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
+WHISPER = paths.data("stt", _WHISPER_EXE)   # Windows/macOS also take a whisper-cli found on PATH (looked up at start)
+if not os.path.isfile(WHISPER) and not sys.platform.startswith("linux"):
+    WHISPER = shutil.which(_WHISPER_EXE) or WHISPER
 
 
 def fake_caps():

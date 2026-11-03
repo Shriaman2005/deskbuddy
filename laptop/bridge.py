@@ -1398,6 +1398,14 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+class BridgeServer(ThreadingHTTPServer):
+    allow_reuse_address = False  # platforms.prepare_listener sets the right option (Windows: exclusive bind)
+
+    def server_bind(self):
+        platforms.prepare_listener(self.socket)
+        super().server_bind()
+
+
 stats = Stats()
 phone_link = link.PhoneLink(lambda: settings.get())  # the link to the phone and pairing live in link.py
 pairing = link.Pairing(phone_link)
@@ -1414,4 +1422,4 @@ if __name__ == "__main__":
     for target in (stats.fast_loop, stats.slow_loop, phone_link.loop, visualizer.run, gaze.run,
                    attention.watch_notifications, typing.loop):
         threading.Thread(target=target, daemon=True).start()
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    BridgeServer(("127.0.0.1", PORT), Handler).serve_forever()
