@@ -81,7 +81,7 @@ jobs:
           if [ "$code" = 77 ]; then echo "::warning::no usable desktop on this runner: typing into Notepad was not tested"; exit 0; fi
           exit $code
       - name: Windows - typing into a Tk text box
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: bash
         run: |
           code=0
@@ -89,11 +89,11 @@ jobs:
           if [ "$code" = 77 ]; then echo "::warning::no usable desktop on this runner: typing into Tk was not tested"; exit 0; fi
           exit $code
       - name: Windows - install.py --uninstall
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: bash
         run: python -I -X utf8 laptop/install.py --uninstall
       - name: Windows - Chip is gone
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: pwsh
         run: |
           if ((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Chip) { throw "the Run entry is still there" }

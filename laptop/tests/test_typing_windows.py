@@ -35,6 +35,46 @@ k32.GlobalLock.argtypes, k32.GlobalLock.restype = [ctypes.c_void_p], ctypes.c_vo
 k32.GlobalUnlock.argtypes = [ctypes.c_void_p]
 
 
+class RECT(ctypes.Structure):
+    _fields_ = [("l", ctypes.c_long), ("t", ctypes.c_long), ("r", ctypes.c_long), ("b", ctypes.c_long)]
+
+
+class GUITHREADINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint32), ("flags", ctypes.c_uint32)] + [
+        (n, ctypes.c_void_p) for n in ("active", "focus", "capture", "menu", "move", "caret")] + [("rc", RECT)]
+
+
+u32.GetWindowRect.argtypes = [ctypes.c_void_p, ctypes.POINTER(RECT)]
+u32.GetGUIThreadInfo.argtypes = [ctypes.c_uint32, ctypes.POINTER(GUITHREADINFO)]
+u32.GetClassNameW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+u32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_void_p]
+u32.SendMessageW.restype = ctypes.c_ssize_t
+
+
+def focus_info():
+    """(class of the window that has the keyboard focus, its text via WM_GETTEXT) for the foreground thread."""
+    fg = u32.GetForegroundWindow()
+    info = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
+    tid = u32.GetWindowThreadProcessId(fg, None)
+    if not u32.GetGUIThreadInfo(tid, ctypes.byref(info)) or not info.focus:
+        return "(no focus window)", ""
+    cls = ctypes.create_unicode_buffer(256)
+    u32.GetClassNameW(info.focus, cls, 256)
+    buf = ctypes.create_unicode_buffer(4096)
+    u32.SendMessageW(info.focus, 0x000D, 4096, ctypes.addressof(buf))  # WM_GETTEXT
+    return cls.value, buf.value
+
+
+def click_inside(hwnd):
+    """A click in the middle of the window, so its text area has the keyboard focus."""
+    r = RECT()
+    u32.GetWindowRect(hwnd, ctypes.byref(r))
+    u32.SetCursorPos((r.l + r.r) // 2, (r.t + r.b) // 2)
+    u32.mouse_event(0x0002, 0, 0, 0, 0)  # left down
+    u32.mouse_event(0x0004, 0, 0, 0, 0)  # left up
+    time.sleep(0.5)
+
+
 def log(text):
     print(text, flush=True)
 
@@ -146,12 +186,17 @@ def main():
         if not bring_to_front(hwnd):
             log("could not bring the window to the front: no usable desktop here")
             return NO_DESKTOP
+        if app != "tk":
+            click_inside(hwnd)
+        log("focus before typing: %s" % (focus_info()[0],))
         status, answer = post_type(SPOKEN)
         log(f"POST /type -> {status} {json.dumps(answer, ensure_ascii=True)}")
         if status == 423:
             return NO_DESKTOP
         if status != 200 or not answer.get("ok"):
             return 1
+        time.sleep(1)
+        log("focus after typing: %s, its text: %r" % focus_info())
         got = read()
         log(f"window text: {got!r}")
         ok = got is not None and got.strip() == EXPECT
