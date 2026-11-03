@@ -1,20 +1,73 @@
-# Chip — a desk buddy for your old Android phone
+# Chip — turn your old Android phone into a living desk buddy
 
-Turn a spare Android phone into **Chip**, a little pixel-art companion that sits next to your laptop. Chip blinks,
-reacts when you touch it, shows your laptop's stats, the time and weather, runs a Pomodoro timer, types what you say
-into your laptop, and flashes the torch when an AI agent (Claude Code, Gemini CLI, opencode) needs you.
+**That old phone in your drawer can be a tiny pixel-art friend on your desk.** Chip blinks, gets happy when you tap
+it, loves being petted, puts on headphones when your music plays, types along with you, tells you when Claude Code
+is done, and types whatever you say straight into your laptop.
 
-The phone and the laptop talk over your home Wi-Fi through one ssh tunnel. No cable, no cloud account, no app store.
+Free and open source. Runs over your home Wi-Fi. No cable, no cloud account, no app store, no subscription.
+Works with almost any Android phone, even a very slow one: it was built on a budget Samsung Galaxy M01 Core.
 
 <p align="center">
-  <img src="docs/img/face.png" width="49%" alt="Chip's face">
   <img src="docs/img/face-happy.png" width="49%" alt="Chip smiling, with the status bar">
+  <img src="docs/img/headphones.png" width="49%" alt="Chip wearing headphones while music plays">
 </p>
+
+## Why you'll love it
+- 🫶 **It's alive.** Chip blinks, looks around, whistles, sneezes, peeks off-screen, spins, yawns and dozes off when
+  you leave. Tap it, rub it, poke it, shake it: it reacts to each one differently.
+- ⌨️ **It works with you.** Start typing and Chip opens its own little laptop and types at your speed, sparks fly
+  above 60 wpm, and it hits a big Enter when you stop. During a focus session the room goes dark and Chip codes by moonlight.
+- 🎙️ **Talk instead of type.** Hold Chip's face with two fingers, speak, let go: your words appear wherever your cursor
+  is on the laptop. Offline on the phone, offline on the laptop, or via Groq, OpenAI, Deepgram, Gemini and more.
+  Speaks Hinglish out of the box.
+- 🤖 **Your AI agents' pager.** When Claude Code, Gemini CLI or opencode finishes or needs you, the phone flashes its
+  torch, plays a chime and Chip tells you who's calling. One click on the dashboard sets the hooks up.
+- 🎧 **It vibes to your music.** Headphones on when music plays, bobbing to the beat, a music card with play/pause,
+  next and volume, and a full-screen visualizer with 7 styles (bars, mirror, radial, neon, waves, LED, silk).
+- 🍅 **A Pomodoro timer you'll actually see.** Pomodoro, countdown and stopwatch with a giant ring, daily goals,
+  auto-start breaks, and star eyes when you finish a focus session.
+- 📊 **Your laptop at a glance.** CPU, RAM, GPU and battery rings, plus a big clock, hourly weather, air quality,
+  sunrise and sunset. Chip wears a mask when the air is bad.
+- 🎨 **Make it yours.** 8 accent colours or any colour you pick, 3 eye styles, and **custom skins**: describe your pet,
+  yourself or a character to any AI chatbot, upload what it gives you, and Chip becomes that face.
+- 👀 **Its eyes follow your mouse** across all your monitors (Linux/GNOME).
+- 🌙 **It keeps you healthy.** Reminds you to stretch after 50 minutes, warns when the laptop battery is low, says the
+  hour, greets you in the morning and goes to sleep at night.
+- 🔒 **Private by design.** Everything stays on your Wi-Fi. Notifications keep only the app's name, typing along only
+  counts key presses, and there's no camera, analytics or account.
+
+## Gallery
+
+| Typing along / focus mode | Music visualizer |
+|---|---|
+| <img src="docs/img/typing.png" alt="Chip typing on its own laptop"> | <img src="docs/img/visualizer.png" alt="Neon music visualizer"> |
+
+| Clock & weather | Laptop stats and music |
+|---|---|
+| <img src="docs/img/clock.png" alt="Clock and weather screen"> | <img src="docs/img/laptop.png" alt="Laptop stats and music screen"> |
+
+| Pomodoro timer | Chip's own face |
+|---|---|
+| <img src="docs/img/timer.png" alt="Pomodoro timer screen"> | <img src="docs/img/face.png" alt="Chip's face"> |
+
+**Eye styles and accent colours** (Classic above, Toon, Button):
+
 <p align="center">
-  <img src="docs/img/clock.png" width="32%" alt="Clock and weather screen">
-  <img src="docs/img/laptop.png" width="32%" alt="Laptop stats and music screen">
-  <img src="docs/img/timer.png" width="32%" alt="Pomodoro timer screen">
+  <img src="docs/img/eyes-toon.png" width="49%" alt="Toon eyes in violet">
+  <img src="docs/img/eyes-button.png" width="49%" alt="Button eyes in rose">
 </p>
+
+**Custom skins**, made with an AI chatbot in a few minutes (fan-made examples, not included in the repo):
+
+<p align="center">
+  <img src="docs/img/skin-knight.png" width="32%" alt="A dark knight skin">
+  <img src="docs/img/skin-mask.png" width="32%" alt="A red masked hero skin">
+  <img src="docs/img/skin-web.png" width="32%" alt="A web-slinger skin">
+</p>
+
+**The dashboard** on the laptop, with a page for every setting:
+
+<p align="center"><img src="docs/img/dashboard.png" width="85%" alt="The Chip dashboard on the laptop"></p>
 
 > **Status: beta.** Linux (GNOME) is the main platform and has every feature. Windows 10/11 works for the core
 > features and is tested in CI. macOS support is written but not finished yet. See the [comparison table](#what-works-where).
@@ -22,7 +75,7 @@ The phone and the laptop talk over your home Wi-Fi through one ssh tunnel. No ca
 ---
 
 ## Contents
-- [What Chip does](#what-chip-does)
+- [All features](#all-features)
 - [What works where](#what-works-where)
 - [What you need](#what-you-need)
 - [Install on the laptop](#1-install-on-the-laptop) — [Linux](#linux-gnome) · [Windows](#windows-1011) · [macOS](#macos-experimental)
@@ -35,34 +88,65 @@ The phone and the laptop talk over your home Wi-Fi through one ssh tunnel. No ca
 
 ---
 
-## What Chip does
+## All features
 
-**On the phone** (swipe left/right between screens: Face → Clock & weather → Laptop → Timer)
-- **Face:** blinks, looks around and reacts. Tap = happy, double-tap = hearts, rub = pets, poke 6× = grumpy,
-  shake = dizzy, drag a finger = its eyes follow it. When idle it whistles, sneezes, peeks off-screen and naps when
-  you are away. It wears headphones while music plays on the laptop and a mask when the air quality is bad.
-- **Clock & weather:** big pixel clock, hourly forecast, air quality, sunrise and sunset (from Open-Meteo, no key needed).
-- **Laptop:** CPU, RAM, GPU and battery rings, plus a music card (play/pause, next, volume) and a music visualizer.
-- **Timer:** Pomodoro (focus / short / long break, daily goal), countdown and stopwatch. While you focus, Chip
-  types away on its own little laptop in a dimmed room.
-- **Typing along:** when you type on the laptop, Chip opens its laptop and types at your speed.
-- **Dictation:** hold Chip's face with **two fingers**, speak, let go. The text is typed wherever your cursor is on
-  the laptop. Speech-to-text runs on the phone (offline), on the laptop (offline), or a cloud provider of your choice
-  (Groq, OpenAI, Deepgram, ElevenLabs, AssemblyAI, Google, Azure, Gemini or a custom URL). Hinglish by default.
-- **Attention alerts:** when an AI agent finishes or needs input, the phone blinks its torch and/or plays a sound and
-  Chip says who is calling, until you get back to the laptop or tap Chip.
-- **Sleep:** dims at night (11 PM–6:30 AM by default), greets you in the morning, reminds you to stretch.
-- **Swipe up** for app shortcuts and quick toggles; **swipe down** on the face for a summary.
+**Chip's face**
+- Blinks, looks around and reacts: tap = happy, double-tap = hearts, rub back and forth = pets, poke 6× = grumpy,
+  shake the phone = dizzy, drag a finger = its eyes follow it.
+- 14 idle animations (whistle, sneeze, peek off-screen, spin, wiggle, smirk, yawn, nod off…). Choose which ones play
+  and how often.
+- Headphones while music plays on the laptop (bring your own pair with a skin), a mask when the air quality index is
+  200 or more (tap to take it off for 15 s), star eyes after a focus session.
+- A background glow that follows the time of day and Chip's mood.
+- Says hello and introduces itself by name, says the hour, can talk (text to speech) and play sounds.
+- Sleeps at night (11 PM–6:30 AM by default, you choose), dims the screen, and greets you in the morning.
+- Pixel-perfect art at 12 frames per second in the VT323 pixel font with CRT scanlines, tuned to run on a weak phone.
+- Rotates with the phone; every screen has a portrait layout.
+
+**Screens** (swipe left/right: Face → Clock & weather → Laptop → Timer)
+- **Clock & weather:** big pixel clock, date, current weather, 6-hour forecast, air quality, sunrise and sunset
+  (Open-Meteo, no API key). Pick your city on the dashboard.
+- **Laptop:** CPU, RAM, GPU and battery rings; music card with the song, play/pause, previous, next, volume and mute.
+- **Visualizer:** a cava-style spectrum of whatever the laptop is playing, 7 styles, tap to switch.
+- **Timer:** Pomodoro (focus / short / long, long break after N, auto-start, daily goal and today's sessions),
+  countdown with presets, stopwatch. The running timer shows as a pill on the face.
+- **Swipe up:** app shortcuts and quick toggles (sounds, talking, dictation engine, fast dictation, visualizer, torch,
+  reload). **Swipe down** on the face: a quick summary.
+
+**Scenes**
+- **Typing along:** after you've typed on the laptop for 10 s, Chip boots its own laptop and types at your pace,
+  thinks when you pause, gets an idea when you carry on, bursts into sparks above 60 wpm and hits a big Enter when you stop.
+- **Focus mode:** during a focus session the room dims, a moon comes up and Chip works away; it gets into flow when you
+  type fast, and notifications show as muted bubbles.
+
+**Dictation**
+- Hold Chip's face with two fingers, speak, let go; slide a finger away to cancel. Typed where your cursor is.
+- Three engines: **phone** (whisper.cpp, offline), **laptop** (whisper.cpp, offline, under a second), **cloud** (Groq,
+  OpenAI, Deepgram, ElevenLabs, AssemblyAI, Google, Azure, Gemini or a custom URL with your own key).
+- Hinglish by default, auto-detect, or any Whisper language. Fast mode for quicker, smaller models.
+- Never presses Enter, never types while the laptop is locked, the mic is only on while you hold.
+
+**Alerts**
+- AI agents: Claude Code, Gemini CLI and opencode hooks, installed and removed from the dashboard.
+- Other apps' notifications (Linux): choose which apps count and whether they get torch, sound, both or nothing.
+- Torch blinking and/or a sound (chime, beep, alarm, ping), reminders every N seconds until you're back, "only when
+  I'm away" and night settings, a test button and the last alerts.
+- Torch also blinks when a focus session or break ends, for the countdown alarm, at stretch time and for laptop
+  battery or heat warnings. Plus a flashlight button.
+
+**Make it yours**
+- Accent colour: cyan, terracotta, sage, violet, rose, amber, sky, or any colour; the whole palette follows it.
+- Eye styles: Classic, Toon, Button, with S/M/L pupils and a gap setting.
+- Custom skins made with any AI chatbot, checked and previewed on the dashboard, with optional matching headphones.
+  Rename Chip too: a skin's name is what it calls itself.
+- Choose which screens, dock items, clock and laptop panels show.
 
 **On the laptop**
-- **Dashboard** at <http://127.0.0.1:8765> with a page for every setting: colour, eyes, skins, behaviour, sleep,
-  screens, timer, alerts, AI agents, dictation and the phone connection. Changes reach the phone within ~3 seconds.
-
-<p align="center"><img src="docs/img/dashboard.png" width="85%" alt="The Chip dashboard on the laptop"></p>
-
-- **Skins:** make your own Chip with any AI chatbot. The Skins page gives you a prompt, checks the JSON the chatbot
-  returns, previews it and installs it. See [Make your own Chip](#make-your-own-chip).
-- **Eyes follow your mouse** across all your monitors (Linux/GNOME).
+- **Dashboard** at <http://127.0.0.1:8765> with a page per topic, light and dark theme, and search. Changes reach the
+  phone within ~3 seconds.
+- **Connections page:** link status, reconnect, find the phone, pair a new one, forget it, and a built-in doctor.
+- The link heals itself: if the phone's IP changes it finds it again, and after a reboot of either side it comes back
+  within a minute. When you update the Chip folder, the phone gets the new files automatically.
 
 ---
 
