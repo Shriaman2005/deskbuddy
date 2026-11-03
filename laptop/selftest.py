@@ -169,6 +169,8 @@ def main():
             check("/stt/status engines phone/laptop/cloud", not missing(stt["engines"], {"phone", "laptop", "cloud"}))
         status, page = get(port, "/")
         check("dashboard page served", status == 200 and isinstance(page, str) and "<html" in page.lower(), status)
+        for logo in ("/logo/chip-dark.png", "/logo/chip-light.png"):
+            check(f"dashboard logo {logo} served", get(port, logo)[0] == 200)
 
         # nobody else can take the bridge's port (Windows: SO_REUSEADDR would let them; the bridge binds exclusively).
         # Only the same address counts: a wildcard bind next to it never gets 127.0.0.1's connections (the more specific wins).

@@ -47,6 +47,7 @@ PORT = int(os.environ.get("CHIP_PORT") or 8765)  # CHIP_PORT / CHIP_PAIR_PORT on
 SETTINGS_FILE = paths.config("settings.json")
 GAZE_FILE = paths.config("gaze.json")  # where the phone sits, per monitor layout
 DASHBOARD = os.path.join(HERE, "dashboard.html")
+LOGOS = {"/logo/chip-dark.png", "/logo/chip-light.png"}  # the dashboard's logo, one per theme (laptop/logo/)
 PREVIEW = os.path.realpath(os.path.join(HERE, "..", "phone", "www"))  # the buddy page itself, for the dashboard's preview
 PACK_FILE = os.path.join(PREVIEW, "pack.json")
 SKINS_DIR = paths.config("skins")  # <id>.json per installed skin, _draft.json for the passing upload
@@ -976,7 +977,7 @@ class Skins:
 # ---------------------------------------------------------------- http
 
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
-         ".txt": "text/plain; charset=utf-8", ".woff2": "font/woff2",
+         ".txt": "text/plain; charset=utf-8", ".woff2": "font/woff2", ".png": "image/png",
          ".json": "application/json"}
 
 
@@ -1125,6 +1126,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({k: phone.get(k) for k in ("battery", "charging", "temp")})
         if url.path in ("/", "/dashboard"):
             return self.send_file(DASHBOARD)
+        if url.path in LOGOS:
+            return self.send_file(os.path.join(HERE, url.path[1:]))
         if url.path.startswith("/preview/"):
             path = os.path.realpath(os.path.join(PREVIEW, unquote(url.path[9:]) or "index.html"))
             if path.startswith(PREVIEW + os.sep) and os.path.splitext(path)[1] in TYPES:
