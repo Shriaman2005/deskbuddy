@@ -27,9 +27,16 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
 
 ## Gallery
 
-| Typing along / focus mode | Music visualizer |
-|---|---|
-| <img src="docs/img/chip-typing.gif" alt="Chip typing along on its own laptop"> | <img src="docs/img/visualizer.png" alt="Neon music visualizer"> |
+<table>
+  <tr>
+    <th width="60%">Typing along / focus mode</th>
+    <th width="40%">Music visualizer</th>
+  </tr>
+  <tr>
+    <td><img src="docs/img/chip-typing.gif" alt="Chip typing along on its own laptop"></td>
+    <td><img src="docs/img/visualizer.png" alt="Neon music visualizer"></td>
+  </tr>
+</table>
 
 | Clock & weather | Laptop stats and music |
 |---|---|
