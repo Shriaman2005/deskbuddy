@@ -65,6 +65,12 @@ class Dictation:
     # ------------------------------------------------------------ mic
     def _open_mic(self):
         start_pulseaudio()
+        # a take that died without cancel (page closed, ssh dropped) leaves its source loaded and the mic held
+        for line in subprocess.run(["pactl", "list", "short", "modules"], capture_output=True, text=True,
+                                   timeout=10).stdout.splitlines():
+            f = line.split("\t")
+            if len(f) > 1 and f[1] == "module-sles-source":
+                subprocess.run(["pactl", "unload-module", f[0]], timeout=10)
         # the mic source is loaded per take and unloaded afterwards, so the mic is really off in between
         self.module = subprocess.run(["pactl", "load-module", "module-sles-source"],
                                      capture_output=True, text=True, timeout=10).stdout.strip()
@@ -96,9 +102,16 @@ class Dictation:
     # ------------------------------------------------------------ API
     def start(self):
         with self.lock:
+            if self.state == "listening" or (self.state == "thinking" and time.time() - self.started > 200):
+                self._close_mic()  # a new hold means the old take is dead (page closed mid-take, lost cancel)
+                self.state = "idle"
             if self.state != "idle":
                 return {"error": "busy"}
-            self._open_mic()
+            try:
+                self._open_mic()
+            except (OSError, subprocess.SubprocessError):
+                self._close_mic()
+                raise
             self.buf, self.level, self.peak, self.started = bytearray(), 0.0, 0.0, time.time()
             self.proc = subprocess.Popen(["parec", "--format=s16le", f"--rate={RATE}", "--channels=1", "--raw",
                                           "--latency-msec=50"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
