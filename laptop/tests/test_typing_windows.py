@@ -186,8 +186,7 @@ def main():
         if not bring_to_front(hwnd):
             log("could not bring the window to the front: no usable desktop here")
             return NO_DESKTOP
-        if app != "tk":
-            click_inside(hwnd)
+        click_inside(hwnd)  # also ends the menu mode bring_to_front's Alt tap starts, which would eat the first letter
         log("focus before typing: %s" % (focus_info()[0],))
         status, answer = post_type(SPOKEN)
         log(f"POST /type -> {status} {json.dumps(answer, ensure_ascii=True)}")
