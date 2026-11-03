@@ -18,30 +18,6 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
   <img src="docs/img/accent-rose.png" width="24%" alt="Chip in rose">
 </p>
 
-## Why you'll love it
-- 🫶 **It's alive.** Chip blinks, looks around, whistles, sneezes, peeks off-screen, spins, yawns and dozes off when
-  you leave. Tap it, rub it, poke it, shake it: it reacts to each one differently.
-- ⌨️ **It works with you.** Start typing and Chip opens its own little laptop and types at your speed, sparks fly
-  above 60 wpm, and it hits a big Enter when you stop. During a focus session the room goes dark and Chip codes by moonlight.
-- 🎙️ **Talk instead of type.** Hold Chip's face with two fingers, speak, let go: your words appear wherever your cursor
-  is on the laptop. Offline on the phone, offline on the laptop, or via Groq, OpenAI, Deepgram, Gemini and more.
-  Speaks Hinglish out of the box.
-- 🤖 **Your AI agents' pager.** When Claude Code, Gemini CLI or opencode finishes or needs you, the phone flashes its
-  torch, plays a chime and Chip tells you who's calling. One click on the dashboard sets the hooks up.
-- 🎧 **It vibes to your music.** Headphones on when music plays, bobbing to the beat, a music card with play/pause,
-  next and volume, and a full-screen visualizer with 7 styles (bars, mirror, radial, neon, waves, LED, silk).
-- 🍅 **A Pomodoro timer you'll actually see.** Pomodoro, countdown and stopwatch with a giant ring, daily goals,
-  auto-start breaks, and star eyes when you finish a focus session.
-- 📊 **Your laptop at a glance.** CPU, RAM, GPU and battery rings, plus a big clock, hourly weather, air quality,
-  sunrise and sunset. Chip wears a mask when the air is bad.
-- 🎨 **Make it yours.** 8 accent colours or any colour you pick, 3 eye styles, and **custom skins**: describe your pet,
-  yourself or a character to any AI chatbot, upload what it gives you, and Chip becomes that face.
-- 👀 **Its eyes follow your mouse** across all your monitors (Linux/GNOME).
-- 🌙 **It keeps you healthy.** Reminds you to stretch after 50 minutes, warns when the laptop battery is low, says the
-  hour, greets you in the morning and goes to sleep at night.
-- 🔒 **Private by design.** Everything stays on your Wi-Fi. Notifications keep only the app's name, typing along only
-  counts key presses, and there's no camera, analytics or account.
-
 ## Gallery
 
 | Typing along / focus mode | Music visualizer |
@@ -74,6 +50,30 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
 **The dashboard** on the laptop, with a page for every setting:
 
 <p align="center"><img src="docs/img/dashboard.png" width="85%" alt="The Chip dashboard on the laptop"></p>
+
+## Why you'll love it
+- 🫶 **It's alive.** Chip blinks, looks around, whistles, sneezes, peeks off-screen, spins, yawns and dozes off when
+  you leave. Tap it, rub it, poke it, shake it: it reacts to each one differently.
+- ⌨️ **It works with you.** Start typing and Chip opens its own little laptop and types at your speed, sparks fly
+  above 60 wpm, and it hits a big Enter when you stop. During a focus session the room goes dark and Chip codes by moonlight.
+- 🎙️ **Talk instead of type.** Hold Chip's face with two fingers, speak, let go: your words appear wherever your cursor
+  is on the laptop. Offline on the phone, offline on the laptop, or via Groq, OpenAI, Deepgram, Gemini and more.
+  Speaks Hinglish out of the box.
+- 🤖 **Your AI agents' pager.** When Claude Code, Gemini CLI or opencode finishes or needs you, the phone flashes its
+  torch, plays a chime and Chip tells you who's calling. One click on the dashboard sets the hooks up.
+- 🎧 **It vibes to your music.** Headphones on when music plays, bobbing to the beat, a music card with play/pause,
+  next and volume, and a full-screen visualizer with 7 styles (bars, mirror, radial, neon, waves, LED, silk).
+- 🍅 **A Pomodoro timer you'll actually see.** Pomodoro, countdown and stopwatch with a giant ring, daily goals,
+  auto-start breaks, and star eyes when you finish a focus session.
+- 📊 **Your laptop at a glance.** CPU, RAM, GPU and battery rings, plus a big clock, hourly weather, air quality,
+  sunrise and sunset. Chip wears a mask when the air is bad.
+- 🎨 **Make it yours.** 8 accent colours or any colour you pick, 3 eye styles, and **custom skins**: describe your pet,
+  yourself or a character to any AI chatbot, upload what it gives you, and Chip becomes that face.
+- 👀 **Its eyes follow your mouse** across all your monitors (Linux/GNOME).
+- 🌙 **It keeps you healthy.** Reminds you to stretch after 50 minutes, warns when the laptop battery is low, says the
+  hour, greets you in the morning and goes to sleep at night.
+- 🔒 **Private by design.** Everything stays on your Wi-Fi. Notifications keep only the app's name, typing along only
+  counts key presses, and there's no camera, analytics or account.
 
 > **Status: beta.** Linux (GNOME) is the main platform and has every feature. Windows 10/11 works for the core
 > features and is tested in CI. macOS support is written but not finished yet. See the [comparison table](#what-works-where).
