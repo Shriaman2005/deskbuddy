@@ -8,7 +8,7 @@ Free and open source. Runs over your home Wi-Fi. No cable, no cloud account, no 
 Works with almost any Android phone, even a very slow one: it was built on a budget Samsung Galaxy M01 Core.
 
 <p align="center">
-  <img src="docs/img/face.png" width="80%" alt="Chip's default face">
+  <img src="docs/img/chip-face.gif" width="80%" alt="Chip waking up, smiling, getting heart eyes and being petted">
 </p>
 <p align="center"><b>Pick any accent colour</b> and Chip's whole look follows it:</p>
 <p align="center">
@@ -29,7 +29,7 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
 
 | Typing along / focus mode | Music visualizer |
 |---|---|
-| <img src="docs/img/typing.png" alt="Chip typing on its own laptop"> | <img src="docs/img/visualizer.png" alt="Neon music visualizer"> |
+| <img src="docs/img/chip-typing.gif" alt="Chip typing along on its own laptop"> | <img src="docs/img/visualizer.png" alt="Neon music visualizer"> |
 
 | Clock & weather | Laptop stats and music |
 |---|---|
