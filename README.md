@@ -295,7 +295,7 @@ Please open an issue with what you see.
 Pairing is done from the dashboard and takes about 5 minutes (most of it is Termux installing packages).
 
 1. On the phone, install **Termux** and **Termux:API** from F-Droid and open Termux once.
-2. On the laptop, open the dashboard → **Connections** → **Replace phone** → **Start pairing**.
+2. On the laptop, open the dashboard → **Connections** → **Add phone** → **Start pairing**.
 3. The dashboard shows a one-line command. Type it into Termux on the phone (it downloads the setup from your laptop,
    checks it, installs what's needed and starts Chip's server). The download is open for 10 minutes and only for one phone.
 4. When it finishes, the phone prints a **PAIRING CODE** (4 groups of 4 characters). Type it into the dashboard and
@@ -385,7 +385,7 @@ use `py -3` instead of `python3` and `laptop\chip.py` for the path.
 1. Open **Your phones**. Every phone you paired with the code is listed.
 2. Get that phone ready (next section), then press **Switch to this phone**. No new code is needed.
 3. If it says "key mismatch", Termux was reset on that phone: press **Pair again** and follow the wizard.
-4. **Remove...** deletes a saved phone; **Disconnect this phone...** (under Replace phone) stops the link but keeps it saved.
+4. **Remove...** deletes a saved phone; **Disconnect this phone...** (under Add phone) stops the link but keeps it saved.
 
 **Get the phone ready to connect**
 1. Same Wi-Fi as the laptop.
@@ -411,7 +411,7 @@ use `py -3` instead of `python3` and `laptop\chip.py` for the path.
 
 **Set up again**
 1. Phone (after a Termux reset, or when packages broke): press **Set up again** on that phone in **Your phones**.
-   It opens the Replace phone wizard: run the command it shows in Termux, then type the code the phone prints.
+   It opens the Add phone wizard: run the command it shows in Termux, then type the code the phone prints.
 2. Laptop: Windows `py -3 laptop\install.py --repair`, macOS `python3 laptop/install.py --repair`. It builds the venv
    again and restarts Chip; your settings, Chip's ssh key, saved phones and the start-at-login choice stay.
 3. Linux: run `laptop/install.sh` again. It only rewrites the service and keeps your settings, key and phones.

@@ -37,7 +37,7 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
   CHIP_EXPECT_CAPS, `tests/test_macos.py` (key events read back, nothing posted), install --ci twice, --uninstall.
 - `laptop/hooks.py` — the dashboard's AI agents card (Codex, Gemini CLI settings.json hooks; opencode plugin): install/remove/test,
   `.chip-bak` once, recognises any `…attention.py Codex|gemini` line; `/hooks*` dashboard-only; `tests/test_hooks.py` (temp HOME).
-- Connections page in `laptop/dashboard.html` (Reconnect, Find phone, Replace phone = pairing wizard, Forget, Doctor).
+- Connections page in `laptop/dashboard.html` (Reconnect, Find phone, Add phone = pairing wizard, Forget, Doctor).
   README "Connections and reboots" describes it.
 - `laptop/doctor.py` — checks the laptop, the Wi-Fi link (incl. paused, home network, key mismatch from `/link` reason) and Termux.
 - `laptop/skin.js` — chip-skin/1: `check -` (JSON report with path/problem/fix per error), `prompt <basis>`,
@@ -83,7 +83,7 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
   phone through the tunnel can trigger typing. Bridge rejects other origins/hosts.
 - Dictation keys live only in `~/.config/deskbuddy/secrets.json` (stt.SECRETS_FILE): never in settings.json, never returned or logged. Settings: dictEngine, dictLang, dictProvider, dictCloudModel/Url, dictAzureRegion, dictModelLaptop.
 - Link writes are dashboard-only: `/link/*` POSTs are refused (`Handler.dashboard_only`) and `/settings` silently drops LINK_KEYS (incl. sshPort) unless Origin is exactly `http://127.0.0.1:8765`. Never let the phone's page or a script change them.
-- Pairing a new phone: only through the dashboard's Replace phone wizard (`/link/pair/*`, the user types the phone's code). Don't delete known_hosts by hand.
+- Pairing a new phone: only through the dashboard's Add phone wizard (`/link/pair/*`, the user types the phone's code). Don't delete known_hosts by hand.
 - Attention/notifications keep only the source app's name, never content. No webcam.
 - Don't clear caches; don't touch GNOME Builder/Flatpak setups.
 - Testing on the phone: undo what you started (e.g. reset a test focus timer so it doesn't count).

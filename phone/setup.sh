@@ -82,3 +82,36 @@ echo "    (type it on the laptop's dashboard; capitals matter)"
 echo
 echo "[setup] done $(date)"
 touch "$SRC/setup.done"
+
+# After the code is typed on the laptop, the laptop sends Chip's files (~/deskbuddy/.chip-hash is written last).
+# Wait for that, then show one clear next step. Gives up after 15 minutes; it only prints, nothing else depends on it.
+MARK="$SRC/.code-shown"; touch "$MARK"
+echo "[setup] waiting for you to type the code on the laptop (this window can stay open)..."
+for _ in $(seq 1 450); do
+  [ "$HOME/deskbuddy/.chip-hash" -nt "$MARK" ] && break
+  sleep 2
+done
+if [ "$HOME/deskbuddy/.chip-hash" -nt "$MARK" ]; then
+  sleep 3   # let the face server finish restarting
+  echo
+  echo "  ╔══════════════════════════════════════════════════════════╗"
+  echo "  ║   ✓  CONNECTED. Chip is installed on this phone.         ║"
+  echo "  ╠══════════════════════════════════════════════════════════╣"
+  echo "  ║                                                          ║"
+  echo "  ║   NEXT: open Chrome on this phone and go to              ║"
+  echo "  ║                                                          ║"
+  echo "  ║         http://127.0.0.1:8080                            ║"
+  echo "  ║                                                          ║"
+  echo "  ║   (long-press the line above to copy it, then paste it   ║"
+  echo "  ║    into Chrome's address bar)                            ║"
+  echo "  ║                                                          ║"
+  echo "  ║   Then Chrome ⋮ menu → Install app (or Add to Home       ║"
+  echo "  ║   screen), so Chip opens full screen.                    ║"
+  echo "  ║                                                          ║"
+  echo "  ║   Keep Termux open in the background.                    ║"
+  echo "  ║   Start Chip later: chip-start     Stop it: chip-stop    ║"
+  echo "  ╚══════════════════════════════════════════════════════════╝"
+  echo
+else
+  echo "[setup] Nothing arrived from the laptop. Type the code on its dashboard (Add phone), or run this again."
+fi

@@ -378,6 +378,9 @@ details[open] .chev { transform: rotate(180deg); }
 .conn .count { font-family: var(--mono); font-size: 18px; color: var(--fg); }
 .conn .code { letter-spacing: .12em; font-family: var(--mono); }
 .conn .step { margin: 0; color: var(--soft); font-size: 13.5px; }
+.linkbox { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--good); background: var(--sunk); font-size: 14px; }
+.linkbox code { font-size: 18px; user-select: all; }
+ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
 .conn .cmdbox { padding: 10px 12px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line2); overflow-wrap: anywhere; user-select: all; }
 #conn-wiz { display: flex; flex-direction: column; gap: 12px; }
 #conn-wiz:empty { display: none; }
@@ -583,8 +586,27 @@ details[open] .chev { transform: rotate(180deg); }
   // what to do on the phone itself, shown before and during pairing and after it
   const PHONE_PREP = `<p class="step"><b>First, on the new phone:</b> install <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">Termux</a> ` +
     `and <a href="https://f-droid.org/packages/com.termux.api/" target="_blank" rel="noopener">Termux:API</a> from F-Droid (the same source for both: mixing sources breaks them; the Play Store's Termux is outdated). ` +
-    `Open Termux once, then do step 1 below.</p>`;
-  const PHONE_FACE = `<p class="step"><b>Then on the phone:</b> open <code>http://127.0.0.1:8080</code> in Chrome, then ⋮ → <b>Install app</b> (or “Add to Home screen”). ` +
+    `Open Termux once, then do step 1 below.</p>` +
+    `<p class="step"><b>Then allow the permissions</b> (Android Settings, Apps, then the app, Permissions). Do it before pairing: each one switches on a feature, and Chip never grants them for you.</p>` +
+    `<ul class="perms"><li><b>Termux, Microphone:</b> dictation (hold Chip with two fingers and speak).</li>` +
+    `<li><b>Termux, Notifications:</b> keeps Termux's notification, which holds the wake lock so the link survives a dark screen.</li>` +
+    `<li><b>Termux and Termux:API, Battery: Unrestricted:</b> Chip stays connected when the screen is off.</li>` +
+    `<li><b>Termux:API, Location:</b> the phone's Wi-Fi name, for “Only on home networks” and finding the phone by itself. Without it, those two are greyed.</li>` +
+    `<li><b>Termux:API, Modify system settings:</b> screen brightness. Only for a phone that is Chip's own screen.</li>` +
+    `<li><b>Termux:API, Notifications:</b> lets it show its own errors instead of failing silently.</li></ul>` +
+    `<p class="hint">Battery, torch and spoken replies need no extra permission, but Termux:API must have been opened once.</p>`;
+  // shown with the wizard, before and during pairing: the usual reasons it gets stuck
+  const PHONE_TROUBLE = `<details>${summary("Trouble connecting?", "Common problems when adding a phone")}<div class="body">` +
+    TS("The command fails in Termux, or the phone can't download the setup", "“Connection refused”, a timeout, or nothing happens", `The phone and laptop must be on the same home Wi-Fi (guest, office and hotspot-isolated networks block it). Allow Python through the laptop's firewall on private networks; on Linux the wizard shows the exact <code>ufw</code> command. If it says <b>port busy</b>, close the other program and start pairing again.`) +
+    TS("Setup stops while installing packages", "pkg errors, “unable to locate package”, signature errors", `Termux and Termux:API must both come from F-Droid. Uninstall both and reinstall from F-Droid, open Termux once, run <code>pkg update</code>, then paste the command again. It is safe to run again.`) +
+    TS("The phone shows no pairing code", "Setup ran but no PAIRING CODE appears", `Wait for the packages to finish (a few minutes on a slow phone). If it printed an error, fix that and paste the command again; press <b>Start pairing</b> again if the 10 minutes ran out.`) +
+    TS("“Wrong code”", "The laptop says the code doesn't match", `Type the 16 characters exactly as shown (0 and O differ). Five wrong tries cancel pairing for safety.`) +
+    TS("Paired, but the face stays blank or offline", "Link is up, nothing on the phone's screen", `Keep Termux open in the background with battery set to Unrestricted. Open <code>http://127.0.0.1:8080</code> in Chrome on the phone, or type <code>chip-start</code> in Termux. Press <b>Reconnect</b> or <b>Doctor</b> on this page.`) +
+    TS("A feature doesn't work (voice, brightness, Wi-Fi name)", "Dictation silent, brightness fixed, home-network option greyed", `Check the permission list above: Microphone for voice, Modify system settings for brightness, Location for the Wi-Fi name.`) +
+    `<p class="hint">More fixes are on the Troubleshooting page. <a href="#troubleshoot">Open Troubleshooting</a></p></div></details>`;
+  const PHONE_FACE = `<div class="linkbox"><b>Next step, on the phone</b><span>Open Chrome and go to this address (Termux on the phone shows the same box):</span>` +
+    `<code class="cmdbox cmd">http://127.0.0.1:8080</code><span>Then ⋮ → <b>Install app</b> (or “Add to Home screen”) so Chip opens full screen.</span></div>` +
+    `<p class="step"><b>More:</b> ` +
     `Chip then opens full screen and keeps the screen on while it shows. Switch on <b>Personal phone</b> above if it's a phone you also use. ` +
     `Open Termux to start Chip (or type <code>chip-start</code>); type <code>chip-stop</code>, or tap Exit in Termux's notification, to stop it. ` +
     `An always-on phone can use Termux:Boot and kiFOSSk instead.</p>`;
@@ -592,7 +614,7 @@ details[open] .chev { transform: rotate(180deg); }
     `<p class="warnbox"><b>Careful.</b> A wrong port stops the tunnel, and nothing here can fix it from the phone. Use the port you gave <code>sshd -p</code>, from 1024 to 65535.</p>` +
     `<div class="line"><label for="conn-port">Port</label><input type="number" class="field" id="conn-port" min="1024" max="65535" step="1" inputmode="numeric">` +
     `<button class="chip" id="conn-port-save">Save</button></div></div></details>` +
-    `<details id="conn-rep">${summary("Replace phone", "Pair a different phone with this laptop")}<div class="body">` +
+    `<details id="conn-rep">${summary("Add phone", "Pair another phone with this laptop")}<div class="body">` +
     `<p class="hint">The new phone is trusted only after you type the code it shows. Do this on your home Wi-Fi.</p>` +
     `<div id="conn-forget"><button class="chip danger" id="conn-forget-btn">Disconnect this phone…</button></div><div id="conn-ask" hidden></div>` +
     `<div id="conn-wiz"></div></div></details>`;
@@ -795,8 +817,8 @@ details[open] .chev { transform: rotate(180deg); }
     ] },
     { id: "connections", nav: "Laptop", title: "Connections", cls: "conn",
       desc: "The Wi-Fi link between this laptop and the phone. Everything goes over an ssh tunnel, and these settings can only be changed on this page.", groups: [
-      { title: "Status", rows: [raw(CONN_TOP)] },
       { title: "Your phones", rows: [raw(CONN_PHONES)] },
+      { title: "Status", rows: [raw(CONN_TOP)] },
       { title: "Chip on the phone", rows: [raw(CONN_PC)] },
       { title: "This laptop", rows: [raw(CONN_LAPTOP)] },
       { title: "This phone", rows: [
@@ -828,14 +850,14 @@ details[open] .chev { transform: rotate(180deg); }
       { title: "Connection and pairing", rows: [
         raw(TS("Chip goes offline when the phone screen turns off", "Link drops after a minute or two", `Set <b>Termux</b> (and Termux:Boot, kiFOSSk) to <b>Battery: Unrestricted</b>. Keep Termux's notification; it holds the wake lock. Its Exit button stops Chip.`)),
         raw(TS("\u201cThe phone isn't answering\u201d (not found)", "Status says offline, the bridge keeps looking", `Is Termux open and the phone on the same Wi-Fi? Use <b>Reconnect</b> or <b>Find phone</b> on the Connections page, or type the phone's address under Advanced. A router restart can give the phone a new address; auto-find handles that unless turned off.`)),
-        raw(TS("\u201cKey mismatch\u201d", "Something answers, but with the wrong ssh key", `A different device is at that address, or Termux was reinstalled or reset. Nothing is connected. If it is your phone, use <b>Connections, Replace phone</b>. Do not delete known_hosts by hand.`)),
+        raw(TS("\u201cKey mismatch\u201d", "Something answers, but with the wrong ssh key", `A different device is at that address, or Termux was reinstalled or reset. Nothing is connected. If it is your phone, use <b>Connections, Add phone</b>. Do not delete known_hosts by hand.`)),
         raw(TS("Switched phone says key mismatch", "Switch to this phone works, then the phone shows Key mismatch", `Termux was reset or reinstalled on that phone, so its ssh key changed. Press <b>Set up again</b> on that phone in <b>Your phones</b> (or <b>Pair again</b>), run the command in Termux and type the code. Nothing is trusted without the code.`)),
-        raw(TS("\u201cNo phone is paired yet\u201d", "First start, nothing pinned", `Open <b>Replace phone</b> on the Connections page and follow the wizard: run the setup command in Termux, then type the code the phone shows.`)),
+        raw(TS("\u201cNo phone is paired yet\u201d", "First start, nothing pinned", `Open <b>Add phone</b> on the Connections page and follow the wizard: run the setup command in Termux, then type the code the phone shows.`)),
         raw(TS("\u201cPaused\u201d or \u201cnot a home network\u201d", "The link deliberately stays down", `Turn off <b>Pause the link</b>, or add this Wi-Fi to your home networks (Connections), or turn off <b>Only on home networks</b>.`)),
         raw(TS("Pairing: the phone can't download the setup", "Termux can't reach the laptop's pairing port", `Allow Python through the firewall on private networks. On Linux the wizard shows the exact <code>ufw</code> command for this pairing only. If it says <b>port busy</b>, close the other program using that port and try again.`)),
         raw(TS("Pairing: the laptop can't find the phone", "Scanning finds nothing", `Both must be on the same Wi-Fi. Guest and office networks isolate devices: use your home Wi-Fi or the phone's hotspot. Pairing refuses open (password-less) Wi-Fi on purpose.`)),
         raw(TS("Pairing: \u201cno ssh key\u201d or \u201cno network\u201d", "The wizard stops at the first step", `No key: run <code>laptop/install.py</code> (or <code>ssh-keygen -t ed25519</code>). No network: connect the laptop to Wi-Fi first.`)),
-        raw(TS("Pairing: wrong code or \u201ctoo many wrong codes\u201d", "Pairing cancelled", `Type the exact characters the phone shows. After several wrong tries the wizard cancels for safety; start Replace phone again.`)),
+        raw(TS("Pairing: wrong code or \u201ctoo many wrong codes\u201d", "Pairing cancelled", `Type the exact characters the phone shows. After several wrong tries the wizard cancels for safety; start Add phone again.`)),
         raw(TS("Phone's files are out of date or the deploy failed", "Doctor says files differ or failed", `Run <code>./deploy.sh</code> (or <code>python3 -I laptop/deploy.py</code>) and read its error. Chip also redeploys by itself once the tunnel comes up. The face page reloads within a minute; close and reopen the kiosk app to force it.`)),
         raw(TS("\u201cFace page isn't checking in\u201d", "Tunnel is up but the face is blank", `Open the Chip app (kiFOSSk) or <code>http://127.0.0.1:8080</code> in Chrome on the phone. In Termux run <code>chip-start</code>.`)),
         raw(TS("Settings or buttons refuse with \u201cforbidden\u201d", "Link changes do nothing", `Link settings can only be changed on the dashboard at <code>http://127.0.0.1:8765</code>, never from the phone or another address.`)),
@@ -1835,8 +1857,8 @@ details[open] .chev { transform: rotate(180deg); }
       "not home network": `This network (${n || "unknown"}) isn't in your home networks, so Chip stays disconnected and doesn't scan here.`,
       "not found": "The phone isn't answering. Is Termux open on it, and is it on this Wi-Fi? " +
         (S && S.linkAutoFind ? "The bridge keeps looking for it." : "Auto-find is off, so try “Find phone”."),
-      "key mismatch": "Something answers at the phone's address, but its ssh key isn't the pinned one: a different device, or the phone was reset. Nothing is connected. If it is your phone, use Replace phone below.",
-      "no key pinned": "No phone is paired yet. Open “Replace phone” below to pair one.",
+      "key mismatch": "Something answers at the phone's address, but its ssh key isn't the pinned one: a different device, or the phone was reset. Nothing is connected. If it is your phone, use Add phone below.",
+      "no key pinned": "No phone is paired yet. Open “Add phone” below to pair one.",
       "connecting": "Connecting to the phone…" }[L.reason];
     return (text || L.reason || "") + (L.detail && L.reason !== "paused" ? ` (${L.detail})` : "");
   }
@@ -2073,7 +2095,7 @@ details[open] .chev { transform: rotate(180deg); }
     if (sig === phSig) return;
     phSig = sig;
     const list = phones.phones || [];
-    if (!list.length) { box.innerHTML = `<p class="none">No phone has been paired yet. Open “Replace phone” below to pair one.</p>`; return; }
+    if (!list.length) { box.innerHTML = `<p class="none">No phone has been paired yet. Open “Add phone” below to pair one.</p>`; return; }
     box.innerHTML = list.map((p) => {
       const mismatch = (p.active && linkInfo && linkInfo.reason === "key mismatch") || phNote[p.id] === "key mismatch";
       const badge = p.active ? (p.online ? ["Connected", "good"] : ["Active, offline", "warn"]) : ["Offline", ""];
@@ -2085,7 +2107,7 @@ details[open] .chev { transform: rotate(180deg); }
         `</div><span class="badge ${badge[1]}">${badge[0]}</span><div class="acts">` +
         (mismatch ? `<button class="chip go" data-act="pair">Pair again</button>` : "") +
         (p.active ? "" : `<button class="chip" data-act="switch">Switch to this phone</button>`) +
-        `<button class="chip" data-act="again" title="Opens the Replace phone wizard: run its command in Termux again, then type the code">Set up again</button>` +
+        `<button class="chip" data-act="again" title="Opens the Add phone wizard: run its command in Termux again, then type the code">Set up again</button>` +
         `<button class="chip danger" data-act="remove">Remove…</button></div></div>`;
     }).join("");
   }
@@ -2168,7 +2190,7 @@ details[open] .chev { transform: rotate(180deg); }
       h = (p.expired ? `<p class="hint">The last pairing ran out of time.</p>` : "") + PHONE_PREP +
         `<p class="step">Pairing opens a one-time download on this laptop for 10 minutes, for one phone only. Nothing is trusted until you type the code the phone shows.</p>` +
         (CAPS && CAPS.os && CAPS.os !== "linux" ? `<p class="hint">Your computer may ask to allow Python on the network: allow it (private networks).</p>` : "") +
-        `<div class="acts"><button class="chip go" id="wiz-start">Start pairing</button></div>` + msg;
+        `<div class="acts"><button class="chip go" id="wiz-start">Start pairing</button></div>` + msg + PHONE_TROUBLE;
     } else {
       const fw = p.firewall && p.firewall.match(/^(.*?pairing only), (sudo .*?)\s+\(after: (sudo .*)\)$/);
       h = `<p class="step">Expires in <span class="count" id="conn-count"></span></p>` + (p.serving ? PHONE_PREP : "");
@@ -2187,7 +2209,7 @@ details[open] .chev { transform: rotate(180deg); }
           (p.wrong_codes ? `<p class="hint" style="color:var(--bad)">${p.wrong_codes} of 5 wrong codes used. The fifth ends pairing.</p>` : "");
       }
       if (p.error) h += `<div class="warnbox">${esc(p.error)}</div>`;
-      h += msg + `<div class="acts"><button class="chip danger" id="wiz-cancel">Cancel pairing</button></div>`;
+      h += msg + `<div class="acts"><button class="chip danger" id="wiz-cancel">Cancel pairing</button></div>` + PHONE_TROUBLE;
     }
     wiz.innerHTML = h;
     if (keep && $("#wiz-code")) $("#wiz-code").value = keep;

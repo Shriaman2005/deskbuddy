@@ -128,7 +128,7 @@ def main(argv):
         print("No phone address saved yet: pair a phone on the dashboard (Connections), or give its IP.", file=sys.stderr)
         return 1
     if not sshlink.pinned():
-        print("No phone key pinned: pair the phone on the dashboard first (Connections → Replace phone).", file=sys.stderr)
+        print("No phone key pinned: pair the phone on the dashboard first (Connections → Add phone).", file=sys.stderr)
         return 1
     ok, lines = deploy(ip, port)
     print("\n".join(lines), file=sys.stdout if ok else sys.stderr)

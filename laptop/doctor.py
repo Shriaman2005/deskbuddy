@@ -120,7 +120,7 @@ check(why != "paused", "link not paused", "dashboard: Connections, turn off “P
 check(why != "not home network", "laptop on a home network" + (f" ({link['laptop']['ssid']})" if link.get("laptop", {}).get("ssid") else ""),
       "join a network listed in linkNetworks, or turn off “Only on home networks” in the dashboard")
 check(why != "key mismatch", "something at the phone's address presents the pinned key",
-      "a different device answers there, or the phone was reset: dashboard, Connections, “Replace phone”")
+      "a different device answers there, or the phone was reset: dashboard, Connections, “Add phone”")
 check(link["tunnel"], f"ssh tunnel up to {link['ip']}",
       "phone and laptop on the same Wi-Fi? Termux open (or Termux:Boot installed)? The bridge rescans the network by itself")
 if link.get("files"):  # PhoneLink.sync_files: the phone's copy of phone/, checked when the tunnel comes up
