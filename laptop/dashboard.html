@@ -821,6 +821,7 @@ details[open] .chev { transform: rotate(180deg); }
         raw(TS("Screen brightness never changes", "Brightness slider has no effect on the phone", `Only on a phone that is Chip's own screen: <b>Settings, Apps, Termux:API, Modify system settings</b>, allow it. On a personal phone, Chip never changes brightness on purpose (see Connections, Personal phone).`)),
         raw(TS("Setup script says \u201cTermux:API did not answer\u201d", "The check at the end of setup.sh timed out", `The first call starts the app and can be slow. Open Termux:API, set battery to Unrestricted, run <code>termux-battery-status</code> until it answers, then run setup again.`)),
         raw(TS("PulseAudio isn't running, or alert sounds and the mic are silent", "Sounds, mic and dictation dead after a reboot", `In Termux: <code>pkg install pulseaudio</code>. Chip clears a stale PulseAudio pid file by itself on the next dictation or alert. If it still fails, run <code>pkill pulseaudio</code> in Termux and try again.`)),
+        raw(TS("Chip doesn't start after a reboot (laptop start-at-login is off)", "The dashboard doesn't open after you log in", `You switched off <b>Start Chip when the laptop starts</b> (This laptop card). Start it by hand: <code>python3 laptop/chip.py start</code> (Windows: <code>py -3 laptop\\chip.py start</code>), or switch it back on with <code>python3 laptop/chip.py autostart on</code>.`)),
         raw(TS("Chip doesn't start by itself after a phone reboot", "Face stays blank until Termux is opened", `Open Termux (it starts Chip), or for an always-on phone install <b>Termux:Boot</b> from F-Droid, open it once, then run <code>./deploy.sh</code> on the laptop.`)),
         raw(TS("Permission prompts to grant", "What Chip needs from Android", `Termux: Microphone (dictation), Notifications allowed, Battery Unrestricted. Termux:API: Battery Unrestricted, and Modify system settings only for brightness control. Chip never grants these for you.`)),
       ] },
@@ -828,6 +829,7 @@ details[open] .chev { transform: rotate(180deg); }
         raw(TS("Chip goes offline when the phone screen turns off", "Link drops after a minute or two", `Set <b>Termux</b> (and Termux:Boot, kiFOSSk) to <b>Battery: Unrestricted</b>. Keep Termux's notification; it holds the wake lock. Its Exit button stops Chip.`)),
         raw(TS("\u201cThe phone isn't answering\u201d (not found)", "Status says offline, the bridge keeps looking", `Is Termux open and the phone on the same Wi-Fi? Use <b>Reconnect</b> or <b>Find phone</b> on the Connections page, or type the phone's address under Advanced. A router restart can give the phone a new address; auto-find handles that unless turned off.`)),
         raw(TS("\u201cKey mismatch\u201d", "Something answers, but with the wrong ssh key", `A different device is at that address, or Termux was reinstalled or reset. Nothing is connected. If it is your phone, use <b>Connections, Replace phone</b>. Do not delete known_hosts by hand.`)),
+        raw(TS("Switched phone says key mismatch", "Switch to this phone works, then the phone shows Key mismatch", `Termux was reset or reinstalled on that phone, so its ssh key changed. Press <b>Set up again</b> on that phone in <b>Your phones</b> (or <b>Pair again</b>), run the command in Termux and type the code. Nothing is trusted without the code.`)),
         raw(TS("\u201cNo phone is paired yet\u201d", "First start, nothing pinned", `Open <b>Replace phone</b> on the Connections page and follow the wizard: run the setup command in Termux, then type the code the phone shows.`)),
         raw(TS("\u201cPaused\u201d or \u201cnot a home network\u201d", "The link deliberately stays down", `Turn off <b>Pause the link</b>, or add this Wi-Fi to your home networks (Connections), or turn off <b>Only on home networks</b>.`)),
         raw(TS("Pairing: the phone can't download the setup", "Termux can't reach the laptop's pairing port", `Allow Python through the firewall on private networks. On Linux the wizard shows the exact <code>ufw</code> command for this pairing only. If it says <b>port busy</b>, close the other program using that port and try again.`)),
@@ -2083,6 +2085,7 @@ details[open] .chev { transform: rotate(180deg); }
         `</div><span class="badge ${badge[1]}">${badge[0]}</span><div class="acts">` +
         (mismatch ? `<button class="chip go" data-act="pair">Pair again</button>` : "") +
         (p.active ? "" : `<button class="chip" data-act="switch">Switch to this phone</button>`) +
+        `<button class="chip" data-act="again" title="Opens the Replace phone wizard: run its command in Termux again, then type the code">Set up again</button>` +
         `<button class="chip danger" data-act="remove">Remove…</button></div></div>`;
     }).join("");
   }
@@ -2112,6 +2115,13 @@ details[open] .chev { transform: rotate(180deg); }
     const row = b.closest(".ph"), id = row.dataset.id, p = phones.phones.find((x) => x.id === id);
     if (b.dataset.act === "rename") return startRename(row);
     if (b.dataset.act === "pair") { const d = $("#conn-rep"); d.open = true; d.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    if (b.dataset.act === "again") {  // same wizard: the setup command is safe to run again, nothing is trusted until the code is typed
+      const d = $("#conn-rep"); d.open = true; d.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (!(pair && pair.active)) await startPair(!!(linkInfo && linkInfo.pinned && linkInfo.tunnel));
+      wizMsg = { bad: false, text: `Setting up ${p.name} again: run the command below in Termux on that phone, then type the code it shows.` };
+      wizSig = ""; renderWiz();
+      return;
+    }
     if (b.dataset.act === "remove") {
       return ask(`Remove “${p.name}” from the list? ${p.active ? "It is the connected phone, so the tunnel stops. " : ""}To use it again you pair it with the code.`,
         "Yes, remove it", async () => {

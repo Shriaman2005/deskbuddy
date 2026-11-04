@@ -9,6 +9,9 @@ login (HKCU Run -> pythonw supervise.py), start it now, wait for the bridge, ope
 macOS steps: find Python 3.12+ (python.org's or Homebrew's; the Xcode python3 is too old), check HTTPS certificates,
 the same venv and key, a LaunchAgent (org.deskbuddy.bridge: starts at login, restarted if it stops, log in
 ~/Library/Logs/deskbuddy-bridge.log), wait for the bridge, open the dashboard and the Accessibility settings.
+  --repair      same as a normal run, but throws the venv away and builds it again first (use it after a Python update
+                or a broken venv). Settings, Chip's ssh key and phones.json stay; start-at-login stays as it was
+                (on, or off if you had switched it off)
   --uninstall   remove the start-at-login entry and stop Chip; settings, keys and the venv stay
   --ci          no browser, no settings pane, no "press Enter" (for GitHub Actions)
 Standard library only; the Python it runs under only needs to be 3.9+ to get as far as finding a newer one."""
@@ -148,6 +151,28 @@ def make_venv(python):
         fail("pip could not install psutil (is there an internet connection?):\n" + (r.stderr or r.stdout)[-1500:])
 
 
+def repair_prepare():
+    """--repair: stop Chip (it runs from the venv, which Windows won't let go of) and delete the venv; remember
+    whether start-at-login was on, so repair_finish can put that back."""
+    import platforms
+    was = platforms.autostart_get()
+    say("  repair: stopping Chip and removing the old venv")
+    if sys.platform == "darwin":
+        unload_launch_agent()
+    stop_strays()
+    if not wait_until_stopped():
+        fail(f"something still answers on 127.0.0.1:{PORT}; close it and run this again.")
+    shutil.rmtree(VENV, ignore_errors=True)
+    return was
+
+
+def repair_finish(was):
+    if was is False:  # install turns start-at-login on; it was off before, so keep it off
+        import platforms
+        ok, note = platforms.autostart_set(False)
+        say("  start at login stays off" if ok else f"  could not keep start-at-login off: {note}")
+
+
 def make_key(fix):
     import sshlink
     miss = sshlink.missing()
@@ -196,7 +221,8 @@ def remove_run_entry():
 
 def install_windows(args):
     from sshlink import OPENSSH_FIX
-    say("Chip: setting up on Windows")
+    say("Chip: setting up on Windows" + (" (repair)" if args.repair else ""))
+    was = repair_prepare() if args.repair else None
     python, skipped = find_python()
     if not python:
         fail("no Python 3.12 or newer found" + (" (the one from the Microsoft Store doesn't work for Chip)" if skipped else "")
@@ -216,6 +242,8 @@ def install_windows(args):
                stdin=proc.DEVNULL, stdout=proc.DEVNULL, stderr=proc.DEVNULL)
     say("6/6 waiting for the bridge")
     wait_for_bridge(paths.data("bridge.log"))
+    if args.repair:
+        repair_finish(was)
     say(f"\nChip is running. Dashboard: {DASHBOARD}")
     say("It starts by itself at login. To remove it: py -3 laptop\\install.py --uninstall")
     if not args.ci:
@@ -312,7 +340,7 @@ def unload_launch_agent():
 
 
 def install_macos(args):
-    say("Chip: setting up on macOS")
+    say("Chip: setting up on macOS" + (" (repair)" if args.repair else ""))
     python, _ = find_python()
     if not python:
         fail("no Python 3.12 or newer found (the python3 that comes with Xcode is too old).\n"
@@ -320,6 +348,7 @@ def install_macos(args):
     if sys.version_info[:2] < NEEDS:  # the rest of Chip's code is for 3.12+: carry on in the newer one
         say(f"  carrying on with {python}")
         os.execv(python, [python, "-I", "-X", "utf8", os.path.abspath(__file__)] + sys.argv[1:])
+    was = repair_prepare() if args.repair else None
     say(f"1/7 Python: {python}")
     say("2/7 HTTPS certificates")
     check_certificates(python)
@@ -340,6 +369,8 @@ def install_macos(args):
         fail(f"launchctl bootstrap {gui_domain()} failed: {(r.stderr or r.stdout).strip()}")
     say("7/7 waiting for the bridge")
     wait_for_bridge(MAC_LOG)
+    if args.repair:
+        repair_finish(was)
     app = accessibility_target()
     say(f"\nChip is running. Dashboard: {DASHBOARD}")
     say("It starts by itself at login. To remove it: python3 laptop/install.py --uninstall")
@@ -375,6 +406,7 @@ def uninstall_macos(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--uninstall", action="store_true")
+    ap.add_argument("--repair", action="store_true", help="rebuild the venv, keep settings, keys, phones and autostart")
     ap.add_argument("--ci", action="store_true")
     args = ap.parse_args()
     if IS_WIN:
@@ -387,7 +419,8 @@ def main():
     if sys.platform == "darwin":
         (uninstall_macos if args.uninstall else install_macos)(args)
         return 0
-    say("On Linux run laptop/install.sh (the bridge runs as a systemd user service).")
+    say("On Linux run laptop/install.sh (the bridge runs as a systemd user service)."
+        + (" It is safe to run again: it keeps your settings, keys and phones.json." if args.repair else ""))
     return 0
 
 

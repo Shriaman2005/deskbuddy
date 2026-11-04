@@ -376,6 +376,48 @@ Only the JSON file reaches the laptop, never your pictures. Skins need Node.js o
 
 ---
 
+## Connections and reboots
+
+Everything below is on the dashboard's **Connections** page (<http://127.0.0.1:8765/#connections>). Windows commands
+use `py -3` instead of `python3` and `laptop\chip.py` for the path.
+
+**Switch between phones you paired before**
+1. Open **Your phones**. Every phone you paired with the code is listed.
+2. Get that phone ready (next section), then press **Switch to this phone**. No new code is needed.
+3. If it says "key mismatch", Termux was reset on that phone: press **Pair again** and follow the wizard.
+4. **Remove...** deletes a saved phone; **Disconnect this phone...** (under Replace phone) stops the link but keeps it saved.
+
+**Get the phone ready to connect**
+1. Same Wi-Fi as the laptop.
+2. Open Termux (Chip starts by itself), or type `chip-start`.
+3. Leave Termux in the background and set its battery to **Unrestricted**.
+4. Press **Switch to this phone** (or **Reconnect**).
+
+**Restart Chip on the phone**
+1. Press **Restart Chip on the phone** (the connection stays up). Or, in Termux on the phone: `chip-restart`.
+2. **Stop Chip on the phone...** (or `chip-stop`) also stops the phone's ssh server, so the laptop can't start it
+   again: open Termux on the phone and type `chip-start`.
+
+**Stop and start Chip on the laptop**
+1. Press **Stop Chip...** on the **This laptop** card, or in a terminal: `python3 laptop/chip.py stop`.
+   The dashboard closes with it, and the phone shows nothing until Chip runs again.
+2. Start it again: `python3 laptop/chip.py start`. Also: `restart`, `status`.
+
+**Don't start Chip by itself**
+1. Laptop: switch off **Start Chip when the laptop starts**, or `python3 laptop/chip.py autostart off` (`on` to undo).
+   After that, start it by hand with `python3 laptop/chip.py start`.
+2. Phone: switch off **Start Chip when the phone starts** (it needs Termux:Boot). Then Chip starts when you open
+   Termux, or when you type `chip-start`.
+
+**Set up again**
+1. Phone (after a Termux reset, or when packages broke): press **Set up again** on that phone in **Your phones**.
+   It opens the Replace phone wizard: run the command it shows in Termux, then type the code the phone prints.
+2. Laptop: Windows `py -3 laptop\install.py --repair`, macOS `python3 laptop/install.py --repair`. It builds the venv
+   again and restarts Chip; your settings, Chip's ssh key, saved phones and the start-at-login choice stay.
+3. Linux: run `laptop/install.sh` again. It only rewrites the service and keeps your settings, key and phones.
+
+---
+
 ## Privacy and security
 
 - **Nothing leaves your home network** except weather/air-quality lookups (Open-Meteo, by city coordinates), the daily
@@ -409,7 +451,7 @@ The dashboard's **Connections** page has a **Doctor** button too, and shows why 
 | Chip goes offline when the phone screen turns off | Set Termux (and Termux:Boot, kiFOSSk) to **Battery: Unrestricted**. |
 | Torch, battery or voice don't work | Termux:API must be installed from F-Droid, like Termux, and opened once. Check with `termux-battery-status` in Termux. |
 | Red "Termux:API Error: Connection refused" notification | Termux:API woke too slowly (common on Android 14+). Open it once, set its battery to **Unrestricted**, allow its permissions, run `pkg upgrade termux-api`. Harmless otherwise. The dashboard's **Troubleshooting** page lists every error with its fix. |
-| "Key mismatch" on the Connections page | Something else answers at the phone's address, or Termux was reinstalled. Re-pair with **Replace phone**. |
+| "Key mismatch" on the Connections page | Something else answers at the phone's address, or Termux was reinstalled. Press **Set up again** (or **Pair again**) on that phone and type the new code. |
 | Dictation types nothing (Windows) | The focused window may be running as administrator. Click a normal window. |
 | Dictation types nothing (macOS) | Allow the Python the installer named in **Accessibility**. |
 | A feature is greyed out with "Linux only for now" | It isn't available on your OS yet (see the [table](#what-works-where)). |
