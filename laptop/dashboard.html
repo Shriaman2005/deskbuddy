@@ -325,6 +325,22 @@ details[open] .chev { transform: rotate(180deg); }
 /* ---------- connections */
 .conn.mask dd.sens, .conn.mask #conn-why, .conn.mask #conn-msg, .conn.mask #conn-nets, .conn.mask #conn-ip, .conn.mask #conn-pre, .conn.mask #conn-origin { filter: blur(6px); user-select: none; transition: filter .15s; }
 .conn.mask #conn-ip::placeholder { color: transparent; }
+.conn.mask .ph-ip { filter: blur(6px); user-select: none; transition: filter .15s; }
+#conn-phones { display: flex; flex-direction: column; gap: 10px; }
+.ph { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line); }
+.ph.active { border-color: var(--line2); }
+.ph .who { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ph .nm { align-self: flex-start; max-width: 100%; padding: 0; border: 0; background: none; color: var(--fg); font: 500 15px/1.3 inherit; font-family: inherit; text-align: left; cursor: text; overflow-wrap: anywhere; }
+.ph .nm:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+.ph input.nm { padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line2); background: var(--bg); width: 100%; max-width: 260px; }
+.ph small { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.ph .badge { flex: none; padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line2); color: var(--muted); font-size: 12px; }
+.ph .badge.good { color: var(--good); border-color: var(--good); }
+.ph .badge.warn { color: var(--warn); border-color: var(--warn); }
+.ph .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+#conn-phones .none { color: var(--muted); font-size: 13.5px; margin: 0; }
+#conn-phask { margin-top: 10px; }
+#conn-ready ol { margin: 0 0 8px; padding-left: 20px; color: var(--soft); font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
 .conn .st { display: flex; flex-direction: column; gap: 6px; }
 .conn .st-head { display: flex; align-items: center; gap: 10px; }
 .conn .st-head i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
@@ -535,6 +551,11 @@ details[open] .chev { transform: rotate(180deg); }
     `<div class="row range"><label class="txt" for="conn-ip"><b>Phone's address</b><small>Set it by hand when Find phone can't see it</small></label>` +
     `<span class="ipline"><input type="text" class="field" id="conn-ip" inputmode="decimal" placeholder="e.g. 192.168.1.9" autocomplete="off" spellcheck="false">` +
     `<button class="chip" id="conn-setip">Set IP</button></span></div>`;
+  const CONN_PHONES = `<div class="blk"><div id="conn-phones"></div><div id="conn-phask" hidden></div></div>` +
+    `<details id="conn-ready">${summary("Get the phone ready to connect", "Steps on the phone, before you switch to it")}<div class="body">` +
+    `<ol><li>Same Wi-Fi as the laptop.</li><li>Open Termux (Chip starts by itself), or type <code>chip-start</code>.</li>` +
+    `<li>Leave Termux in the background, and set the battery to Unrestricted.</li><li>Press <b>Switch to this phone</b> (or Reconnect).</li></ol>` +
+    `<p class="hint">If it says “key mismatch”, Termux was reset on that phone: use <b>Pair again</b>.</p></div></details>`;
   const CONN_NETS = `<div class="row netrow sub" data-needs="linkHomeOnly"><span class="txt"><b>Home networks</b>` +
     `<small>Chip only connects (and only scans) on these. “wired” means a cable. Up to 10.</small></span>` +
     `<div class="nets" id="conn-nets"></div></div>`;
@@ -552,7 +573,7 @@ details[open] .chev { transform: rotate(180deg); }
     `<button class="chip" id="conn-port-save">Save</button></div></div></details>` +
     `<details id="conn-rep">${summary("Replace phone", "Pair a different phone with this laptop")}<div class="body">` +
     `<p class="hint">The new phone is trusted only after you type the code it shows. Do this on your home Wi-Fi.</p>` +
-    `<div id="conn-forget"><button class="chip danger" id="conn-forget-btn">Forget this phone…</button></div><div id="conn-ask" hidden></div>` +
+    `<div id="conn-forget"><button class="chip danger" id="conn-forget-btn">Disconnect this phone…</button></div><div id="conn-ask" hidden></div>` +
     `<div id="conn-wiz"></div></div></details>`;
   const THEME_HTML = `<div class="row choice"><span class="txt"><b>Theme</b><small>Pitch black or light, for this page only. Chip's face on the phone is not affected</small></span>` +
     `<div class="pick" id="theme-pick" role="group" aria-label="Theme"><button class="chip" data-theme-pick="system">System</button>` +
@@ -754,6 +775,7 @@ details[open] .chev { transform: rotate(180deg); }
     { id: "connections", nav: "Laptop", title: "Connections", cls: "conn",
       desc: "The Wi-Fi link between this laptop and the phone. Everything goes over an ssh tunnel, and these settings can only be changed on this page.", groups: [
       { title: "Status", rows: [raw(CONN_TOP)] },
+      { title: "Your phones", rows: [raw(CONN_PHONES)] },
       { title: "This phone", rows: [
         sw("personalPhone", "Personal phone", "A phone you also use: Chip never changes its screen brightness and hides the app buttons. Chip runs as an installed web app (open Termux first)"),
       ] },
@@ -1268,6 +1290,7 @@ details[open] .chev { transform: rotate(180deg); }
     linkInfo = await fetch("/link", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
     renderStatus();
     renderConn();
+    loadPhones();
     if (($("#conn-rep") && $("#conn-rep").open) || (pair && pair.active)) loadPair();
   }
 
@@ -1905,21 +1928,96 @@ details[open] .chev { transform: rotate(180deg); }
   });
 
   // ---- inline confirm (no alert())
-  function ask(text, yes, onYes, danger = true) {
-    const box = $("#conn-ask");
+  function ask(text, yes, onYes, danger = true, sel = "#conn-ask") {
+    const box = $(sel);
     box.hidden = false;
     box.className = "ask";
-    box.innerHTML = `<div>${esc(text)}</div><div class="acts"><button class="chip ${danger ? "danger" : "go"}" id="ask-yes">${esc(yes)}</button><button class="chip" id="ask-no">Cancel</button></div>`;
-    $("#ask-no").onclick = () => { box.hidden = true; };
-    $("#ask-yes").onclick = async () => { box.hidden = true; await onYes(); };
+    box.innerHTML = `<div>${esc(text)}</div><div class="acts"><button class="chip ${danger ? "danger" : "go"}" data-ask="yes">${esc(yes)}</button><button class="chip" data-ask="no">Cancel</button></div>`;
+    box.querySelector('[data-ask="no"]').onclick = () => { box.hidden = true; };
+    box.querySelector('[data-ask="yes"]').onclick = async () => { box.hidden = true; await onYes(); };
   }
   $("#conn-forget-btn").addEventListener("click", () => ask(
-    "Forget this phone? The pinned ssh key and saved address are deleted and the tunnel stops. Chip shows nothing until a phone is paired again.",
-    "Yes, forget it", async () => {
+    "Disconnect this phone? The tunnel stops and Chip shows nothing until you switch to a phone again. It stays in Your phones.",
+    "Yes, disconnect", async () => {
       const { status, data } = await linkPost("/link/forget");
-      connMsg(status === 200 ? "Forgotten. Pair a phone below." : why(data), status === 200 ? "good" : "bad");
+      connMsg(status === 200 ? "Disconnected. It is still in Your phones." : why(data), status === 200 ? "good" : "bad");
       loadPhone();
     }));
+
+  // ---- saved phones (GET /link/phones; POST /link/phones/switch|rename|remove)
+  let phones = null, phSig = "", phEdit = null, phNote = {};
+  async function loadPhones() {
+    const r = await fetch("/link/phones", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (r) { phones = r; renderPhones(); }
+  }
+  function renderPhones() {
+    const box = $("#conn-phones");
+    if (!box || !phones || phEdit) return;
+    const sig = JSON.stringify([phones, phNote, linkInfo && linkInfo.reason, linkInfo && linkInfo.tunnel]);
+    if (sig === phSig) return;
+    phSig = sig;
+    const list = phones.phones || [];
+    if (!list.length) { box.innerHTML = `<p class="none">No phone has been paired yet. Open “Replace phone” below to pair one.</p>`; return; }
+    box.innerHTML = list.map((p) => {
+      const mismatch = (p.active && linkInfo && linkInfo.reason === "key mismatch") || phNote[p.id] === "key mismatch";
+      const badge = p.active ? (p.online ? ["Connected", "good"] : ["Active, offline", "warn"]) : ["Offline", ""];
+      const seen = p.online ? "now" : p.lastSeen ? when(p.lastSeen) : "never";
+      return `<div class="ph${p.active ? " active" : ""}" data-id="${esc(p.id)}"><div class="who">` +
+        `<button class="nm" data-act="rename" title="Click to rename">${esc(p.name || "Phone")}</button>` +
+        `<small>Last seen ${esc(seen)} · <span class="ph-ip">${esc(p.ip || "no address yet")}</span></small>` +
+        (phNote[p.id] ? `<small style="color:var(--warn)">${esc(phNote[p.id] === "key mismatch" ? "Key mismatch: Termux was reset on that phone." : phNote[p.id])}</small>` : "") +
+        `</div><span class="badge ${badge[1]}">${badge[0]}</span><div class="acts">` +
+        (mismatch ? `<button class="chip go" data-act="pair">Pair again</button>` : "") +
+        (p.active ? "" : `<button class="chip" data-act="switch">Switch to this phone</button>`) +
+        `<button class="chip danger" data-act="remove">Remove…</button></div></div>`;
+    }).join("");
+  }
+  function startRename(row) {
+    const id = row.dataset.id, p = phones.phones.find((x) => x.id === id), b = row.querySelector(".nm");
+    if (!p) return;
+    phEdit = id;
+    const inp = document.createElement("input");
+    inp.className = "nm"; inp.id = "conn-phname"; inp.type = "text"; inp.maxLength = 32; inp.value = p.name || ""; inp.setAttribute("aria-label", "Phone name");
+    b.replaceWith(inp); inp.focus(); inp.select();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return; done = true;
+      const name = inp.value.trim();
+      if (save && name && name !== p.name) {
+        const { status, data } = await linkPost("/link/phones/rename", { id, name });
+        if (status !== 200) connMsg(why(data), "bad");
+      }
+      phEdit = null; phSig = ""; loadPhones();
+    };
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") finish(true); else if (e.key === "Escape") finish(false); });
+    inp.addEventListener("blur", () => finish(true));
+  }
+  $("#conn-phones").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b) return;
+    const row = b.closest(".ph"), id = row.dataset.id, p = phones.phones.find((x) => x.id === id);
+    if (b.dataset.act === "rename") return startRename(row);
+    if (b.dataset.act === "pair") { const d = $("#conn-rep"); d.open = true; d.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    if (b.dataset.act === "remove") {
+      return ask(`Remove “${p.name}” from the list? ${p.active ? "It is the connected phone, so the tunnel stops. " : ""}To use it again you pair it with the code.`,
+        "Yes, remove it", async () => {
+          const { status, data } = await linkPost("/link/phones/remove", { id });
+          connMsg(status === 200 ? `Removed ${p.name}.` : why(data), status === 200 ? "good" : "bad");
+          phSig = ""; loadPhones(); loadPhone();
+        }, true, "#conn-phask");
+    }
+    if (b.dataset.act === "switch") await busy(b, "Switching…", async () => {
+      const { status, data } = await linkPost("/link/phones/switch", { id });
+      phNote = {};
+      if (status !== 200) connMsg(why(data), "bad");
+      else { connMsg(data.note ? `Switched to ${p.name}, but: ${data.note}` : `Switched to ${p.name}. Connecting…`, data.note ? "bad" : "good"); }
+      phSig = ""; await loadPhones(); await loadPhone();
+      setTimeout(async () => {  // the tunnel needs a moment: a key mismatch shows up in /link
+        await loadPhone();
+        if (linkInfo && linkInfo.reason === "key mismatch") { phNote[id] = "key mismatch"; phSig = ""; renderPhones(); }
+      }, 4000);
+    });
+  });
 
   // ---- pairing wizard
   async function loadPair() {
