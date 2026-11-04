@@ -1127,6 +1127,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.dashboard_only(reading=True) and self.send_json(hooks.listing())
         if url.path == "/link/pair":  # carries the pairing token: never to the phone's page
             return self.dashboard_only(reading=True) and self.send_json(pairing.status())
+        if url.path == "/link/phones":  # the phones paired before (dashboard only)
+            return self.dashboard_only(reading=True) and self.send_json(phone_link.saved())
         if url.path == "/link":  # for the dashboard and doctor.py
             return self.send_json(phone_link.snapshot())
         if url.path == "/api/status":  # the preview's stand-in for the phone server: what the phone last reported
@@ -1363,6 +1365,26 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True})
         self.send_json({"error": "not found"}, 404)
 
+    def post_phones(self, path, link):
+        """/link/phones/switch {id}, /link/phones/rename {id, name}, /link/phones/remove {id} (dashboard only)."""
+        body = self.read_json() or {}
+        pid = body.get("id")
+        link.migrate()
+        if not isinstance(pid, str) or not link.phones.get(pid):
+            return self.send_json({"ok": False, "error": "unknown phone"}, 404)
+        if path.endswith("/rename"):
+            name = link.phones.rename(pid, body.get("name"))
+            if name is None:
+                return self.send_json({"ok": False, "error": "bad name",
+                                       "message": f"a name of 1 to {link.phones.NAME_MAX} characters"}, 400)
+            return self.send_json({"ok": True, "name": name})
+        if path.endswith("/remove"):
+            return self.send_json({"ok": link.remove_saved(pid)})
+        why = link.blocked()
+        if not link.switch(pid):
+            return self.send_json({"ok": False, "error": "unknown phone"}, 404)
+        return self.send_json({"ok": True, **({"note": why} if why else {})})
+
     def post_link(self, path):
         """/link/reconnect, /link/find, /link/ip {ip}, /link/forget, /link/doctor (dashboard only)."""
         link = phone_link
@@ -1391,6 +1413,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/link/forget":
             link.forget()
             return self.send_json({"ok": True})
+        if path in ("/link/phones/switch", "/link/phones/rename", "/link/phones/remove"):
+            return self.post_phones(path, link)
         if path not in ("/link/reconnect", "/link/find", "/link/ip"):
             return self.send_json({"error": "not found"}, 404)
         if path == "/link/ip":  # checked before blocked(), so a bad request is a 400 whatever the link's state
@@ -1439,7 +1463,8 @@ class BridgeServer(link.QuickServer):
 
 
 stats = Stats()
-phone_link = link.PhoneLink(lambda: settings.get())  # the link to the phone and pairing live in link.py
+phone_link = link.PhoneLink(lambda: settings.get(),  # the link to the phone and pairing live in link.py
+                            set_port=lambda port: settings.update({"sshPort": port}))
 pairing = link.Pairing(phone_link)
 visualizer = Visualizer()
 gaze = Gaze()

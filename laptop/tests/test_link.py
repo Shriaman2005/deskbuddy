@@ -61,10 +61,10 @@ def wait(cond, timeout=20, step=0.3):
     return cond()
 
 
-def fetch(port, path, method="GET", host=None, headers=None):
+def fetch(port, path, method="GET", host=None, headers=None, body=None):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     try:
-        conn.request(method, path, body=b"{}" if method == "POST" else None,
+        conn.request(method, path, body=json.dumps(body or {}).encode() if method == "POST" else None,
                      headers={"Host": host or f"127.0.0.1:{port}", **(headers or {})})
         r = conn.getresponse()
         body = r.read().decode("utf-8", "replace")
@@ -96,6 +96,99 @@ def phone(key_file, host="127.0.0.1", port=0, home=None):
 def write_json(name, data):
     with open(os.path.join(CFG, name), "w", encoding="utf-8") as f:
         json.dump(data, f)
+
+
+def pair_in_process(fake, cfg):
+    """A confirmed pairing (Pairing.confirm, the real code path) with the fake phone, without the download server:
+    the session is the one Pairing.start leaves once the phone fetched the bundle."""
+    lnk = link.PhoneLink(lambda: cfg)
+    p = link.Pairing(lnk)
+    now = time.time()
+    p.session = {"script_id": "x", "bundle_token": "x", "ip": "127.0.0.1", "net": ipaddress.ip_network("127.0.0.0/8"),
+                 "until": now, "script": b"", "bundle": b"", "script_by": fake.host, "fetched_by": fake.host,
+                 "fetched_at": now, "ready": now, "error": None, "wrong": 0}
+    code = p.host_keys(fake.host)[0][2][:link.Pairing.CODE_LEN]
+    with contextlib.redirect_stdout(sys.stderr):
+        answer, status = p.confirm(code)
+    return answer if status == 200 else {"ok": False, "status": status, **answer}
+
+
+def phones_checks(bport, dash, real, good_pub, remote):
+    """Saved phones (P1): migration, pairing twice, switch (keys + ip + port, tunnel up), key changed, rename, remove,
+    and every /link/phones* refused without the dashboard's Origin."""
+    lk = lambda: fetch(bport, "/link")[1]  # noqa: E731
+    saved = lambda: fetch(bport, "/link/phones", headers=dash)[1]  # noqa: E731
+    post = lambda path, body, h=dash: fetch(bport, path, "POST", headers=h, body=body)  # noqa: E731
+    first = saved()
+    one = first.get("phones") or [{}]
+    check("migration: the existing pin is saved as Phone 1, active",
+          len(first.get("phones", [])) == 1 and one[0].get("name") == "Phone 1" and one[0].get("active")
+          and one[0].get("ip") == "127.0.0.1" and one[0].get("sshPort") == real.port and one[0].get("online"), first)
+    if os.name != "nt":
+        check("phones.json is 0600", os.stat(link.PHONES_FILE).st_mode & 0o777 == 0o600, oct(os.stat(link.PHONES_FILE).st_mode))
+    with open(link.PHONES_FILE, encoding="utf-8") as f:
+        stored = json.load(f)
+    check("phones.json holds only id, name, keys, ip, sshPort, pairedAt, lastSeen",
+          all(set(p) <= {"id", "name", "keys", "ip", "sshPort", "pairedAt", "lastSeen"} for p in stored["phones"])
+          and stored["phones"][0]["lastSeen"], stored)
+    a_id = one[0].get("id")
+
+    b_key, _ = host_key("second_phone_key")
+    b = phone(b_key)
+    cfg = {"sshPort": b.port, "linkKeepAlive": 10, "linkPaused": False, "linkHomeOnly": False,
+           "linkNetworks": [], "linkAutoFind": False, "linkRetry": 5}
+    r1 = pair_in_process(b, cfg)
+    r2 = pair_in_process(b, cfg)  # the same phone again: updated, not a duplicate
+    cfg["sshPort"] = real.port
+    r3 = pair_in_process(real, cfg)  # Phone 1 paired again: still the same entry
+    lst = saved().get("phones", [])
+    check("pairing a second phone adds it as Phone 2; the same key again is no duplicate",
+          r1.get("ok") and r2.get("ok") and r3.get("ok") and r1.get("id") == r2.get("id") != a_id and r3.get("id") == a_id
+          and [p["name"] for p in lst] == ["Phone 1", "Phone 2"], [r1, r2, r3, lst])
+    b_id = r1.get("id")
+
+    status, ans = post("/link/phones/switch", {"id": b_id})
+    up = wait(lambda: lk().get("tunnel") and lk().get("port") == b.port, 40)
+    check("switch: Phone 2's port, address and key, tunnel up to it",
+          status == 200 and up and sshlink.pinned() == {tuple(k[:2]) for k in link.Phones().get(b_id)["keys"]}
+          and link.load_state().get("ip") == "127.0.0.1" and wait(lambda: remote in b.forwards, 10),
+          [status, ans, sshlink.pinned(), link.load_state(), b.forwards, remote])
+    check("switch: Phone 2 is the active one, online", wait(lambda: saved().get("active") == b_id
+          and next(p for p in saved()["phones"] if p["id"] == b_id)["online"], 10), saved())
+    status, _ = post("/link/phones/switch", {"id": a_id})
+    up = wait(lambda: lk().get("tunnel") and lk().get("port") == real.port, 40)
+    check("switch back: Phone 1's key + port again, no re-pairing, tunnel up",
+          status == 200 and up and sshlink.pinned() == {tuple(good_pub.split())}, lk())
+
+    port_b = b.port  # Termux reset on Phone 2: same address and port, a new host key
+    b.stop()
+    reset_key, _ = host_key("second_phone_reset_key")
+    b2 = phone(reset_key, port=port_b)
+    status, _ = post("/link/phones/switch", {"id": b_id})
+    check("switch to a phone whose key changed: key mismatch, no tunnel",
+          status == 200 and wait(lambda: lk().get("reason") == "key mismatch", 40) and not b2.forwards, lk())
+
+    status, ans = post("/link/phones/rename", {"id": a_id, "name": "  Desk   phone "})
+    check("rename trims the name", status == 200 and ans.get("name") == "Desk phone"
+          and next(p for p in saved()["phones"] if p["id"] == a_id)["name"] == "Desk phone", ans)
+    bad = [post("/link/phones/rename", {"id": a_id, "name": n})[0] for n in ("   ", "x" * 33, 5)]
+    check("rename refuses empty, >32 characters and non-text", bad == [400, 400, 400], bad)
+    check("unknown id: 404", post("/link/phones/switch", {"id": "nope"})[0] == 404)
+
+    status, _ = post("/link/phones/remove", {"id": b_id})  # the active one: forget + remove
+    after = saved()
+    check("remove the active phone: unpinned, gone from the list, Phone 1 kept",
+          status == 200 and after.get("active") is None and [p["id"] for p in after.get("phones", [])] == [a_id]
+          and not sshlink.pinned(), after)
+    status, _ = post("/link/forget", {})
+    check("forget keeps the saved phone", status == 200 and [p["id"] for p in saved().get("phones", [])] == [a_id])
+
+    phone_page = {"Origin": "http://127.0.0.1:8080"}
+    refused = [fetch(bport, "/link/phones", headers=phone_page)[0], fetch(bport, "/link/phones", "POST")[0]]
+    refused += [post(path, {"id": a_id, "name": "x"}, h)[0] for path in
+                ("/link/phones/switch", "/link/phones/rename", "/link/phones/remove") for h in (phone_page, {})]
+    check("every /link/phones* refused without the dashboard's Origin", set(refused) == {403}, refused)
+    return a_id
 
 
 def loopback_aliases():
@@ -233,6 +326,16 @@ def main():
               any("✓ can ssh into Termux" in l for l in lines), r.stdout[-1500:])
         check("doctor.py: the phone reaches the bridge through the tunnel",
               any("✓ phone reaches the bridge through the tunnel" in l for l in lines), r.stdout[-1500:])
+
+        a_id = phones_checks(bport, dash, real, good_pub, remote)
+        before = fetch(bport, "/link/phones", headers=dash)[1]
+        bridge.terminate()
+        bridge.communicate(timeout=8)
+        bridge = proc.popen(py + [os.path.join(LAPTOP, "bridge.py")], env=env, stdin=proc.DEVNULL, stdout=proc.PIPE,
+                            stderr=proc.STDOUT)
+        after = wait(lambda: (lambda r: r[0] == 200 and r[1])(fetch(bport, "/link/phones", headers=dash)), 20)
+        check("saved phones survive a bridge restart", after == before and after["phones"][0]["id"] == a_id
+              and after["phones"][0]["name"] == "Desk phone", [before, after])
     finally:
         bridge.terminate()
         try:

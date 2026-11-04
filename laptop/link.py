@@ -2,6 +2,7 @@
 the phone again when its address changes; Pairing pairs a new phone from the dashboard; Phone files are synced by
 deploy.py when the tunnel comes up and the phone's copy differs. Every ssh call goes through sshlink.py (the
 phone's host key pinned under an alias, equally strict on every OS)."""
+import base64
 import concurrent.futures
 import hashlib
 import hmac
@@ -30,6 +31,7 @@ PORT = int(os.environ.get("CHIP_PORT") or 8765)  # the bridge's port (CHIP_PORT 
 REMOTE_PORT = int(os.environ.get("CHIP_TUNNEL_REMOTE_PORT") or PORT)
 PAIR_PORT = int(os.environ.get("CHIP_PAIR_PORT") or 8766)  # the one-shot download server for pairing a new phone (laptop's LAN address only)
 STATE_FILE = paths.config("state.json")
+PHONES_FILE = paths.config("phones.json")
 
 
 class QuickServer(ThreadingHTTPServer):
@@ -55,6 +57,127 @@ def save_state(state):
         json.dump(state, f)
 
 
+def key_fingerprint(key):
+    """OpenSSH's SHA256 fingerprint (base64, no padding) of a public key's base64 blob, or None."""
+    try:
+        return base64.b64encode(hashlib.sha256(base64.b64decode(key, validate=True)).digest()).decode().rstrip("=")
+    except ValueError:
+        return None
+
+
+class Phones:
+    """The phones paired before (PHONES_FILE, 0600): {"active": id, "phones": [{id, name, keys: [[type, key]], ip,
+    sshPort, pairedAt, lastSeen}]}. No secrets, only public host keys. id = the first 12 characters of the ED25519
+    key's fingerprint (stable per Termux install). A phone gets in only through Pairing.confirm (or the one-time
+    migration of the pin made before this file existed); switching to one rewrites the pin from here."""
+    NAME_MAX = 32
+
+    def __init__(self, path=None):
+        self.path = path or PHONES_FILE
+        self.lock = threading.RLock()
+
+    @staticmethod
+    def key_id(keys):
+        keys = sorted(keys, key=lambda k: k[0] != "ssh-ed25519")  # ED25519 first
+        for _, key in keys:
+            fp = key_fingerprint(key)
+            if fp:
+                return fp[:12]
+        return None
+
+    def exists(self):
+        return os.path.exists(self.path)
+
+    def load(self):
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+        phones = [p for p in data.get("phones") or [] if isinstance(p, dict) and p.get("id") and p.get("keys")]
+        active = data.get("active")
+        return {"active": active if any(p["id"] == active for p in phones) else None, "phones": phones}
+
+    def save(self, data):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        tmp = self.path + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=1)
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        os.replace(tmp, self.path)
+
+    def get(self, pid):
+        return next((p for p in self.load()["phones"] if p["id"] == pid), None)
+
+    def add_or_update(self, keys, ip, port, active=True, name=None):
+        """Saves a confirmed phone (same key again = the same entry, updated). Returns its id."""
+        keys = [list(k[:2]) for k in keys]
+        pid = self.key_id(keys)
+        if not pid:
+            return None
+        with self.lock:
+            data = self.load()
+            p = next((p for p in data["phones"] if p["id"] == pid), None)
+            if p is None:
+                taken = {q.get("name") for q in data["phones"]}
+                n = len(data["phones"]) + 1
+                while f"Phone {n}" in taken:
+                    n += 1
+                p = {"id": pid, "name": name or f"Phone {n}", "pairedAt": round(time.time()), "lastSeen": None}
+                data["phones"].append(p)
+            p.update(keys=keys, ip=ip, sshPort=port)
+            if active:
+                data["active"] = pid
+            self.save(data)
+        return pid
+
+    def migrate(self, keys, ip, port):
+        """Once: a pin exists and PHONES_FILE doesn't → save it as "Phone 1", active."""
+        with self.lock:
+            if self.exists() or not keys:
+                return None
+            return self.add_or_update(sorted(keys), ip, port, name="Phone 1")
+
+    def change(self, pid, **fields):
+        with self.lock:
+            data = self.load()
+            p = next((p for p in data["phones"] if p["id"] == pid), None)
+            if p is None:
+                return False
+            p.update(fields)
+            self.save(data)
+            return True
+
+    def set_active(self, pid):
+        with self.lock:
+            data = self.load()
+            if pid is not None and not any(p["id"] == pid for p in data["phones"]):
+                return False
+            if data["active"] != pid:
+                data["active"] = pid
+                self.save(data)
+            return True
+
+    def rename(self, pid, name):
+        name = " ".join(name.split()) if isinstance(name, str) else ""
+        if not 1 <= len(name) <= self.NAME_MAX:
+            return None
+        return name if self.change(pid, name=name) else False
+
+    def remove(self, pid):
+        with self.lock:
+            data = self.load()
+            left = [p for p in data["phones"] if p["id"] != pid]
+            if len(left) == len(data["phones"]):
+                return False
+            self.save({"active": None if data["active"] == pid else data["active"], "phones": left})
+            return True
+
+
 class PhoneLink:
     """Keeps `ssh -R` open to Termux so the phone's 127.0.0.1:8765 reaches this bridge, over the home Wi-Fi.
     The phone's ssh host key is pinned under an alias, so its address can change: when the saved address stops
@@ -64,9 +187,11 @@ class PhoneLink:
     differs (files: "checking" / "up to date" / "updating" / "failed", for the Connections card)."""
     HOST_KEY_CHANGED = ("Host key verification failed", "REMOTE HOST IDENTIFICATION HAS CHANGED")
 
-    def __init__(self, settings):
+    def __init__(self, settings, set_port=None):
         self.settings = settings  # () -> the bridge's settings dict
+        self.set_port = set_port  # (port) -> None: saves sshPort (a LINK_KEY) when switching phones
         self.state = load_state()
+        self.phones = Phones()
         self.up = False
         self.since = 0.0       # when the tunnel came up
         self.started = 0.0     # when the current ssh started (0 = none running)
@@ -217,10 +342,14 @@ class PhoneLink:
                 save_state(self.state)
                 self.restart = bool(self.started)
             self.fails, self.error = 0, None
+        active = self.phones.load()["active"]
+        if active:
+            self.phones.change(active, ip=ip)
         self.wake.set()
 
     def forget(self):
-        """Drop the pinned key and the saved address, and stop the tunnel."""
+        """Drop the pinned key and the saved address, and stop the tunnel. The phone stays in phones.json
+        (no longer active), so it can be switched back to."""
         with self.lock:
             try:
                 os.remove(KNOWN_HOSTS)
@@ -230,6 +359,7 @@ class PhoneLink:
             save_state(self.state)
             self.fails, self.error, self.detail = 0, None, ""
             self.restart = True
+        self.phones.set_active(None)
         print("forgot the phone's key and address", flush=True)
         self.wake.set()
 
@@ -240,10 +370,54 @@ class PhoneLink:
             with open(KNOWN_HOSTS + ".tmp", "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(f"{HOST_ALIAS} {kind} {key}\n" for kind, key in keys)
             os.replace(KNOWN_HOSTS + ".tmp", KNOWN_HOSTS)
-            self.state["ip"] = ip
+            if ip:
+                self.state["ip"] = ip
+            else:
+                self.state.pop("ip", None)
             save_state(self.state)
             self.fails, self.error, self.detail, self.restart = 0, None, "", True
         self.wake.set()
+
+    # ---- saved phones (phones.json)
+    def migrate(self):
+        """The pin made before phones.json existed becomes "Phone 1" (once)."""
+        return self.phones.migrate(self.pinned(), self.state.get("ip"), self.port())
+
+    def saved(self):
+        """{active, phones: [...]} for the dashboard: no raw keys, the fingerprint instead; online = the active one's tunnel."""
+        self.migrate()
+        data = self.phones.load()
+        out = []
+        for p in data["phones"]:
+            kinds = sorted(p["keys"], key=lambda k: k[0] != "ssh-ed25519")
+            fp = key_fingerprint(kinds[0][1])
+            out.append({"id": p["id"], "name": p.get("name"), "ip": p.get("ip"), "sshPort": p.get("sshPort"),
+                        "pairedAt": p.get("pairedAt"), "lastSeen": p.get("lastSeen"),
+                        "fingerprint": "SHA256:" + fp if fp else None, "key_type": kinds[0][0],
+                        "active": p["id"] == data["active"], "online": p["id"] == data["active"] and self.up})
+        return {"active": data["active"], "phones": out}
+
+    def switch(self, pid):
+        """Pin a saved phone again (its keys, last address and ssh port), with no re-pairing; the tunnel restarts.
+        A Termux reset since then shows up as "key mismatch" (pair it again)."""
+        p = self.phones.get(pid)
+        if not p:
+            return False
+        port = p.get("sshPort")
+        if isinstance(port, int) and port != self.port() and self.set_port:
+            self.set_port(port)
+        self.phones.set_active(pid)
+        self.replace_pin(p.get("ip"), [tuple(k[:2]) for k in p["keys"]])
+        print(f"switched to the saved phone {p.get('name')!r}", flush=True)
+        return True
+
+    def remove_saved(self, pid):
+        """Delete one saved phone; the active one is forgotten (unpinned) first."""
+        if not self.phones.get(pid):
+            return False
+        if self.phones.load()["active"] == pid:
+            self.forget()
+        return self.phones.remove(pid)
 
     def reconnect(self):
         self.fails, self.restart = 0, True
@@ -318,6 +492,10 @@ class PhoneLink:
             deploy.LOCK.release()
 
     def loop(self):
+        try:
+            self.migrate()
+        except Exception as e:
+            print("link: phones.json:", e, flush=True)
         while True:
             try:
                 self.tick()
@@ -340,6 +518,15 @@ class PhoneLink:
         if ip and self.pinned():
             self.run_tunnel(ip)
 
+    def seen(self, ip):
+        """The tunnel came up: the active saved phone's lastSeen and address."""
+        try:
+            active = self.phones.load()["active"]
+            if active:
+                self.phones.change(active, ip=ip, lastSeen=round(time.time()))
+        except OSError as e:
+            print("link: phones.json:", e, flush=True)
+
     def run_tunnel(self, ip):
         port, keepalive = self.port(), self.cfg()["linkKeepAlive"]
         cmd = [tool("ssh"), "-N", *sshlink.options(port), "-o", "ExitOnForwardFailure=yes",
@@ -361,6 +548,7 @@ class PhoneLink:
                     break
                 if not self.up and time.time() - started > 4:  # ssh -N prints nothing; alive after 4 s means connected
                     self.up, self.since, self.fails, self.error, self.detail = True, time.time(), 0, None, ""
+                    self.seen(ip)
                     threading.Thread(target=self.sync_files, args=(ip, port), daemon=True).start()
                 time.sleep(1)
             err = proc.stderr.read() if not stopped else ""
@@ -652,10 +840,12 @@ exit
                     return {"ok": False, "error": "too many wrong codes", "message": "pairing cancelled"}, 409
                 return {"ok": False, "error": "code mismatch", "tries_left": self.MAX_WRONG - s["wrong"]}, 409
             self.session = None
+        self.link.migrate()  # the old pin is kept as a saved phone before it's replaced
         self.link.replace_pin(ip, [keys[0][:2]])
+        pid = self.link.phones.add_or_update([keys[0][:2]], ip, self.link.port())
         print(f"pairing: pinned the phone at {ip}", flush=True)
         ok, lines = deploy.deploy(ip, self.link.port())
-        return {"ok": True, "ip": ip, "fingerprint": "SHA256:" + keys[0][2],
+        return {"ok": True, "ip": ip, "id": pid, "fingerprint": "SHA256:" + keys[0][2],
                 "deploy": {"ok": ok, "lines": lines[-20:]}}, 200
 
     def cancel(self):
