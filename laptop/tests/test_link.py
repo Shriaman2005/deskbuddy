@@ -32,6 +32,7 @@ except ImportError:
     sys.exit("test_link.py needs asyncssh: python3 -m venv <scratch>/venv && <scratch>/venv/bin/pip install asyncssh")
 import deploy  # noqa: E402
 import link  # noqa: E402
+import phonectl  # noqa: E402
 import sshlink  # noqa: E402
 from fake_phone import FakePhone  # noqa: E402
 from platforms import proc  # noqa: E402
@@ -191,6 +192,61 @@ def phones_checks(bport, dash, real, good_pub, remote):
     return a_id
 
 
+def control_checks(bport, dash, real):
+    """Phone server controls (P3): restart, stop and the Termux:Boot switch go over the tunnel's ssh with the pinned
+    options; dashboard only; 409 while the tunnel is down. stop is only ever run against the fake phone."""
+    lk = lambda: fetch(bport, "/link")[1]  # noqa: E731
+    post = lambda path, body=None, h=dash: fetch(bport, path, "POST", headers=h, body=body or {})  # noqa: E731
+    check("/link says whether Chip starts with the phone (the setup's Termux:Boot file is not there in the fake: off)",
+          wait(lambda: lk().get("phone_autostart") is False, 20), lk())
+    status, body = post("/link/phone/restart")
+    check("restart: runs chip-restart on the phone and returns its lines",
+          status == 200 and body.get("ok") and real.restarts == 1 and phonectl.RESTART_CMD in real.commands
+          and any("Chip restarted" in l for l in body.get("lines", [])), [status, body])
+    check("restart never touches sshd or runs chip-stop", real.stops == 0 and not any("sshd" in c and "pkill" in c for c in real.commands))
+    boot = os.path.join(real.home, ".termux", "boot", "deskbuddy")
+    status, body = post("/link/phone/autostart", {"on": True})
+    check("autostart on: Termux:Boot file made, /link follows",
+          status == 200 and body.get("on") is True and os.path.isfile(boot) and lk().get("phone_autostart") is True,
+          [status, body, lk().get("phone_autostart")])
+    status, body = post("/link/phone/autostart", {"on": False})
+    check("autostart off: file removed, /link follows",
+          status == 200 and body.get("on") is False and not os.path.exists(boot) and lk().get("phone_autostart") is False,
+          [status, body, lk().get("phone_autostart")])
+    check("autostart needs {on: true|false}", post("/link/phone/autostart", {"on": "yes"})[0] == 400
+          and post("/link/phone/autostart", {})[0] == 400)
+    status, body = post("/link/phone/stop")
+    check("stop: runs chip-stop, and says the phone is needed to start Chip again",
+          status == 200 and body.get("ok") and real.stops == 1 and "chip-start" in body.get("needs_hand", ""), [status, body])
+    for path in ("/link/phone/restart", "/link/phone/stop", "/link/phone/autostart"):
+        ran = len(real.commands)
+        status, _ = post(path, {"on": True}, h={"Origin": "http://127.0.0.1:8080"})
+        status2, _ = post(path, {"on": True}, h={})
+        check(f"{path} refused from the phone's page and without an Origin ({status}, {status2})",
+              status == 403 and status2 == 403 and len(real.commands) == ran)
+    # the tunnel down: nothing is sent
+    fetch(bport, "/settings", "POST", headers=dash, body={"linkPaused": True})
+    check("(paused: the tunnel closes)", wait(lambda: not lk().get("tunnel"), 20), lk())
+    ran = len(real.commands)
+    answers = [post(p, {"on": True}) for p in ("/link/phone/restart", "/link/phone/stop", "/link/phone/autostart")]
+    check("tunnel down: all three answer 409 phone offline and send nothing",
+          all(a[0] == 409 and a[1].get("error") == "phone offline" for a in answers) and len(real.commands) == ran, answers)
+    fetch(bport, "/settings", "POST", headers=dash, body={"linkPaused": False})
+    check("(unpaused: the tunnel is back)", wait(lambda: lk().get("tunnel"), 40), lk())
+    # stop over a session the phone cuts (sshd killed): ssh exits 255 with "closed by remote host", still a success
+    orig = phonectl._run
+    try:
+        phonectl._run = lambda *a: (255, ["Chip stopped (wake lock released). Start again: chip-start",
+                                          "Connection to 127.0.0.1 closed by remote host."])
+        ok, lines = phonectl.stop("127.0.0.1", 1)
+        phonectl._run = lambda *a: (255, ["ssh: connect to host 127.0.0.1 port 1: Connection refused"])
+        bad, _ = phonectl.stop("127.0.0.1", 1)
+    finally:
+        phonectl._run = orig
+    check("stop: a session cut by sshd's end is a success, a refused connection is not",
+          ok and lines[-1] == phonectl.STOPPED_NOTE and not bad, [ok, lines, bad])
+
+
 def loopback_aliases():
     """127.0.0.2/.3 usable (Linux, Windows; macOS has only 127.0.0.1 unless aliased)."""
     try:
@@ -327,6 +383,7 @@ def main():
         check("doctor.py: the phone reaches the bridge through the tunnel",
               any("✓ phone reaches the bridge through the tunnel" in l for l in lines), r.stdout[-1500:])
 
+        control_checks(bport, dash, real)
         a_id = phones_checks(bport, dash, real, good_pub, remote)
         before = fetch(bport, "/link/phones", headers=dash)[1]
         bridge.terminate()

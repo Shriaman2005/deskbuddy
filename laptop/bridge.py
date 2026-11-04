@@ -38,6 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # python -I skips the script's folder
 import hooks  # noqa: E402
 import link  # noqa: E402
+import phonectl  # noqa: E402
 import platforms  # noqa: E402
 import stt  # noqa: E402
 import updates  # noqa: E402
@@ -1385,6 +1386,26 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "unknown phone"}, 404)
         return self.send_json({"ok": True, **({"note": why} if why else {})})
 
+    def post_phone_control(self, path, link):
+        """/link/phone/restart, /link/phone/stop, /link/phone/autostart {on: bool} (dashboard only). 409 while the tunnel
+        is down. Stop also stops the phone's sshd: the answer says the phone is needed to start Chip again."""
+        action = path.rsplit("/", 1)[1]
+        on = None
+        if action == "autostart":
+            on = (self.read_json() or {}).get("on")
+            if not isinstance(on, bool):
+                return self.send_json({"ok": False, "error": "bad request", "message": "expected {on: true|false}"}, 400)
+        if not link.up or not link.state.get("ip"):
+            return self.send_json({"ok": False, "error": "phone offline",
+                                   "message": "the phone isn't connected: connect it first (open Termux, or Reconnect)"}, 409)
+        ok, lines = link.control(action, on)
+        out = {"ok": ok, "lines": lines}
+        if action == "autostart":
+            out["on"] = link.autostart
+        if action == "stop" and ok:
+            out["needs_hand"] = phonectl.STOPPED_NOTE
+        return self.send_json(out, 200 if ok else 502)
+
     def post_link(self, path):
         """/link/reconnect, /link/find, /link/ip {ip}, /link/forget, /link/doctor (dashboard only)."""
         link = phone_link
@@ -1415,6 +1436,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True})
         if path in ("/link/phones/switch", "/link/phones/rename", "/link/phones/remove"):
             return self.post_phones(path, link)
+        if path in ("/link/phone/restart", "/link/phone/stop", "/link/phone/autostart"):
+            return self.post_phone_control(path, link)
         if path not in ("/link/reconnect", "/link/find", "/link/ip"):
             return self.send_json({"error": "not found"}, 404)
         if path == "/link/ip":  # checked before blocked(), so a bad request is a 400 whatever the link's state

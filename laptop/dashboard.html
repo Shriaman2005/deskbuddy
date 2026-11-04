@@ -340,6 +340,12 @@ details[open] .chev { transform: rotate(180deg); }
 .ph .acts { display: flex; gap: 8px; flex-wrap: wrap; }
 #conn-phones .none { color: var(--muted); font-size: 13.5px; margin: 0; }
 #conn-phask { margin-top: 10px; }
+#conn-pc { display: flex; flex-direction: column; gap: 12px; }
+#conn-pc .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+#conn-pc pre { margin: 0; }
+#conn-pc .auto { display: flex; align-items: center; gap: 14px; justify-content: space-between; }
+#conn-pc .auto .txt { display: flex; flex-direction: column; gap: 2px; }
+#conn-pc .auto small, #conn-pc .hint { color: var(--muted); font-size: 12.5px; margin: 0; }
 #conn-ready ol { margin: 0 0 8px; padding-left: 20px; color: var(--soft); font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
 .conn .st { display: flex; flex-direction: column; gap: 6px; }
 .conn .st-head { display: flex; align-items: center; gap: 10px; }
@@ -556,6 +562,14 @@ details[open] .chev { transform: rotate(180deg); }
     `<ol><li>Same Wi-Fi as the laptop.</li><li>Open Termux (Chip starts by itself), or type <code>chip-start</code>.</li>` +
     `<li>Leave Termux in the background, and set the battery to Unrestricted.</li><li>Press <b>Switch to this phone</b> (or Reconnect).</li></ol>` +
     `<p class="hint">If it says “key mismatch”, Termux was reset on that phone: use <b>Pair again</b>.</p></div></details>`;
+  const CONN_PC = `<div class="blk" id="conn-pc"><div class="acts"><button class="chip" id="pc-restart">Restart Chip on the phone</button>` +
+    `<button class="chip danger" id="pc-stop">Stop Chip on the phone…</button></div>` +
+    `<p class="hint" id="pc-off" hidden>The phone isn't connected, so these can't reach it. Open Termux on the phone (or press Reconnect above).</p>` +
+    `<div id="pc-ask" hidden></div><p class="hint" id="pc-msg" hidden></p><pre id="pc-out" hidden></pre>` +
+    `<label class="auto"><span class="txt"><b>Start Chip when the phone starts</b>` +
+    `<small>Needs the Termux:Boot app. Off: Chip starts when you open Termux (or type <code>chip-start</code>).</small></span>` +
+    `<input type="checkbox" class="sw" id="pc-auto" disabled></label>` +
+    `<p class="hint">On the phone itself, in Termux: <code>chip-restart</code> restarts Chip, <code>chip-stop</code> stops it and the connection, <code>chip-start</code> starts it again.</p></div>`;
   const CONN_NETS = `<div class="row netrow sub" data-needs="linkHomeOnly"><span class="txt"><b>Home networks</b>` +
     `<small>Chip only connects (and only scans) on these. “wired” means a cable. Up to 10.</small></span>` +
     `<div class="nets" id="conn-nets"></div></div>`;
@@ -776,6 +790,7 @@ details[open] .chev { transform: rotate(180deg); }
       desc: "The Wi-Fi link between this laptop and the phone. Everything goes over an ssh tunnel, and these settings can only be changed on this page.", groups: [
       { title: "Status", rows: [raw(CONN_TOP)] },
       { title: "Your phones", rows: [raw(CONN_PHONES)] },
+      { title: "Chip on the phone", rows: [raw(CONN_PC)] },
       { title: "This phone", rows: [
         sw("personalPhone", "Personal phone", "A phone you also use: Chip never changes its screen brightness and hides the app buttons. Chip runs as an installed web app (open Termux first)"),
       ] },
@@ -969,7 +984,7 @@ details[open] .chev { transform: rotate(180deg); }
   }
 
   // ---------------------------------------------------------------- state
-  let S = null, saving = 0, phoneInfo = null, linkInfo = null;
+  let S = null, saving = 0, phoneInfo = null, linkInfo = null, pcBusy = false;
 
   function render() {
     if (!S) return;
@@ -1777,7 +1792,7 @@ details[open] .chev { transform: rotate(180deg); }
   loadSkins();
 
   // ---------------------------------------------------------------- connections (the link to the phone, pairing a new one)
-  // Endpoints: GET /link, /link/pair; POST /link/reconnect|find|ip|forget|doctor and /link/pair/start|confirm|cancel.
+  // Endpoints: GET /link, /link/pair; POST /link/reconnect|find|ip|forget|doctor, /link/pair/start|confirm|cancel and /link/phone/restart|stop|autostart.
   // The POSTs need Origin http://127.0.0.1:8765 exactly, so the dashboard must be opened at that address.
   const HOME_ORIGIN = "http://127.0.0.1:8765";
   let pair = null, pairAt = 0, pairResult = null, wizSig = "", wizMsg = null;
@@ -1825,9 +1840,18 @@ details[open] .chev { transform: rotate(180deg); }
     const t = connMask ? "Show connection details" : "Hide connection details";
     eye.title = t; eye.setAttribute("aria-label", t);
   }
+  function renderPhoneCtl() {
+    if (!$("#pc-restart")) return;
+    const up = !!(linkInfo && linkInfo.tunnel), auto = linkInfo ? linkInfo.phone_autostart : null;
+    for (const id of ["#pc-restart", "#pc-stop"]) if (!pcBusy) $(id).disabled = !up;
+    $("#pc-off").hidden = up;
+    const sw = $("#pc-auto");
+    if (!pcBusy) { sw.disabled = !up || auto === null || auto === undefined; if (auto !== null && auto !== undefined) sw.checked = auto; }
+  }
   function renderConn() {
     if (!$("#conn-st")) return;
     applyMask();
+    renderPhoneCtl();
     const bad = location.origin !== HOME_ORIGIN, o = $("#conn-origin");
     o.hidden = !bad;
     if (bad) o.textContent = `You opened this page at ${location.origin}. Link buttons and link settings only work at ${HOME_ORIGIN}; the bridge ignores them from anywhere else.`;
@@ -1943,6 +1967,38 @@ details[open] .chev { transform: rotate(180deg); }
       connMsg(status === 200 ? "Disconnected. It is still in Your phones." : why(data), status === 200 ? "good" : "bad");
       loadPhone();
     }));
+
+  // ---- Chip on the phone (POST /link/phone/restart|stop|autostart; 409 while the tunnel is down)
+  const pcShow = (text, kind, lines) => {
+    const m = $("#pc-msg"), o = $("#pc-out");
+    m.hidden = !text; m.textContent = text || ""; m.style.color = kind === "bad" ? "var(--bad)" : kind === "good" ? "var(--good)" : "";
+    o.hidden = !(lines && lines.length); o.textContent = (lines || []).join("\n");
+  };
+  async function pcRun(btn, label, path, body, done) {
+    pcBusy = true; pcShow("");
+    await busy(btn, label, async () => {
+      const { status, data } = await linkPost(path, body);
+      if (status === 409 && data.error === "phone offline") pcShow(why(data), "bad");
+      else if (status === 200 && data.ok) pcShow(done(data), "good", data.lines);
+      else pcShow(why(data) === "failed" ? "That didn't work. Output below." : why(data), "bad", data.lines);
+    });
+    pcBusy = false; await loadPhone();
+  }
+  $("#pc-restart").addEventListener("click", (e) => pcRun(e.currentTarget, "Restarting…", "/link/phone/restart", {},
+    () => "Restarted. The face reloads by itself within a minute."));
+  $("#pc-stop").addEventListener("click", () => ask(
+    "Stop Chip on the phone? This also stops the phone's ssh server, so the connection ends and this laptop can't start Chip again. " +
+    "To start it again you need the phone: open Termux or type chip-start.",
+    "Yes, stop Chip", () => pcRun($("#pc-stop"), "Stopping…", "/link/phone/stop", {},
+      (d) => `Chip is stopped. ${d.needs_hand || "To start it again you need the phone: open Termux or type chip-start."}`), true, "#pc-ask"));
+  $("#pc-auto").addEventListener("change", async (e) => {
+    const sw = e.currentTarget, on = sw.checked;
+    pcBusy = true; sw.disabled = true; pcShow("");
+    const { status, data } = await linkPost("/link/phone/autostart", { on });
+    if (status === 200 && data.ok) pcShow(on ? "Chip will start when the phone starts (Termux:Boot must be installed)." : "Chip won't start by itself when the phone starts. Open Termux to start it.", "good");
+    else { sw.checked = !on; pcShow(why(data), "bad", data.lines); }
+    pcBusy = false; await loadPhone();
+  });
 
   // ---- saved phones (GET /link/phones; POST /link/phones/switch|rename|remove)
   let phones = null, phSig = "", phEdit = null, phNote = {};

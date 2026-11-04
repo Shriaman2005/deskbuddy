@@ -1,0 +1,18 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# `chip-restart` in Termux: restarts Chip's face server, its supervisor and PulseAudio, and starts them again. Unlike
+# chip-stop it leaves sshd alone, so it works over the laptop's ssh (the dashboard's "Restart Chip on the phone") and the
+# tunnel stays up. Settings and pairing stay.
+pkill -f "[d]eskbuddy/supervisor.sh"   # first: it would restart the rest while they are being stopped
+pkill -f "[d]eskbuddy/server.py"
+pkill -x whisper-cli   # a dictation in progress
+pkill -x parec
+pkill -x pulseaudio
+timeout 5 termux-torch off 2>/dev/null   # a blinking alert shouldn't outlive the restart
+sleep 1
+bash ~/deskbuddy/services.sh </dev/null   # sshd is still up; this starts the supervisor, which starts the face server
+sleep 2
+ok() { local name=$1; shift; pgrep "$@" >/dev/null && echo "  ✓ $name" || echo "  ✗ $name (not running: see ~/deskbuddy/supervisor.log)"; }
+ok "ssh server (the laptop's tunnel)" -x sshd
+ok "face server" -f "[d]eskbuddy/server.py"
+ok "supervisor" -f "[d]eskbuddy/supervisor.sh"
+echo "Chip restarted."

@@ -40,11 +40,11 @@ ClientAliveCountMax 3
 SSHD
 sshd -t  # a broken config would lock the laptop out: stop here instead (set -e)
 
-# buddy files + autostart (Termux:Boot if installed, otherwise whenever Termux opens) + chip-start / chip-stop
+# buddy files + autostart (Termux:Boot if installed, otherwise whenever Termux opens) + chip-start / chip-stop / chip-restart
 mkdir -p ~/deskbuddy ~/.termux/boot
 cp -r "$SRC/phone/." ~/deskbuddy/
-chmod +x ~/deskbuddy/services.sh ~/deskbuddy/server.py ~/deskbuddy/chip-start ~/deskbuddy/chip-stop ~/deskbuddy/stt-setup.sh
-ln -sf ~/deskbuddy/chip-start ~/deskbuddy/chip-stop "$PREFIX/bin/"   # deploys replace the targets, so these stay current
+chmod +x ~/deskbuddy/services.sh ~/deskbuddy/server.py ~/deskbuddy/chip-start ~/deskbuddy/chip-stop ~/deskbuddy/chip-restart ~/deskbuddy/stt-setup.sh
+ln -sf ~/deskbuddy/chip-start ~/deskbuddy/chip-stop ~/deskbuddy/chip-restart "$PREFIX/bin/"   # deploys replace the targets, so these stay current
 printf '#!/data/data/com.termux/files/usr/bin/bash\nexec ~/deskbuddy/services.sh\n' >~/.termux/boot/deskbuddy
 chmod +x ~/.termux/boot/deskbuddy
 grep -q "deskbuddy/services.sh" ~/.bashrc 2>/dev/null || echo '~/deskbuddy/services.sh >/dev/null 2>&1' >>~/.bashrc

@@ -5,6 +5,8 @@ pairing. It allows `ssh -R` onto its own loopback only (as GatewayPorts no does)
   deploy.DEPLOY_CMD   unpacks the tar from stdin into <home>/deskbuddy (safely: tarfile's "data" filter)
   deploy.HASH_CMD     prints <home>/deskbuddy/.chip-hash
   doctor.py's script  answers that sshd, the supervisor and the server run (tunnel=1 while a -R is up)
+  phonectl's commands restart / stop are only counted (restarts, stops); the Termux:Boot file is really made and removed
+  in <home>/.termux/boot/deskbuddy (autostart on / off / read)
 anything else exits 127. Nothing is run for real.
 
     phone = FakePhone(host_key_file, client_pub_file, host="127.0.0.2", port=0, home=tmpdir).start()
@@ -22,6 +24,7 @@ import asyncssh
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # laptop/, for deploy.py
 import deploy  # noqa: E402
+import phonectl  # noqa: E402
 
 
 class FakePhone:
@@ -29,6 +32,8 @@ class FakePhone:
         self.host_key, self.client_pub, self.host, self.port = host_key, client_pub, host, port
         self.home = home or tempfile.mkdtemp(prefix="fake-phone-")
         self.deploys = 0
+        self.restarts = 0
+        self.stops = 0
         self.commands = []   # every command run, in order
         self.forwards = []   # ports the client asked to listen on (-R)
         self.listening = set()
@@ -90,6 +95,26 @@ class FakePhone:
                         process.stdout.write(f.read())
                 except OSError:
                     pass
+                process.exit(0)
+            elif cmd == phonectl.RESTART_CMD:
+                self.restarts += 1
+                process.stdout.write(b"  \xe2\x9c\x93 ssh server (the laptop's tunnel)\n  \xe2\x9c\x93 face server\n"
+                                     b"  \xe2\x9c\x93 supervisor\nChip restarted.\n")
+                process.exit(0)
+            elif cmd == phonectl.STOP_CMD:
+                self.stops += 1
+                process.stdout.write(b"Chip stopped (wake lock released). Start again: chip-start\n")
+                process.exit(0)
+            elif cmd in (phonectl.AUTOSTART_ON_CMD, phonectl.AUTOSTART_OFF_CMD, phonectl.AUTOSTART_GET_CMD):
+                boot = os.path.join(self.home, ".termux", "boot", "deskbuddy")
+                if cmd == phonectl.AUTOSTART_ON_CMD:
+                    os.makedirs(os.path.dirname(boot), exist_ok=True)
+                    with open(boot, "w") as f:
+                        f.write("#!/data/data/com.termux/files/usr/bin/bash\nexec ~/deskbuddy/services.sh\n")
+                elif cmd == phonectl.AUTOSTART_OFF_CMD and os.path.exists(boot):
+                    os.remove(boot)
+                elif cmd == phonectl.AUTOSTART_GET_CMD:
+                    process.stdout.write(b"on\n" if os.path.exists(boot) else b"off\n")
                 process.exit(0)
             elif "pgrep -x sshd" in cmd:  # doctor.py's phone check
                 tunnel = "tunnel=1\n" if self.listening else ""

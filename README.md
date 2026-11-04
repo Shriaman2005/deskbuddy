@@ -313,7 +313,8 @@ Now show Chip's face. Pick one:
   screen and keeps the screen on while it's showing.
 - Turn on **Personal phone** on the dashboard's Connections page.
 - Chip runs while Termux runs: open Termux (or type `chip-start`) to start it; type `chip-stop`, or tap **Exit** in
-  Termux's notification, to stop it.
+  Termux's notification, to stop it. `chip-restart` restarts it and keeps the connection; the dashboard's Connections
+  page has the same as **Restart Chip on the phone**, **Stop Chip on the phone** and **Start Chip when the phone starts**.
 
 **A spare phone that lives on the desk (always on)**
 - Install **Termux:Boot** (F-Droid) and open it once, so Chip starts by itself when the phone reboots.

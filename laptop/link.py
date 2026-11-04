@@ -20,6 +20,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import deploy
+import phonectl
 import platforms
 import sshlink
 from platforms import paths
@@ -211,6 +212,7 @@ class PhoneLink:
         self.files_detail = ""
         self.files_at = 0.0
         self.syncs = 0                     # deploys started by the sync (tests count them)
+        self.autostart = None              # is the Termux:Boot file there: None (unknown), True, False
 
     def cfg(self):
         return self.settings()
@@ -462,6 +464,7 @@ class PhoneLink:
                 "laptop": self.network(), "fingerprint": fp, "key_type": kind,
                 "reason": why, "detail": self.detail if why else "",
                 "rtt_ms": self.rtt(ip) if probe else None,
+                "phone_autostart": self.autostart if self.up else None,
                 "files": self.files, "files_detail": self.files_detail,
                 "files_ago": round(time.time() - self.files_at) if self.files_at else None}
 
@@ -490,6 +493,24 @@ class PhoneLink:
             self.files_detail = "" if ok else (lines[-1][:160] if lines else "deploy failed")
         finally:
             deploy.LOCK.release()
+
+    # ---- the phone's server (phonectl.py): restart, stop, start when the phone starts
+    def read_autostart(self, ip, port):
+        found = phonectl.read_autostart(ip, port)
+        if found is not None and self.up and self.state.get("ip") == ip:
+            self.autostart = found
+
+    def control(self, action, on=None):
+        """(ok, lines) for restart / stop / autostart over the tunnel; the caller has checked that it is up."""
+        ip, port = self.state.get("ip"), self.port()
+        if action == "restart":
+            return phonectl.restart(ip, port)
+        if action == "stop":
+            return phonectl.stop(ip, port)
+        ok, lines = phonectl.autostart(ip, port, bool(on))
+        if ok:
+            self.autostart = bool(on)
+        return ok, lines
 
     def loop(self):
         try:
@@ -550,6 +571,7 @@ class PhoneLink:
                     self.up, self.since, self.fails, self.error, self.detail = True, time.time(), 0, None, ""
                     self.seen(ip)
                     threading.Thread(target=self.sync_files, args=(ip, port), daemon=True).start()
+                    threading.Thread(target=self.read_autostart, args=(ip, port), daemon=True).start()
                 time.sleep(1)
             err = proc.stderr.read() if not stopped else ""
         finally:
