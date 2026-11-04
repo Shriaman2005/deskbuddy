@@ -40,6 +40,7 @@ import hooks  # noqa: E402
 import link  # noqa: E402
 import platforms  # noqa: E402
 import stt  # noqa: E402
+import updates  # noqa: E402
 from platforms import paths  # noqa: E402
 from platforms.proc import SubprocessError, TimeoutExpired  # noqa: E402
 
@@ -80,6 +81,7 @@ TOGGLES = (
     "torchAway", "torchRepeat", "torchNight", "behaviourTorch",
     "pomoAutoBreak", "pomoAutoFocus", "workScene",                                  # timer
     "typingScene",                                                                  # Chip types along with you
+    "updateCheck", "updateBubble",                                                  # updates.py: daily check, Chip mentions it
 )
 
 
@@ -1085,7 +1087,12 @@ class Handler(BaseHTTPRequestHandler):
                                     "ip": q.get("pip", "") if re.fullmatch(r"[\d.]{7,15}", q.get("pip", "")) else None}
                                    if q.get("ssid") else None))  # the phone's own Wi-Fi: names and numbers only
             return self.send_json(dict(stats.snapshot(), **typing.snapshot(), settingsRev=settings.rev, skinsRev=skins.rev,
-                                       attention=attention.pending(), caps=platforms.caps()))
+                                       attention=attention.pending(), caps=platforms.caps(),
+                                       update=updater.available()))  # a newer version's tag, or ""
+        if url.path == "/update":  # the dashboard's Updates card (updates.py)
+            if not self.dashboard_only(reading=True):
+                return
+            return self.send_json(updater.state())
         if url.path == "/caps":  # what this laptop can do (platforms CAPS); the dashboard hides the rest
             return self.send_json(dict(platforms.caps(), os=platforms.NAME))
         if url.path == "/viz":
@@ -1244,6 +1251,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"error": "expected a JSON object"}, 400)
             code, out = hooks.handle(self.path.split("?")[0].rsplit("/", 1)[1], body.get("agent"))
             return self.send_json(out, code)
+        if self.path.split("?")[0] in ("/update/check", "/update/apply"):  # never the phone's page or a script
+            if not self.dashboard_only():
+                return
+            if self.path.startswith("/update/check"):
+                updater.check()
+                return self.send_json(updater.state())
+            answer, code = updater.apply()
+            self.send_json(answer, code)
+            if answer.get("ok"):
+                updater.restart()
+            return
         if self.path.split("?")[0].startswith("/link/"):
             if not self.dashboard_only():
                 return
@@ -1431,9 +1449,10 @@ phone = {}  # what the buddy said about itself on its last /stats poll
 apps = Apps()
 attention = Attention()
 typing = Typing()
+updater = updates.Updater(lambda: settings.get())
 
 if __name__ == "__main__":
     for target in (stats.fast_loop, stats.slow_loop, phone_link.loop, visualizer.run, gaze.run,
-                   attention.watch_notifications, typing.loop):
+                   attention.watch_notifications, typing.loop, updater.loop):
         threading.Thread(target=target, daemon=True).start()
     BridgeServer(("127.0.0.1", PORT), Handler).serve_forever()

@@ -36,7 +36,7 @@
     dock: true, dockTime: true, dockWeather: true, dockAqi: true, dockCpu: true, dockLaptopTemp: true, dockLaptopBattery: true,
     dockPhoneBattery: true, dockPhoneTemp: true, timerPill: true, focusBar: true, dots: true, musicMode: true, mask: true,
     clockNow: true, clockHours: true, clockAir: true, ringCpu: true, ringRam: true, ringGpu: true, ringBattery: true, mediaCard: true,
-    sounds: C.sounds, talk: C.talk, idle: true, greetings: true, hourly: true, trackToasts: true, laptopAlerts: true, phoneAlerts: true,
+    sounds: C.sounds, talk: C.talk, idle: true, greetings: true, updateBubble: true, hourly: true, trackToasts: true, laptopAlerts: true, phoneAlerts: true,
     shake: true, stretch: true, stretchMin: C.stretchEveryMin, dictation: true, fastDictation: C.fastDictation ?? false,
     dictEngine: "phone", dictLang: "hinglish", burnGuard: false, gazeFollow: false,
     torch: true, torchAsk: true, torchDone: true, torchApps: true, notifyAllApps: false, alertTorch: true, alertSound: true,
@@ -634,6 +634,12 @@
       skinsRev = d.skinsRev;
     }
     if (alerts && !wasOnline && t - bootAt > 8000 && !state.night) say("Laptop connected 💻", 2500);
+    // a newer Chip on GitHub (laptop/updates.py): said once a day until it is installed; "Chip mentions updates" hides it
+    const upd = d.update ? d.update + " " + new Date().toDateString() : "";
+    if (upd && prefs.updateBubble && store.get("updateSaid", "") !== upd && t - bootAt > 15000 && !state.night && screenIdx === 0) {
+      store.set("updateSaid", upd);
+      setTimeout(() => { express("joy", 1500); say(`I've got an update! ${d.update} is out, see the dashboard ✨`, 5000); }, 3000);
+    }
 
     if (d.cpu != null && d.cpu >= 85) { if (!state.busySince) state.busySince = t; } else state.busySince = 0;
     if (alerts && prev && d.temp >= 90 && prev.temp < 90) { express("worried", 3000); flash(2); say(`Laptop is ${d.temp}°C — toasty in here 🥵`, 4000); }

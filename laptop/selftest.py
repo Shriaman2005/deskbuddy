@@ -102,7 +102,7 @@ def main():
     with open(os.path.join(cfg, "settings.json"), "w") as f:
         json.dump({"rev": 1, "values": {"linkPaused": True}}, f)  # never scan the Wi-Fi or open a tunnel from a test
     fake = os.environ.get("CHIP_FAKE_CAPS") or "gpu=0"
-    env = dict(os.environ, CHIP_PORT=str(port), CHIP_PAIR_PORT=str(pair_port), CHIP_CONFIG_DIR=cfg,
+    env = dict(os.environ, CHIP_UPDATE_URL="off", CHIP_PORT=str(port), CHIP_PAIR_PORT=str(pair_port), CHIP_CONFIG_DIR=cfg,
                CHIP_DATA_DIR=data, CHIP_FAKE_CAPS=fake)
     bridge = proc.popen([sys.executable, "-I", "-X", "utf8", "-X", "faulthandler", os.path.join(HERE, "bridge.py")], env=env,
                         stdin=proc.DEVNULL, stdout=proc.PIPE, stderr=proc.STDOUT)
@@ -201,6 +201,15 @@ def main():
               and [a.get("id") for a in agents.get("agents", [])] == ["claude-code", "gemini", "opencode"], agents)
         status, _ = get(port, "/hooks", headers={"Origin": "http://127.0.0.1:8080"})
         check("/hooks refused for the phone's page", status == 403, status)
+        status, upd = get(port, "/update")
+        check("/update has the current version and how to update", status == 200 and isinstance(upd, dict)
+              and bool(upd.get("current")) and upd.get("mode") in ("git", "zip"), upd)
+        for path in ("/update/check", "/update/apply"):
+            for hdr in ({}, {"Origin": "http://127.0.0.1:8080"}):
+                status, _ = get(port, path, method="POST", headers=hdr)
+                check(f"{path} refused unless it comes from the dashboard ({hdr or 'no Origin'})", status == 403, status)
+        status, _ = get(port, "/update", headers={"Origin": "http://127.0.0.1:8080"})
+        check("/update refused for the phone's page", status == 403, status)
         check("no known_hosts written by the test", not os.path.exists(os.path.join(cfg, "known_hosts")))
     except BaseException:
         finish(bridge, tmp, caps)

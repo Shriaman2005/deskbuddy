@@ -96,6 +96,7 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
 - [Using Chip](#using-chip)
 - [Privacy and security](#privacy-and-security)
 - [Troubleshooting](#troubleshooting)
+- [Updating](#updating)
 - [Uninstall](#uninstall)
 - [For developers](#for-developers)
 
@@ -376,8 +377,9 @@ Only the JSON file reaches the laptop, never your pictures. Skins need Node.js o
 
 ## Privacy and security
 
-- **Nothing leaves your home network** except weather/air-quality lookups (Open-Meteo, by city coordinates) and, only
-  if you choose the cloud dictation engine, the audio clip to that provider.
+- **Nothing leaves your home network** except weather/air-quality lookups (Open-Meteo, by city coordinates), the daily
+  update check (one anonymous request to GitHub; switch it off on the About page) and, only if you choose the cloud
+  dictation engine, the audio clip to that provider.
 - **The link** is ssh with keys only: the laptop opens one tunnel to Termux's sshd (port 8022) and pins the phone's
   host key, so another device can't pretend to be your phone, even if it takes over its IP address. Passwords,
   agent/X11 forwarding and port forwards into the phone are switched off in the phone's sshd config.
@@ -415,6 +417,18 @@ The dashboard's **Connections** page has a **Doctor** button too, and shows why 
 One phone pairs with one laptop at a time. Pairing a new laptop replaces the old one's key on the phone.
 
 ---
+
+## Updating
+
+Once a day the laptop checks GitHub for a new release of Chip. When there is one, the dashboard shows a banner and
+**About → Updates** shows what's new; Chip also says so on the phone (switch that off with **Chip mentions updates**,
+or the whole check with **Check for updates**).
+
+- **Installed with `git clone`:** press **Update now**. Chip pulls the release, restarts the bridge, and the phone
+  gets the new files by itself when it reconnects. It refuses if you've edited files in the Chip folder, so your
+  changes are never overwritten.
+- **Installed from a ZIP:** press **Download**, unzip the new version over the old folder and run the installer
+  again. Your settings, skins and paired phone are kept (they live outside the Chip folder).
 
 ## Uninstall
 
@@ -473,6 +487,9 @@ Preview the phone page without a phone (bridge running):
 
 CI (`.github/workflows/ci.yml`) runs the checks on Linux, Windows and macOS on every push, including a fake phone
 for the tunnel and real typing into Notepad on Windows.
+
+Releasing an update: bump `VERSION`, commit and push, then create a GitHub release tagged `v` + the version
+(e.g. `v1.1.0`) on that commit. Its release notes are what users see on the dashboard (`laptop/updates.py`).
 
 Contributions and bug reports are welcome: please include the output of `doctor.py`.
 

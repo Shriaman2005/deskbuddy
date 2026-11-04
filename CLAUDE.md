@@ -39,6 +39,10 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
   `.chip-bak` once, recognises any `…attention.py claude-code|gemini` line; `/hooks*` dashboard-only; `tests/test_hooks.py` (temp HOME).
 - Connections page in `laptop/dashboard.html` (Reconnect, Find phone, Replace phone = pairing wizard, Forget, Doctor).
   README "Connections and reboots" describes it.
+- `laptop/updates.py` — daily GitHub latest-release check vs `VERSION` (settings updateCheck/updateBubble; /stats `update` = the
+  newer tag; GET /update, POST /update/check|apply dashboard-only). Apply = git fetch tag + merge --ff-only (refused with local
+  edits; ZIP folders get a download link), then the bridge exits for its supervisor to restart. CHIP_UPDATE_URL (off in selftest).
+  Release = bump VERSION, push, GitHub release tagged v<VERSION>.
 - `laptop/doctor.py` — checks the laptop, the Wi-Fi link (incl. paused, home network, key mismatch from `/link` reason) and Termux.
 - `laptop/skin.js` — chip-skin/1: `check -` (JSON report with path/problem/fix per error), `prompt <basis>`,
   `example`; the bridge runs it as a subprocess for /skins/*. Reuses pack.js (eyeLook, pupilFit), so it checks what
