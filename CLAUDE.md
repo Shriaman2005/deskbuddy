@@ -72,7 +72,7 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
 - Preview without the phone: headless Chrome at 1480x720 on
   `http://127.0.0.1:8765/preview/index.html?screen=0&typing` (also `mood=focus`, `&sceneT=`, `&wpm=`, `&idle=`,
   `&accent=sage`, `&music`, `&gaze=x,y` pins the eyes' look, -1..1, no /gaze stream; `&eyes=classic|toon|button`,
-  `&pupil=S|M|L`; `&skin=<id>` an installed skin, `&skin=draft` the last upload that passed the check, for
+  `&pupil=S|M|L`, `&size=50..250` (faceSize %); `&skin=<id>` an installed skin, `&skin=draft` the last upload that passed the check, for
   previewing before installing).
 - Phone: ssh port 8022 (Termux), `curl 127.0.0.1:8765/phone` = its state, `/link` = the tunnel. No adb anywhere
   in the project (removed on purpose): everything goes over the Wi-Fi ssh tunnel; don't add adb back.

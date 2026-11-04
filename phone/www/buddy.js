@@ -43,7 +43,7 @@
     torchAway: false, torchRepeat: true, torchNight: false, behaviourTorch: true, torchSeconds: 3, soundSeconds: 2,
     soundVolume: 80, soundStyle: "chime", remindEvery: 20, remindMinutes: 3,
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoLongEvery: 4, pomoAutoBreak: true, pomoAutoFocus: false, pomoGoal: 8,
-    workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", chipGlow: 100, eyeGap: 0, phonesGap: 0, idleRate: "normal", idleOff: [],
+    workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", chipGlow: 100, eyeGap: 0, phonesGap: 0, faceSize: 100, idleRate: "normal", idleOff: [],
     phonesFollowSkin: true, phonesDefault: "",  // a skin's own headphones when it has a pair; else "" = Chip's own, or an installed skin id to borrow from
     eyeStyle: "", pupilSize: "M", showPupils: true, skin: "", locName: "", locLat: 0, locLon: 0,  // weather place from the dashboard ("" = config.js); eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
     brightnessDay: C.brightness.day,
@@ -1453,6 +1453,8 @@
     app.dataset.eyeGap = prefs.eyeGap;  // px added to each eye's distance from the centre
     app.dataset.phonesGap = preview.has("hpgap") ? preview.get("hpgap") : prefs.phonesGap;  // the same for each headphone ear cup
     phonesPick();  // whose headphones Chip wears
+    const size = preview.has("size") ? +preview.get("size") || 100 : prefs.faceSize;  // % of the screen-filling size (player.js fit)
+    if (app.dataset.faceSize !== String(size)) { app.dataset.faceSize = size; window.dispatchEvent(new Event("resize")); }
     app.dataset.eyes = preview.get("eyes") || prefs.eyeStyle;  // chip.js picks them up
     app.dataset.pupil = (preview.get("pupil") || prefs.pupilSize).toUpperCase();
     app.dataset.pupils = prefs.showPupils ? "1" : "0";

@@ -293,7 +293,7 @@ circle.fg { fill: none; stroke: var(--good); stroke-width: 7; stroke-linecap: ro
 .f-stats { color: var(--muted); font-size: 4vmin; min-height: 4vmin; }
 
 /* Chip's focus and typing scenes (chip.js + pack.json, from the Claude Design "Robot Focus" / "Robot Typing") */
-#scene { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .35s, visibility 0s .35s; }
+#scene { position: absolute; inset: 0; overflow: hidden; opacity: 0; visibility: hidden; transition: opacity .35s, visibility 0s .35s; }
 #app.chip #scene, #app.scene #scene { opacity: 1; visibility: visible; transition: opacity .35s; }
 #head { transition: opacity .35s; }
 #app.chip #head { opacity: 0; visibility: hidden; }

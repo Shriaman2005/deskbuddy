@@ -371,7 +371,11 @@
     let nudge = [0, 0];   // burn-in guard offset in CSS px, applied in whole device pixels
     function fit() {
       const d = devicePixelRatio || 1;   // k counts device pixels, so every grid pixel is a whole number of them
-      const k = Math.max(1, Math.floor(Math.min(innerWidth * d / GW, innerHeight * d / GH)));
+      // faceSize (% , the dashboard's "Face size"): 100 = the biggest whole k that fits; more zooms in past the screen's
+      // edges (centred, the edges cut), less shrinks. k stays whole so pixels stay square: it moves in steps.
+      const base = Math.min(innerWidth * d / GW, innerHeight * d / GH);
+      const pct = Math.max(50, Math.min(250, +(canvas.closest("#app") || document.body).dataset.faceSize || 100));
+      const k = Math.max(1, pct === 100 ? Math.floor(base) : Math.round(base * pct / 100));
       const w = GW * k, h = GH * k;
       canvas.style.cssText += `;position:absolute;inset:auto;width:${w / d}px;height:${h / d}px;` +
         `left:${(Math.round((innerWidth * d - w) / 2) + Math.round(nudge[0] * d)) / d}px;top:${(Math.round((innerHeight * d - h) / 2) + Math.round(nudge[1] * d)) / d}px;image-rendering:pixelated`;

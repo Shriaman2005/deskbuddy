@@ -575,12 +575,15 @@ details[open] .chev { transform: rotate(180deg); }
     about: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 11v5.5M12 7.8h.01",
   };
   const PAGES = [
-    { id: "appearance", nav: "Chip", title: "Appearance", desc: "How Chip looks on the phone: its colour, its eyes and its headphones.", groups: [
+    { id: "appearance", nav: "Chip", title: "Appearance", desc: "How Chip looks on the phone: its colour, its size, its eyes and its headphones.", groups: [
       { title: "Colour and light", rows: [
         raw(SWATCH_HTML),
         { color: true, k: "accentColor", id: "accent-custom", label: "Custom colour", help: "Pick any colour; Chip's palette follows it (very dark colours are lightened)" },
         range("chipGlow", "Chip's glow", 0, 200, 10, "vol"),
         range("brightnessDay", "Daytime brightness", 5, 255, 5, "pct", "", true),
+      ] },
+      { title: "Size", note: "For bigger or smaller phone screens. Chip's pixels stay square, so it grows in steps; past 100% the edges of the scenes are cut.", rows: [
+        range("faceSize", "Face size", 50, 250, 5, "vol"),
       ] },
       { title: "Eyes", rows: [
         raw(EYES_HTML),
