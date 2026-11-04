@@ -405,6 +405,7 @@ The dashboard's **Connections** page has a **Doctor** button too, and shows why 
 | Pairing: the laptop can't find the phone | Both must be on the same Wi-Fi. Guest/office networks often isolate devices: use your home Wi-Fi or the phone's hotspot. |
 | Chip goes offline when the phone screen turns off | Set Termux (and Termux:Boot, kiFOSSk) to **Battery: Unrestricted**. |
 | Torch, battery or voice don't work | Termux:API must be installed from F-Droid, like Termux, and opened once. Check with `termux-battery-status` in Termux. |
+| Red "Termux:API Error: Connection refused" notification | Termux:API woke too slowly (common on Android 14+). Open it once, set its battery to **Unrestricted**, allow its permissions, run `pkg upgrade termux-api`. Harmless otherwise. The dashboard's **Troubleshooting** page lists every error with its fix. |
 | "Key mismatch" on the Connections page | Something else answers at the phone's address, or Termux was reinstalled. Re-pair with **Replace phone**. |
 | Dictation types nothing (Windows) | The focused window may be running as administrator. Click a normal window. |
 | Dictation types nothing (macOS) | Allow the Python the installer named in **Accessibility**. |

@@ -437,6 +437,7 @@ details[open] .chev { transform: rotate(180deg); }
     ["rose", "Rose", "#f472b6"], ["amber", "Amber", "#f5c04a"], ["sky", "Sky", "#6cb8ff"], ["custom", "Custom", "var(--custom)"]];
   const CHEV = `<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6l6-6"/></svg>`;
   const summary = (title, sub) => `<summary><span class="txt"><b class="lbl">${title}</b><small class="sublbl">${sub}</small></span>${CHEV}</summary>`;
+  const TS = (title, sub, fix) => `<details>${summary(esc(title), esc(sub))}<div class="body"><p class="hint" style="color:var(--soft);font-size:14px">${fix}</p></div></details>`;
   const turnOn = (what, page) => `Turn on ${what}${page ? ` on the <a href="#${page}">${page[0].toUpperCase() + page.slice(1)}</a> page` : " above"} to change these.`;
 
   // the bits of markup the code below fills in (all text from the pack, the bridge or the user goes in via esc() or textContent)
@@ -570,6 +571,7 @@ details[open] .chev { transform: rotate(180deg); }
     apps: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
     dictation: "M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21",
     connections: "M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01",
+    troubleshoot: "M14.5 6.5a4 4 0 0 0-5 5L4 17l3 3l5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5l-2.5-.5l-.5-2.5z",
     about: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 11v5.5M12 7.8h.01",
   };
   const PAGES = [
@@ -748,6 +750,54 @@ details[open] .chev { transform: rotate(180deg); }
         range("linkRetry", "Retry every", 5, 60, 5, "sec"),
       ] },
       { title: "Advanced", rows: [raw(CONN_END)] },
+    ] },
+    { id: "troubleshoot", nav: "Laptop", title: "Troubleshooting", desc: "Every error Chip can show and how to fix it yourself. Tap a problem to open its fix. Or use the search box on the left.", groups: [
+      { title: "Check everything at once", rows: [raw(`<div class="row"><span class="txt"><b>Run the doctor</b><small>Checks the laptop, the Wi-Fi link and Termux, and prints a fix next to every failed check</small></span><a class="chip" href="#connections">Open Connections</a></div>`)] },
+      { title: "Phone setup and Termux:API", rows: [
+        raw(TS("Red \u201cTermux:API Error: Connection refused\u201d notification", "Opens the Termux:API app with a Java stack trace", `Termux:API answered after the command had already given up, so it had nothing to connect back to. It is harmless, but it means the app is slow to wake. Open the <b>Termux:API</b> app once, then set <b>Settings, Apps, Termux:API, Battery: Unrestricted</b> (also for Termux). Allow all its permissions and notifications, run <code>pkg upgrade termux-api</code> in Termux, then check <code>termux-battery-status</code> prints JSON with <code>percentage</code>.`)),
+        raw(TS("Battery, torch or voice don't work", "Chip runs but shows no battery, torch or speech", `Termux:API must be installed from F-Droid (same source as Termux, never mixed with Play Store builds) and opened once. In Termux run <code>termux-battery-status</code>; if it hangs, force-stop Termux:API and retry.`)),
+        raw(TS("Termux and Termux:API won't work together", "Signature or version errors, app not found", `Both must come from the same source (F-Droid). Mixing F-Droid, GitHub and Play Store builds breaks the shared signature. Uninstall both and install both from F-Droid.`)),
+        raw(TS("Screen brightness never changes", "Brightness slider has no effect on the phone", `Only on a phone that is Chip's own screen: <b>Settings, Apps, Termux:API, Modify system settings</b>, allow it. On a personal phone, Chip never changes brightness on purpose (see Connections, Personal phone).`)),
+        raw(TS("Setup script says \u201cTermux:API did not answer\u201d", "The check at the end of setup.sh timed out", `The first call starts the app and can be slow. Open Termux:API, set battery to Unrestricted, run <code>termux-battery-status</code> until it answers, then run setup again.`)),
+        raw(TS("PulseAudio isn't running, or alert sounds and the mic are silent", "Sounds, mic and dictation dead after a reboot", `In Termux: <code>pkg install pulseaudio</code>. Chip clears a stale PulseAudio pid file by itself on the next dictation or alert. If it still fails, run <code>pkill pulseaudio</code> in Termux and try again.`)),
+        raw(TS("Chip doesn't start by itself after a phone reboot", "Face stays blank until Termux is opened", `Open Termux (it starts Chip), or for an always-on phone install <b>Termux:Boot</b> from F-Droid, open it once, then run <code>./deploy.sh</code> on the laptop.`)),
+        raw(TS("Permission prompts to grant", "What Chip needs from Android", `Termux: Microphone (dictation), Notifications allowed, Battery Unrestricted. Termux:API: Battery Unrestricted, and Modify system settings only for brightness control. Chip never grants these for you.`)),
+      ] },
+      { title: "Connection and pairing", rows: [
+        raw(TS("Chip goes offline when the phone screen turns off", "Link drops after a minute or two", `Set <b>Termux</b> (and Termux:Boot, kiFOSSk) to <b>Battery: Unrestricted</b>. Keep Termux's notification; it holds the wake lock. Its Exit button stops Chip.`)),
+        raw(TS("\u201cThe phone isn't answering\u201d (not found)", "Status says offline, the bridge keeps looking", `Is Termux open and the phone on the same Wi-Fi? Use <b>Reconnect</b> or <b>Find phone</b> on the Connections page, or type the phone's address under Advanced. A router restart can give the phone a new address; auto-find handles that unless turned off.`)),
+        raw(TS("\u201cKey mismatch\u201d", "Something answers, but with the wrong ssh key", `A different device is at that address, or Termux was reinstalled or reset. Nothing is connected. If it is your phone, use <b>Connections, Replace phone</b>. Do not delete known_hosts by hand.`)),
+        raw(TS("\u201cNo phone is paired yet\u201d", "First start, nothing pinned", `Open <b>Replace phone</b> on the Connections page and follow the wizard: run the setup command in Termux, then type the code the phone shows.`)),
+        raw(TS("\u201cPaused\u201d or \u201cnot a home network\u201d", "The link deliberately stays down", `Turn off <b>Pause the link</b>, or add this Wi-Fi to your home networks (Connections), or turn off <b>Only on home networks</b>.`)),
+        raw(TS("Pairing: the phone can't download the setup", "Termux can't reach the laptop's pairing port", `Allow Python through the firewall on private networks. On Linux the wizard shows the exact <code>ufw</code> command for this pairing only. If it says <b>port busy</b>, close the other program using that port and try again.`)),
+        raw(TS("Pairing: the laptop can't find the phone", "Scanning finds nothing", `Both must be on the same Wi-Fi. Guest and office networks isolate devices: use your home Wi-Fi or the phone's hotspot. Pairing refuses open (password-less) Wi-Fi on purpose.`)),
+        raw(TS("Pairing: \u201cno ssh key\u201d or \u201cno network\u201d", "The wizard stops at the first step", `No key: run <code>laptop/install.py</code> (or <code>ssh-keygen -t ed25519</code>). No network: connect the laptop to Wi-Fi first.`)),
+        raw(TS("Pairing: wrong code or \u201ctoo many wrong codes\u201d", "Pairing cancelled", `Type the exact characters the phone shows. After several wrong tries the wizard cancels for safety; start Replace phone again.`)),
+        raw(TS("Phone's files are out of date or the deploy failed", "Doctor says files differ or failed", `Run <code>./deploy.sh</code> (or <code>python3 -I laptop/deploy.py</code>) and read its error. Chip also redeploys by itself once the tunnel comes up. The face page reloads within a minute; close and reopen the kiosk app to force it.`)),
+        raw(TS("\u201cFace page isn't checking in\u201d", "Tunnel is up but the face is blank", `Open the Chip app (kiFOSSk) or <code>http://127.0.0.1:8080</code> in Chrome on the phone. In Termux run <code>chip-start</code>.`)),
+        raw(TS("Settings or buttons refuse with \u201cforbidden\u201d", "Link changes do nothing", `Link settings can only be changed on the dashboard at <code>http://127.0.0.1:8765</code>, never from the phone or another address.`)),
+      ] },
+      { title: "Dictation", rows: [
+        raw(TS("\u201cI didn't hear anything\u201d, \u201ctoo short\u201d, \u201ccouldn't make out any words\u201d", "Chip shows this after you let go", `Hold Chip with two fingers for the whole sentence, speak close to the mic, and check the Microphone permission for Termux.`)),
+        raw(TS("\u201cThe laptop is locked\u201d", "Nothing is typed", `By design, nothing is typed while the laptop is locked. Unlock it and dictate again.`)),
+        raw(TS("\u201cNo API key set\u201d / \u201cThe provider rejected the API key\u201d", "Cloud engine only", `Add or fix the key in the Cloud provider section. Keys live only in <code>~/.config/deskbuddy/secrets.json</code> and are never shown again.`)),
+        raw(TS("\u201cProvider quota or rate limit reached\u201d", "Cloud engine only", `Your plan's limit is used up. Wait, upgrade the plan, or switch to the Phone or Laptop engine.`)),
+        raw(TS("\u201cCan't reach the provider\u201d or \u201ctook too long\u201d", "Cloud engine or a slow phone", `Check the laptop's internet. On the phone engine try <b>Fast mode</b> (about 3 s). There is no fallback: if the chosen engine fails, nothing is typed.`)),
+        raw(TS("\u201cThis engine doesn't support that language\u201d", "Language mismatch", `Pick a different language under Language, or another engine.`)),
+        raw(TS("\u201cThe speech engine failed\u201d", "whisper.cpp or the provider crashed", `Phone engine: in Termux run <code>bash ~/deskbuddy/stt-setup.sh</code> (about 10 minutes, needed only for the Phone engine). Laptop engine: re-download the model under Laptop model.`)),
+        raw(TS("Nothing is typed on Windows", "Dictation text goes nowhere", `The focused window may be running as administrator. Click a normal window and try again.`)),
+        raw(TS("Nothing is typed on macOS", "Dictation text goes nowhere", `Switch on the Python that the installer named in <b>System Settings, Privacy and Security, Accessibility</b>.`)),
+        raw(TS("Nothing is typed on Linux", "Dictation text goes nowhere", `Typing on Linux needs a GNOME session and PyGObject (<code>python3-gi</code>). Run <code>python3 -I laptop/doctor.py</code>: if the Typing check fails, install python3-gi and restart the bridge.`)),
+      ] },
+      { title: "The laptop and the dashboard", rows: [
+        raw(TS("The dashboard doesn't open at 127.0.0.1:8765", "Page not found or connection refused", `The bridge isn't running. Linux: <code>systemctl --user restart deskbuddy-bridge</code>. Windows or macOS: rerun <code>laptop/install.py</code> (it restarts within 5 seconds on its own).`)),
+        raw(TS("A feature is greyed out with \u201cLinux only for now\u201d", "Setting disabled", `That feature isn't available on your operating system yet. See the “What works where” table in the README.`)),
+        raw(TS("Eyes don't follow the mouse (Linux)", "Eyes look straight ahead", `Log out and back in once after installing the GNOME extension. <code>doctor.py</code> tells you if the extension is off.`)),
+        raw(TS("AI agents card can't add Chip's hook", "Claude Code, Gemini CLI or opencode shows an error", `Chip edits only its own lines in the agent's settings.json (backed up once as <code>.chip-bak</code>). Check the file is valid JSON and writable, then press Install again.`)),
+        raw(TS("An app never shows up under Apps", "List is empty", `Apps appear here only after they send a notification. Chip keeps only the app's name, never the content.`)),
+        raw(TS("My skin is rejected", "The upload or check fails", `The Skins page lists each problem with its path and fix. Correct it and upload again. Nothing is installed until the check passes.`)),
+        raw(TS("Something else is wrong", "No error on screen", `Press <b>Doctor</b> on the Connections page, or run <code>python3 -I laptop/doctor.py</code>. It checks the laptop, the Wi-Fi link and Termux, and prints a fix next to every failed check.`)),
+      ] },
     ] },
     { id: "about", nav: "Laptop", title: "About", desc: "Who made Chip, where your settings live, and how to start over.", groups: [
       { title: "Made by", rows: [raw(AUTHOR_HTML)] },
