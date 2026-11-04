@@ -63,6 +63,7 @@ HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 ORIGINS = {f"http://{h}" for h in HOSTS} | {"http://127.0.0.1:8080", "http://localhost:8080"}
 DASHBOARD_ORIGIN = f"http://127.0.0.1:{PORT}"  # the only origin allowed to manage the link (Handler.dashboard_only)
 DOCTOR = os.path.join(HERE, "doctor.py")
+CHIP_CLI = os.path.join(HERE, "chip.py")  # /bridge/stop|restart run it, so the OS's service manager does the work
 # Dictation engines (laptop/stt.py): whisper.cpp v1.9.5 built here (static, AVX2), models from ggerganov/whisper.cpp
 # on Hugging Face in ~/.local/share/deskbuddy/stt/models; for a 4 s sentence on this Ryzen 5 3450U: small ~2 s
 # (best with Hinglish), base ~0.8 s (fast mode). Or a cloud API, with keys in ~/.config/deskbuddy/secrets.json.
@@ -984,6 +985,22 @@ TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=u
          ".json": "application/json"}
 
 
+def bridge_state():
+    """GET /bridge: this laptop's Chip service for the dashboard (autostart None = not set up to start by itself)."""
+    return {"os": platforms.NAME, "service": platforms.SERVICE, "autostart": platforms.autostart_get(),
+            "startCommand": platforms.start_command(), "pid": os.getpid()}
+
+
+def run_chip_cli(action):
+    """chip.py stop|restart in its own process (and session): it outlives this bridge while the OS stops it."""
+    try:
+        platforms.proc.popen([sys.executable, "-I", "-X", "utf8", CHIP_CLI, action], text=False, detached=True,
+                             cwd=paths.REPO, stdin=platforms.proc.DEVNULL, stdout=platforms.proc.DEVNULL,
+                             stderr=platforms.proc.DEVNULL, **({} if os.name == "nt" else {"start_new_session": True}))
+    except OSError as e:
+        print(f"chip.py {action}: {e}", flush=True)
+
+
 class Handler(BaseHTTPRequestHandler):
     def allowed(self):
         # Host guards against DNS rebinding (a website whose name points at 127.0.0.1), Origin against
@@ -1128,6 +1145,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.dashboard_only(reading=True) and self.send_json(hooks.listing())
         if url.path == "/link/pair":  # carries the pairing token: never to the phone's page
             return self.dashboard_only(reading=True) and self.send_json(pairing.status())
+        if url.path == "/bridge":  # the Connections page's "This laptop" card (dashboard only)
+            return self.dashboard_only(reading=True) and self.send_json(bridge_state())
         if url.path == "/link/phones":  # the phones paired before (dashboard only)
             return self.dashboard_only(reading=True) and self.send_json(phone_link.saved())
         if url.path == "/link":  # for the dashboard and doctor.py
@@ -1265,6 +1284,10 @@ class Handler(BaseHTTPRequestHandler):
             if answer.get("ok"):
                 updater.restart()
             return
+        if self.path.split("?")[0] in ("/bridge/stop", "/bridge/restart", "/bridge/autostart"):
+            if not self.dashboard_only():  # stopping Chip or start-at-login: never the phone's page or a script
+                return
+            return self.post_bridge(self.path.split("?")[0].rsplit("/", 1)[1])
         if self.path.split("?")[0].startswith("/link/"):
             if not self.dashboard_only():
                 return
@@ -1385,6 +1408,18 @@ class Handler(BaseHTTPRequestHandler):
         if not link.switch(pid):
             return self.send_json({"ok": False, "error": "unknown phone"}, 404)
         return self.send_json({"ok": True, **({"note": why} if why else {})})
+
+    def post_bridge(self, action):
+        """/bridge/autostart {on: bool}; /bridge/stop and /bridge/restart answer first, then chip.py stops (or
+        restarts) this bridge through the OS's service manager: the dashboard goes away with it."""
+        if action == "autostart":
+            on = (self.read_json() or {}).get("on")
+            if not isinstance(on, bool):
+                return self.send_json({"ok": False, "error": "bad request", "message": "expected {on: true|false}"}, 400)
+            ok, msg = platforms.autostart_set(on)
+            return self.send_json(dict(bridge_state(), ok=ok, message=msg), 200 if ok else 500)
+        self.send_json({"ok": True, "action": action, "startCommand": platforms.start_command()})
+        threading.Timer(0.5, run_chip_cli, (action,)).start()
 
     def post_phone_control(self, path, link):
         """/link/phone/restart, /link/phone/stop, /link/phone/autostart {on: bool} (dashboard only). 409 while the tunnel

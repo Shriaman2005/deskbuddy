@@ -269,3 +269,79 @@ def caps():
         out.update(stats=ps is not None, battery=bool(ps) and psstats.attempt(ps.sensors_battery) is not None,
                    idle=idle_ms() is not None, locked=is_locked is not None, typing=is_locked is not None)
     return out
+
+
+# ---------------------------------------------------------------- the bridge as a service (chip.py, /bridge/*)
+# install.py's LaunchAgent. Start at login off = RunAtLoad and KeepAlive false in the plist (KeepAlive true would
+# start it at every load anyway); the loaded job keeps its old settings until it is booted out.
+
+PLIST = os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents", LAUNCH_AGENT + ".plist")
+SERVICE = f"LaunchAgent {LAUNCH_AGENT}"
+NOT_INSTALLED = "Chip isn't installed here: run python3 laptop/install.py"
+
+
+def _launchctl(*args):
+    from .proc import TimeoutExpired, complete
+    try:
+        r = complete(["launchctl", *args], timeout=30)
+    except (OSError, TimeoutExpired) as e:
+        return False, f"launchctl {args[0]}: {e}"
+    return r.returncode == 0, (r.stderr or r.stdout).strip()
+
+
+def _target():
+    return f"gui/{os.getuid()}/{LAUNCH_AGENT}"
+
+
+def _loaded():
+    return _launchctl("print", _target())[0]
+
+
+def service_stop():
+    if not _loaded():
+        return True, "the LaunchAgent wasn't loaded"
+    ok, msg = _launchctl("bootout", _target())
+    return ok, "stopped (LaunchAgent booted out)" if ok else f"launchctl bootout: {msg}"
+
+
+def service_start():
+    if not os.path.isfile(PLIST):
+        return False, NOT_INSTALLED
+    if not _loaded():
+        _launchctl("enable", _target())
+        ok, msg = _launchctl("bootstrap", f"gui/{os.getuid()}", PLIST)
+        if not ok:
+            return False, f"launchctl bootstrap: {msg}"
+    ok, msg = _launchctl("kickstart", _target())  # RunAtLoad false (start at login off) doesn't run it at bootstrap
+    return ok, "started" if ok else f"launchctl kickstart: {msg}"
+
+
+def service_restart():
+    if not _loaded():
+        return service_start()
+    ok, msg = _launchctl("kickstart", "-k", _target())
+    return ok, "restarted" if ok else f"launchctl kickstart -k: {msg}"
+
+
+def autostart_get():
+    import plistlib
+    try:
+        with open(PLIST, "rb") as f:
+            return bool(plistlib.load(f).get("RunAtLoad"))
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return None
+
+
+def autostart_set(on):
+    import plistlib
+    try:
+        with open(PLIST, "rb") as f:
+            agent = plistlib.load(f)
+        agent["RunAtLoad"] = agent["KeepAlive"] = bool(on)
+        with open(PLIST, "wb") as f:
+            plistlib.dump(agent, f)
+    except FileNotFoundError:
+        return False, NOT_INSTALLED
+    except (OSError, ValueError, plistlib.InvalidFileException) as e:
+        return False, f"{PLIST}: {e}"
+    return True, "Chip starts at login" if on else "Chip won't start at login"

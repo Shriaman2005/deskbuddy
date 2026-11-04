@@ -153,3 +153,38 @@ def wifi_ssid(iface):
 def firewall_on():
     """True if a firewall will likely block the pairing download port."""
     return False
+
+
+# ---------------------------------------------------------------- the bridge as a service (chip.py, /bridge/*)
+# Each answers (ok, message) except autostart_get (True/False, None = Chip isn't set up to start by itself here).
+# They only call the OS's service manager, so chip.py works while the bridge is down.
+
+SERVICE = "the bridge"    # what the OS calls Chip's service, for messages
+
+
+def start_command(action="start"):
+    """The exact command that runs chip.py <action> on this OS (shown on the dashboard and by doctor.py)."""
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "chip.py")
+    return f'python3 "{path}" {action}' if " " in path else f"python3 {path} {action}"
+
+
+def service_stop():
+    return False, "stopping Chip isn't set up on this OS"
+
+
+def service_start():
+    return False, "starting Chip isn't set up on this OS"
+
+
+def service_restart():
+    ok, msg = service_stop()
+    return service_start() if ok else (ok, msg)
+
+
+def autostart_get():
+    return None
+
+
+def autostart_set(on):
+    return False, "start at login isn't set up on this OS"

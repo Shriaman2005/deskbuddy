@@ -10,6 +10,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # python -I skips the script's folder
 import sshlink  # noqa: E402
+import platforms  # noqa: E402
 from platforms import proc  # noqa: E402
 
 BRIDGE = f"http://127.0.0.1:{os.environ.get('CHIP_PORT') or 8765}"
@@ -22,6 +23,19 @@ def check(ok, what, fix=""):
     failed += not ok
     print(f"  {'✓' if ok else '✗'} {what}" + ("" if ok else f"\n      → {fix}"))
     return ok
+
+
+def info(text):
+    print(f"  · {text}")
+
+
+def autostart():
+    """Start at login off is a choice (chip.py autostart off, the dashboard's switch), not a failure."""
+    on = platforms.autostart_get()
+    if on is False:
+        info("Chip doesn't start when the laptop starts (your choice; turn it on: "
+             + platforms.start_command("autostart on") + ")")
+    return on
 
 
 def run(*cmd, timeout=15):
@@ -38,9 +52,12 @@ def get(path):
 
 def laptop_linux():
     check(run("systemctl", "--user", "is-active", "deskbuddy-bridge") == "active", "bridge service running",
-          "systemctl --user restart deskbuddy-bridge   (journalctl --user -u deskbuddy-bridge -n 30)")
-    check(run("systemctl", "--user", "is-enabled", "deskbuddy-bridge") == "enabled", "bridge starts at boot",
-          "bash ~/deskbuddy/laptop/install.sh")
+          "bridge stopped: " + platforms.start_command() + "   (journalctl --user -u deskbuddy-bridge -n 30)")
+    on = autostart()
+    if on is None:
+        check(False, "bridge set up to start at boot", "bash ~/deskbuddy/laptop/install.sh")
+    elif on:
+        check(True, "bridge starts at boot")
     check("Linger=yes" in run("loginctl", "show-user", os.environ.get("USER", "")), "runs before you log in (linger)",
           "bash ~/deskbuddy/laptop/install.sh")
     gaze = run("gdbus", "call", "--session", "--dest", "org.deskbuddy.Gaze", "--object-path", "/org/deskbuddy/Gaze",
@@ -65,22 +82,25 @@ def ssh_and_key():
 
 def laptop_windows():
     from platforms import windows
-    check(get("/link") is not None, f"bridge answering on {BRIDGE[7:]}", "log out and back in, or run laptop/install.py again")
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, windows.RUN_KEY) as k:
-            entry = winreg.QueryValueEx(k, windows.RUN_VALUE)[0]
-    except OSError:
-        entry = ""
-    check("supervise.py" in entry, "bridge starts at login (HKCU Run → supervise.py)", "run laptop/install.py again")
+    check(get("/link") is not None, f"bridge answering on {BRIDGE[7:]}",
+          "bridge stopped: " + platforms.start_command() + "   (or run laptop/install.py again)")
+    on = autostart()
+    if on is None:
+        check(False, "Chip installed (venv + supervise.py)", "run py -3 laptop\\install.py")
+    elif on:
+        check(True, f"bridge starts at login (HKCU Run {windows.RUN_VALUE} → supervise.py)")
     ssh_and_key()
 
 
 def laptop_macos():
     from platforms import macos
-    check(get("/link") is not None, f"bridge answering on {BRIDGE[7:]}", "log out and back in, or run laptop/install.py again")
-    check(bool(run("launchctl", "print", f"gui/{os.getuid()}/{macos.LAUNCH_AGENT}")),
-          f"LaunchAgent {macos.LAUNCH_AGENT} loaded", "run laptop/install.py again")
+    check(get("/link") is not None, f"bridge answering on {BRIDGE[7:]}",
+          "bridge stopped: " + platforms.start_command() + "   (or run laptop/install.py again)")
+    on = autostart()
+    if on is None:
+        check(False, f"LaunchAgent {macos.LAUNCH_AGENT} installed", "run python3 laptop/install.py")
+    elif on:
+        check(True, f"LaunchAgent {macos.LAUNCH_AGENT} starts Chip at login")
     ssh_and_key()
     # Accessibility can't be checked from here: macOS would answer for Terminal, not for the bridge's Python
     print("  · typing dictated text needs Python switched on in System Settings → Privacy & Security → Accessibility"
@@ -92,7 +112,7 @@ print("Laptop")
 
 print("Wi-Fi link")
 link = get("/link")
-if not check(link is not None, f"bridge answers on {BRIDGE[7:]}", "start the bridge (see above)"):
+if not check(link is not None, f"bridge answers on {BRIDGE[7:]}", "start the bridge: " + platforms.start_command()):
     sys.exit(1)
 check(link["pinned"], "phone's ssh key pinned", "open Termux on the phone once; the bridge pins its key when it connects")
 why = link.get("reason")  # why the tunnel is down (None when it's up), see PhoneLink.reason()

@@ -406,3 +406,43 @@ def wifi_ssid(iface):
 
 def firewall_on():
     return run("systemctl", "is-active", "ufw") == "active"
+
+
+# ---------------------------------------------------------------- the bridge as a service (chip.py, /bridge/*)
+
+UNIT = "deskbuddy-bridge"  # the systemd user service install.sh sets up
+SERVICE = f"systemd user service {UNIT}"
+start_command = base.start_command
+
+
+def _systemctl(*args):
+    """(ok, message) of `systemctl --user <args> deskbuddy-bridge`."""
+    from .proc import TimeoutExpired, complete
+    try:
+        r = complete(["systemctl", "--user", *args, UNIT], timeout=30)
+    except (OSError, TimeoutExpired) as e:
+        return False, f"systemctl --user {' '.join(args)} {UNIT}: {e}"
+    return r.returncode == 0, (r.stderr or r.stdout).strip() or f"systemctl --user {' '.join(args)} {UNIT}: done"
+
+
+def service_stop():
+    return _systemctl("stop")
+
+
+def service_start():
+    return _systemctl("start")
+
+
+def service_restart():
+    """systemd's own restart: one job, so it still starts again when the stop ends the caller (the bridge's child)."""
+    return _systemctl("restart")
+
+
+def autostart_get():
+    state = run("systemctl", "--user", "is-enabled", UNIT, timeout=10)
+    return {"enabled": True, "disabled": False}.get(state)  # not-found / masked / "": not set up
+
+
+def autostart_set(on):
+    ok, msg = _systemctl("enable" if on else "disable")
+    return ok, ("Chip starts when the laptop starts" if on else "Chip won't start by itself") if ok else msg

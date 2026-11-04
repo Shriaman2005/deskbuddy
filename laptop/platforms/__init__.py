@@ -80,3 +80,9 @@ def caps():
         CAPS.update(_detect())
         _caps_at = time.monotonic()
     return dict(CAPS)
+
+
+# the bridge as a service (chip.py, /bridge/*, doctor.py): base.py documents them
+SERVICE, start_command = backend.SERVICE, backend.start_command
+service_stop, service_start, service_restart = backend.service_stop, backend.service_start, backend.service_restart
+autostart_get, autostart_set = backend.autostart_get, backend.autostart_set

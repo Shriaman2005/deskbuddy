@@ -204,3 +204,82 @@ def caps():
                    idle=idle_ms() is not None, locked=is_locked is not None,
                    typing=input_size_ok() and is_locked is not None)
     return out
+
+
+# ---------------------------------------------------------------- the bridge as a service (chip.py, /bridge/*)
+# install.py's venv runs supervise.py (pythonw, no window), started at login by the HKCU Run value "Chip".
+
+from . import paths as _paths  # noqa: E402
+
+SERVICE = "supervise.py (started at login by HKCU Run \"Chip\")"
+VENV_PY = _paths.data("venv", "Scripts", "python.exe")
+VENV_PYW = _paths.data("venv", "Scripts", "pythonw.exe")
+SUPERVISE = _paths.laptop("supervise.py")
+RUN_COMMAND = f'"{VENV_PYW}" -I -X utf8 "{SUPERVISE}"'   # the same as install.py writes
+NOT_INSTALLED = "Chip isn't installed here: run py -3 laptop\\install.py"
+
+
+def start_command(action="start"):
+    path = _paths.laptop("chip.py")
+    return f'py -3 "{path}" {action}' if " " in path else f"py -3 {path} {action}"
+
+
+def service_stop():
+    """supervise.py --stop (the venv's Python has psutil): the supervisors first, then the bridges."""
+    from .proc import TimeoutExpired, complete
+    if not os.path.isfile(VENV_PY):
+        return False, NOT_INSTALLED
+    try:
+        r = complete([VENV_PY, "-I", "-X", "utf8", SUPERVISE, "--stop"], timeout=60)
+    except (OSError, TimeoutExpired) as e:
+        return False, f"supervise.py --stop: {e}"
+    return r.returncode == 0, (r.stdout or r.stderr).strip() or "stopped"
+
+
+def service_start():
+    from .proc import DEVNULL, popen
+    if not os.path.isfile(VENV_PYW):
+        return False, NOT_INSTALLED
+    try:
+        popen([VENV_PYW, "-I", "-X", "utf8", SUPERVISE], text=False, detached=True, cwd=_paths.REPO,
+              stdin=DEVNULL, stdout=DEVNULL, stderr=DEVNULL)
+    except OSError as e:
+        return False, f"couldn't start supervise.py: {e}"
+    return True, "started supervise.py (the bridge answers in a few seconds)"
+
+
+def autostart_get():
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            return "supervise.py" in winreg.QueryValueEx(k, RUN_VALUE)[0]
+    except OSError:
+        return False if os.path.isfile(VENV_PYW) else None
+    except ImportError:  # not Windows (the selftest imports this everywhere)
+        return None
+
+
+def autostart_set(on):
+    try:
+        import winreg
+    except ImportError:
+        return False, "not Windows"
+    if on and not os.path.isfile(VENV_PYW):
+        return False, NOT_INSTALLED
+    try:
+        if on:
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+                winreg.SetValueEx(k, RUN_VALUE, 0, winreg.REG_SZ, RUN_COMMAND)
+            return True, "Chip starts at login (HKCU Run \"Chip\")"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            winreg.DeleteValue(k, RUN_VALUE)
+    except FileNotFoundError:
+        pass  # it wasn't there
+    except OSError as e:
+        return False, f"HKCU Run: {e}"
+    return True, "Chip won't start at login"
+
+
+def service_restart():
+    ok, msg = service_stop()
+    return service_start() if ok else (ok, msg)

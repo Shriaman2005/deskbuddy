@@ -210,6 +210,15 @@ def main():
                 check(f"{path} refused unless it comes from the dashboard ({hdr or 'no Origin'})", status == 403, status)
         status, _ = get(port, "/update", headers={"Origin": "http://127.0.0.1:8080"})
         check("/update refused for the phone's page", status == 403, status)
+        for path in ("/bridge/stop", "/bridge/restart", "/bridge/autostart"):  # never stop the real one: only refusals
+            for hdr in ({}, {"Origin": "http://127.0.0.1:8080"}):
+                status, _ = get(port, path, method="POST", headers=hdr)
+                check(f"{path} refused unless it comes from the dashboard ({hdr or 'no Origin'})", status == 403, status)
+        status, svc = get(port, "/bridge")
+        check("/bridge says how to start Chip and whether it starts at login", status == 200 and isinstance(svc, dict)
+              and "chip.py" in str(svc.get("startCommand")) and svc.get("autostart") in (True, False, None), svc)
+        status, _ = get(port, "/bridge", headers={"Origin": "http://127.0.0.1:8080"})
+        check("/bridge refused for the phone's page", status == 403, status)
         check("no known_hosts written by the test", not os.path.exists(os.path.join(cfg, "known_hosts")))
     except BaseException:
         finish(bridge, tmp, caps)

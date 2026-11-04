@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: "22"
       - run: python -m pip install asyncssh==2.24.1
-      - run: python -I -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/selftest.py phone/server.py phone/alert.py phone/dictation.py
+      - run: python -I -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/chip.py laptop/selftest.py phone/server.py phone/alert.py phone/dictation.py
       - run: node laptop/check_pack.js
       - run: python -I laptop/test_skins.py
       - run: python -I laptop/selftest.py
@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r laptop/requirements.txt asyncssh==2.24.1
-      - run: python -I -X utf8 -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/selftest.py laptop/install.py laptop/tests/test_macos.py phone/server.py phone/alert.py phone/dictation.py
+      - run: python -I -X utf8 -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/chip.py laptop/selftest.py laptop/install.py laptop/tests/test_macos.py phone/server.py phone/alert.py phone/dictation.py
       - run: python -I -X utf8 laptop/selftest.py
         env:
           CHIP_EXPECT_CAPS: stats,idle,locked,typing
@@ -66,6 +66,23 @@ jobs:
           $run = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Chip
           Write-Host "Run entry: $run"
           if ($run -notmatch 'pythonw\.exe.*supervise\.py') { throw "no start-at-login entry" }
+      - name: Windows - chip.py status, autostart off/on, stop/start
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          function chip { python -I -X utf8 laptop/chip.py @args; $script:code = $LASTEXITCODE }
+          chip status; if ($code -ne 0) { throw "status: exit $code while the bridge runs" }
+          chip autostart off; if ($code -ne 0) { throw "autostart off: exit $code" }
+          if ($null -ne (Get-ItemProperty $runKey).Chip) { throw "the Run entry is still there" }
+          chip status
+          chip autostart on; if ($code -ne 0) { throw "autostart on: exit $code" }
+          if ((Get-ItemProperty $runKey).Chip -notmatch 'pythonw\.exe.*supervise\.py') { throw "no Run entry after autostart on" }
+          chip stop; if ($code -ne 0) { throw "stop: exit $code" }
+          chip status; if ($code -ne 3) { throw "status: exit $code after stop (expected 3)" }
+          chip start; if ($code -ne 0) { throw "start: exit $code" }
+          chip restart; if ($code -ne 0) { throw "restart: exit $code" }
+          chip status; if ($code -ne 0) { throw "status: exit $code after restart" }
       - name: Windows - typing into Notepad
         if: runner.os == 'Windows'
         shell: bash
@@ -117,6 +134,19 @@ jobs:
           assert s["caps"]["typing"] and isinstance(s["locked"], bool), "no lock state: typing would be refused"'
           plutil -p ~/Library/LaunchAgents/org.deskbuddy.bridge.plist
           launchctl print gui/$(id -u)/org.deskbuddy.bridge | grep -E 'state|pid|program' | head
+      - name: macOS - chip.py status, autostart off/on, stop/start (macOS paused, informational)
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        continue-on-error: true
+        run: |
+          set -e
+          chip() { python -I -X utf8 laptop/chip.py "$@"; }
+          chip status
+          chip autostart off; plutil -extract RunAtLoad raw ~/Library/LaunchAgents/org.deskbuddy.bridge.plist | grep -qx false
+          chip autostart on; plutil -extract RunAtLoad raw ~/Library/LaunchAgents/org.deskbuddy.bridge.plist | grep -qx true
+          chip stop; set +e; chip status; c=$?; set -e; test $c -eq 3
+          chip start
+          chip restart
+          chip status
       - name: macOS - install.py --uninstall
         if: ${{ !cancelled() && runner.os == 'macOS' }}
         run: python -I -X utf8 laptop/install.py --uninstall

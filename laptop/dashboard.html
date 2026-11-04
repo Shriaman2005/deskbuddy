@@ -340,12 +340,12 @@ details[open] .chev { transform: rotate(180deg); }
 .ph .acts { display: flex; gap: 8px; flex-wrap: wrap; }
 #conn-phones .none { color: var(--muted); font-size: 13.5px; margin: 0; }
 #conn-phask { margin-top: 10px; }
-#conn-pc { display: flex; flex-direction: column; gap: 12px; }
-#conn-pc .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+#conn-pc, #conn-laptop { display: flex; flex-direction: column; gap: 12px; }
+#conn-pc .acts, #conn-laptop .acts { display: flex; gap: 8px; flex-wrap: wrap; }
 #conn-pc pre { margin: 0; }
-#conn-pc .auto { display: flex; align-items: center; gap: 14px; justify-content: space-between; }
-#conn-pc .auto .txt { display: flex; flex-direction: column; gap: 2px; }
-#conn-pc .auto small, #conn-pc .hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+#conn-pc .auto, #conn-laptop .auto { display: flex; align-items: center; gap: 14px; justify-content: space-between; }
+#conn-pc .auto .txt, #conn-laptop .auto .txt { display: flex; flex-direction: column; gap: 2px; }
+#conn-pc .auto small, #conn-pc .hint, #conn-laptop .auto small, #conn-laptop .hint { color: var(--muted); font-size: 12.5px; margin: 0; }
 #conn-ready ol { margin: 0 0 8px; padding-left: 20px; color: var(--soft); font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
 .conn .st { display: flex; flex-direction: column; gap: 6px; }
 .conn .st-head { display: flex; align-items: center; gap: 10px; }
@@ -570,6 +570,13 @@ details[open] .chev { transform: rotate(180deg); }
     `<small>Needs the Termux:Boot app. Off: Chip starts when you open Termux (or type <code>chip-start</code>).</small></span>` +
     `<input type="checkbox" class="sw" id="pc-auto" disabled></label>` +
     `<p class="hint">On the phone itself, in Termux: <code>chip-restart</code> restarts Chip, <code>chip-stop</code> stops it and the connection, <code>chip-start</code> starts it again.</p></div>`;
+  const CONN_LAPTOP = `<div class="blk" id="conn-laptop"><div class="acts"><button class="chip" id="lp-restart">Restart Chip</button>` +
+    `<button class="chip danger" id="lp-stop">Stop Chip…</button></div>` +
+    `<div id="lp-ask" hidden></div><p class="hint" id="lp-msg" hidden></p>` +
+    `<label class="auto"><span class="txt"><b>Start Chip when the laptop starts</b>` +
+    `<small id="lp-auto-sub">Off: Chip runs only after you start it by hand.</small></span>` +
+    `<input type="checkbox" class="sw" id="lp-auto" disabled></label>` +
+    `<p class="hint">This dashboard is part of Chip, so it closes while Chip is stopped. To start Chip, in a terminal: <code id="lp-cmd">python3 laptop/chip.py start</code></p></div>`;
   const CONN_NETS = `<div class="row netrow sub" data-needs="linkHomeOnly"><span class="txt"><b>Home networks</b>` +
     `<small>Chip only connects (and only scans) on these. “wired” means a cable. Up to 10.</small></span>` +
     `<div class="nets" id="conn-nets"></div></div>`;
@@ -791,6 +798,7 @@ details[open] .chev { transform: rotate(180deg); }
       { title: "Status", rows: [raw(CONN_TOP)] },
       { title: "Your phones", rows: [raw(CONN_PHONES)] },
       { title: "Chip on the phone", rows: [raw(CONN_PC)] },
+      { title: "This laptop", rows: [raw(CONN_LAPTOP)] },
       { title: "This phone", rows: [
         sw("personalPhone", "Personal phone", "A phone you also use: Chip never changes its screen brightness and hides the app buttons. Chip runs as an installed web app (open Termux first)"),
       ] },
@@ -1999,6 +2007,56 @@ details[open] .chev { transform: rotate(180deg); }
     else { sw.checked = !on; pcShow(why(data), "bad", data.lines); }
     pcBusy = false; await loadPhone();
   });
+
+  // ---- This laptop (GET /bridge; POST /bridge/stop|restart|autostart): the bridge itself, through chip.py
+  let bridgeInfo = null;
+  const lpShow = (text, kind) => {
+    const m = $("#lp-msg");
+    m.hidden = !text; m.textContent = text || ""; m.style.color = kind === "bad" ? "var(--bad)" : kind === "good" ? "var(--good)" : "";
+  };
+  async function loadBridge() {
+    const r = await fetch("/bridge", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (!r) return;
+    bridgeInfo = r;
+    $("#lp-cmd").textContent = r.startCommand;
+    const sw = $("#lp-auto");
+    sw.checked = r.autostart === true; sw.disabled = r.autostart === null;
+    if (r.autostart === null) $("#lp-auto-sub").textContent = "Chip isn't set up to start by itself here: run the installer (install.sh or install.py).";
+  }
+  const startCmd = () => (bridgeInfo && bridgeInfo.startCommand) || "python3 laptop/chip.py start";
+  async function waitBack(oldPid) {  // the bridge is restarting: poll until a new one answers
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const r = await fetch("/bridge", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+      if (r && r.pid !== oldPid) return true;
+    }
+    return false;
+  }
+  $("#lp-restart").addEventListener("click", (e) => busy(e.currentTarget, "Restarting…", async () => {
+    lpShow("");
+    const old = bridgeInfo && bridgeInfo.pid;
+    const { status, data } = await linkPost("/bridge/restart");
+    if (status !== 200 || !data.ok) return lpShow(why(data), "bad");
+    lpShow("Restarting Chip…");
+    if (await waitBack(old)) { lpShow("Chip restarted.", "good"); loadBridge(); loadPhone(); }
+    else lpShow(`Chip didn't come back within 40 s. In a terminal: ${startCmd()}`, "bad");
+  }));
+  $("#lp-stop").addEventListener("click", () => ask(
+    `Stop Chip on this laptop? The dashboard closes too, and the phone shows nothing until Chip runs again. To start again, in a terminal: ${startCmd()}`,
+    "Yes, stop Chip", async () => {
+      const { status, data } = await linkPost("/bridge/stop");
+      if (status !== 200 || !data.ok) return lpShow(why(data), "bad");
+      lpShow(`Chip is stopping. This page stops working in a moment. To start Chip again, in a terminal: ${data.startCommand || startCmd()}`, "good");
+    }, true, "#lp-ask"));
+  $("#lp-auto").addEventListener("change", async (e) => {
+    const sw = e.currentTarget, on = sw.checked;
+    sw.disabled = true; lpShow("");
+    const { status, data } = await linkPost("/bridge/autostart", { on });
+    if (status === 200 && data.ok) lpShow(on ? "Chip will start when the laptop starts." : `Chip won't start by itself. To start it: ${startCmd()}`, "good");
+    else { sw.checked = !on; lpShow(why(data), "bad"); }
+    await loadBridge();
+  });
+  loadBridge();
 
   // ---- saved phones (GET /link/phones; POST /link/phones/switch|rename|remove)
   let phones = null, phSig = "", phEdit = null, phNote = {};
