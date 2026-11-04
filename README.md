@@ -1,4 +1,4 @@
-# Chip — turn your old Android phone into a living desk buddy
+#turn your old Android phone into a living desk buddy
 
 **That old phone in your drawer can be a tiny pixel-art friend on your desk.** Chip blinks, gets happy when you tap
 it, loves being petted, puts on headphones when your music plays, types along with you, tells you when Claude Code
