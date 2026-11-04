@@ -6,3 +6,7 @@ build/
 .idea/
 .claude/
 SUBMISSION_INFO.md
+
+# private notes: Claude Code brief and the port plan (kept locally, not published)
+CLAUDE.md
+docs/port/

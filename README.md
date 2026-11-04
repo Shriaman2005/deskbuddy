@@ -470,7 +470,6 @@ or the whole check with **Check for updates**).
 | `laptop/skin.js`, `merge_pack.js` | Skin checker / prompt generator, and the pack merge tool. |
 | `laptop/gnome-extension/` | The GNOME Shell extension for the mouse pointer. |
 | `design/` | Design deltas and tools for the art pack. |
-| `docs/port/` | The cross-platform port plan. |
 
 ### Useful commands
 ```bash
