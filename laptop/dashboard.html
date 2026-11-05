@@ -166,6 +166,13 @@ input[type=range]:disabled { cursor: default; }
 .lbl { display: block; font-weight: 500; font-size: 15px; }
 .sublbl { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
 .blk { display: flex; flex-direction: column; gap: 12px; }
+.manual { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 18px; border-radius: 12px;
+          border: 1px solid var(--accent); background: var(--accent-soft); }
+.manual .txt { flex: 1 1 260px; }
+.manual .txt b { display: block; font-size: 15px; margin-bottom: 3px; }
+.manual .txt small { display: block; }
+.chip.manbtn { min-height: 44px; padding: 8px 20px; font-size: 15px; font-weight: 600; gap: 0; background: var(--accent);
+               border-color: var(--accent); color: var(--knob-on); }
 .line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .line > input { flex: 1 1 220px; }
 .line > label { flex: none; width: 80px; color: var(--soft); font-size: 13.5px; }
@@ -581,13 +588,20 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     `<small>Needs the Termux:Boot app. Off: Chip starts when you open Termux (or type <code>chip-start</code>).</small></span>` +
     `<input type="checkbox" class="sw" id="pc-auto" disabled></label>` +
     `<p class="hint">On the phone itself, in Termux: <code>chip-restart</code> restarts Chip, <code>chip-stop</code> stops it and the connection, <code>chip-start</code> starts it again.</p></div>`;
+  // the one-page manual for this laptop's OS (GET /manual.pdf): the commands for when the dashboard can't open
+  let MAN_OS = "PDF";  // set from GET /bridge (loadBridge): the bridge serves this OS's manual
+  const MANUAL_BTN = () => `<a class="chip manbtn" href="/manual.pdf" download>Download the manual (<span class="man-os">${MAN_OS}</span>)</a>`;
+  const manualBox = (title, text) => `<div class="manual"><span class="txt"><b>${title}</b><small>${text}</small></span>${MANUAL_BTN()}</div>`;
+  const CONN_MANUAL = manualBox("Chip's manual: keep a copy",
+    "One page of commands to copy and paste. You need it when this dashboard can't open: after you stop Chip or switch off start-at-login, after a reboot, or to set Chip up again and start over.");
   const CONN_LAPTOP = `<div class="blk" id="conn-laptop"><div class="acts"><button class="chip" id="lp-restart">Restart Chip</button>` +
     `<button class="chip danger" id="lp-stop">Stop Chip…</button></div>` +
     `<div id="lp-ask" hidden></div><p class="hint" id="lp-msg" hidden></p>` +
     `<label class="auto"><span class="txt"><b>Start Chip when the laptop starts</b>` +
     `<small id="lp-auto-sub">Off: Chip runs only after you start it by hand.</small></span>` +
     `<input type="checkbox" class="sw" id="lp-auto" disabled></label>` +
-    `<p class="hint">This dashboard is part of Chip, so it closes while Chip is stopped. To start Chip, in a terminal: <code id="lp-cmd">python3 laptop/chip.py start</code></p></div>`;
+    `<p class="hint">This dashboard is part of Chip, so it closes while Chip is stopped. To start Chip, in a terminal: <code id="lp-cmd">python3 laptop/chip.py start</code></p>` +
+    `<div id="lp-manual" hidden>${manualBox("Chip won't start after a reboot", "This dashboard won't open until you start Chip yourself. Download the manual now: it has the command to start Chip, and to switch this back on.")}</div></div>`;
   const CONN_NETS = `<div class="row netrow sub" data-needs="linkHomeOnly"><span class="txt"><b>Home networks</b>` +
     `<small>Chip only connects (and only scans) on these. “wired” means a cable. Up to 10.</small></span>` +
     `<div class="nets" id="conn-nets"></div></div>`;
@@ -822,6 +836,7 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     ] },
     { id: "connections", nav: "Laptop", title: "Connections", cls: "conn",
       desc: "The Wi-Fi link between this laptop and the phone. Everything goes over an ssh tunnel, and these settings can only be changed on this page.", groups: [
+      { title: "Manual", rows: [raw(CONN_MANUAL)] },
       { title: "Status", rows: [raw(CONN_TOP)] },
       { title: "Your phones", rows: [raw(CONN_PHONES)] },
       { fold: "Advanced", note: "Everything else about the link, for when you want to look around.", groups: [
@@ -850,7 +865,7 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
         raw(TS("Screen brightness never changes", "Brightness slider has no effect on the phone", `Only on a phone that is Chip's own screen: <b>Settings, Apps, Termux:API, Modify system settings</b>, allow it. On a personal phone, Chip never changes brightness on purpose (see Connections, Personal phone).`)),
         raw(TS("Setup script says \u201cTermux:API did not answer\u201d", "The check at the end of setup.sh timed out", `The first call starts the app and can be slow. Open Termux:API, set battery to Unrestricted, run <code>termux-battery-status</code> until it answers, then run setup again.`)),
         raw(TS("PulseAudio isn't running, or alert sounds and the mic are silent", "Sounds, mic and dictation dead after a reboot", `In Termux: <code>pkg install pulseaudio</code>. Chip clears a stale PulseAudio pid file by itself on the next dictation or alert. If it still fails, run <code>pkill pulseaudio</code> in Termux and try again.`)),
-        raw(TS("Chip doesn't start after a reboot (laptop start-at-login is off)", "The dashboard doesn't open after you log in", `You switched off <b>Start Chip when the laptop starts</b> (This laptop card). Start it by hand: <code>python3 laptop/chip.py start</code> (Windows: <code>py -3 laptop\\chip.py start</code>), or switch it back on with <code>python3 laptop/chip.py autostart on</code>.`)),
+        raw(TS("Chip doesn't start after a reboot (laptop start-at-login is off)", "The dashboard doesn't open after you log in", `You switched off <b>Start Chip when the laptop starts</b> (This laptop card). The manual (<b>Download the manual</b> at the top of Connections, or <code>docs/manual/</code> in the Chip folder) has every command. Start it by hand: <code>python3 laptop/chip.py start</code> (Windows: <code>py -3 laptop\\chip.py start</code>), or switch it back on with <code>python3 laptop/chip.py autostart on</code>.`)),
         raw(TS("Chip doesn't start by itself after a phone reboot", "Face stays blank until Termux is opened", `Open Termux (it starts Chip), or for an always-on phone install <b>Termux:Boot</b> from F-Droid, open it once, then run <code>./deploy.sh</code> on the laptop.`)),
         raw(TS("Permission prompts to grant", "What Chip needs from Android", `Termux: Microphone (dictation), Notifications allowed, Battery Unrestricted. Termux:API: Battery Unrestricted, and Modify system settings only for brightness control. Chip never grants these for you.`)),
       ] },
@@ -891,7 +906,7 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
         raw(TS("Something else is wrong", "No error on screen", `Press <b>Doctor</b> on the Connections page, or run <code>python3 -I laptop/doctor.py</code>. It checks the laptop, the Wi-Fi link and Termux, and prints a fix next to every failed check.`)),
       ] },
     ] },
-    { id: "about", nav: "Laptop", title: "About", desc: "Who made Chip, updates, where your settings live, and how to start over.", groups: [
+    { id: "about", nav: "Laptop", title: "About & Updates", desc: "Who made Chip, updates, where your settings live, and how to start over.", groups: [
       { title: "Made by", rows: [raw(AUTHOR_HTML)] },
       { title: "Updates", rows: [
         sw("updateCheck", "Check for updates", "Once a day the laptop asks GitHub for the latest version of Chip. Nothing about you is sent"),
@@ -2052,6 +2067,9 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     $("#lp-cmd").textContent = r.startCommand;
     const sw = $("#lp-auto");
     sw.checked = r.autostart === true; sw.disabled = r.autostart === null;
+    $("#lp-manual").hidden = r.autostart !== false;
+    MAN_OS = { windows: "Windows", macos: "macOS", linux: "Linux" }[r.os] || "Linux";
+    document.querySelectorAll(".man-os").forEach((e) => { e.textContent = MAN_OS; });
     if (r.autostart === null) $("#lp-auto-sub").textContent = "Chip isn't set up to start by itself here: run the installer (install.sh or install.py).";
   }
   const startCmd = () => (bridgeInfo && bridgeInfo.startCommand) || "python3 laptop/chip.py start";
@@ -2192,6 +2210,7 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
       h = `<p class="step"><b style="color:var(--good)">✓ Paired with ${esc(r.ip)}</b><br><small>Key ${esc(shortFp(r.fingerprint))}</small></p>` +
         `<p class="step">${r.deploy.ok ? "Chip's files were sent to the new phone." : "The key is pinned, but sending Chip's files failed. Run ./deploy.sh on the laptop:"}</p>` +
         (r.deploy.ok ? PHONE_FACE : `<pre>${esc((r.deploy.lines || []).join("\n"))}</pre>`) +
+        manualBox("If you close Chip and want to start over", "Download the manual: it shows how to start Chip again on this laptop and on the phone, without this dashboard.") +
         `<div class="acts"><button class="chip go" id="wiz-done">Done</button></div>`;
     } else if (!p.active) {
       h = (p.expired ? `<p class="hint">The last pairing ran out of time.</p>` : "") + PHONE_PREP +

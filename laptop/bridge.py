@@ -50,6 +50,9 @@ SETTINGS_FILE = paths.config("settings.json")
 GAZE_FILE = paths.config("gaze.json")  # where the phone sits, per monitor layout
 DASHBOARD = os.path.join(HERE, "dashboard.html")
 LOGOS = {"/logo/chip-dark.png", "/logo/chip-light.png"}  # the dashboard's logo, one per theme (laptop/logo/)
+MANUAL_OS = platforms.NAME if platforms.NAME in ("windows", "macos") else "linux"
+MANUAL = os.path.join(HERE, "..", "docs", "manual", f"chip-manual-{MANUAL_OS}.pdf")  # GET /manual.pdf: this OS's one-page manual
+MANUAL_NAME = "Chip manual (%s).pdf" % {"windows": "Windows", "macos": "macOS", "linux": "Linux"}[MANUAL_OS]
 PREVIEW = os.path.realpath(os.path.join(HERE, "..", "phone", "www"))  # the buddy page itself, for the dashboard's preview
 PACK_FILE = os.path.join(PREVIEW, "pack.json")
 SKINS_DIR = paths.config("skins")  # <id>.json per installed skin, _draft.json for the passing upload
@@ -982,7 +985,7 @@ class Skins:
 
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
          ".txt": "text/plain; charset=utf-8", ".woff2": "font/woff2", ".png": "image/png",
-         ".json": "application/json"}
+         ".json": "application/json", ".pdf": "application/pdf"}
 
 
 def bridge_state():
@@ -1046,7 +1049,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_file(self, path):
+    def send_file(self, path, download=None):
         try:
             with open(path, "rb") as f:
                 body = f.read()
@@ -1055,6 +1058,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", TYPES[os.path.splitext(path)[1]])
         self.send_header("Cache-Control", "no-cache")
+        if download:  # saved under this name instead of opened in the tab
+            self.send_header("Content-Disposition", f'attachment; filename="{download}"')
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -1157,6 +1162,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_file(DASHBOARD)
         if url.path in LOGOS:
             return self.send_file(os.path.join(HERE, url.path[1:]))
+        if url.path == "/manual.pdf":  # the dashboard's "Download the manual" button
+            return self.send_file(MANUAL, MANUAL_NAME)
         if url.path.startswith("/preview/"):
             path = os.path.realpath(os.path.join(PREVIEW, unquote(url.path[9:]) or "index.html"))
             if path.startswith(PREVIEW + os.sep) and os.path.splitext(path)[1] in TYPES:

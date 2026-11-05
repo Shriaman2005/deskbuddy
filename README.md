@@ -405,7 +405,10 @@ use `py -3` instead of `python3` and `laptop\chip.py` for the path.
 
 **Don't start Chip by itself**
 1. Laptop: switch off **Start Chip when the laptop starts**, or `python3 laptop/chip.py autostart off` (`on` to undo).
-   After that, start it by hand with `python3 laptop/chip.py start`.
+   After that, start it by hand with `python3 laptop/chip.py start`. Keep the one-page manual
+   for your laptop (**Download the manual** at the top of the Connections page, or `docs/manual/` for
+   [Windows](docs/manual/chip-manual-windows.pdf), [macOS](docs/manual/chip-manual-macos.pdf),
+   [Linux](docs/manual/chip-manual-linux.pdf)): every command to copy and paste, for when the dashboard can't open.
 2. Phone: switch off **Start Chip when the phone starts** (it needs Termux:Boot). Then Chip starts when you open
    Termux, or when you type `chip-start`.
 
