@@ -99,6 +99,10 @@ a.chip { text-decoration: none; }
 .phead p { margin: 6px 0 0; max-width: 640px; color: var(--muted); }
 
 /* ---------- groups: a heading over a boxed list of rows */
+details.fold { border: 1px solid var(--line); border-radius: 14px; }
+details.fold > summary { display: flex; flex-direction: column; gap: 2px; padding: 14px 20px; }
+details.fold > summary small { color: var(--muted); font-size: 13px; }
+details.fold > .foldbody { display: flex; flex-direction: column; gap: 22px; padding: 4px 16px 18px; }
 .grp { display: flex; flex-direction: column; gap: 10px; }
 .grp > h2 { margin: 0; padding: 0 4px; font-size: 14px; font-weight: 600; }
 .grp > .gnote { margin: -4px 0 0; padding: 0 4px; font-size: 13.5px; color: var(--muted); }
@@ -564,7 +568,11 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     `<details id="conn-ready">${summary("Get the phone ready to connect", "Steps on the phone, before you switch to it")}<div class="body">` +
     `<ol><li>Same Wi-Fi as the laptop.</li><li>Open Termux (Chip starts by itself), or type <code>chip-start</code>.</li>` +
     `<li>Leave Termux in the background, and set the battery to Unrestricted.</li><li>Press <b>Switch to this phone</b> (or Reconnect).</li></ol>` +
-    `<p class="hint">If it says “key mismatch”, Termux was reset on that phone: use <b>Pair again</b>.</p></div></details>`;
+    `<p class="hint">If it says “key mismatch”, Termux was reset on that phone: use <b>Pair again</b>.</p></div></details>` +
+    `<details id="conn-rep">${summary("Add phone", "Pair another phone with this laptop")}<div class="body">` +
+    `<p class="hint">The new phone is trusted only after you type the code it shows. Do this on your home Wi-Fi.</p>` +
+    `<div id="conn-forget"><button class="chip danger" id="conn-forget-btn">Disconnect this phone…</button></div><div id="conn-ask" hidden></div>` +
+    `<div id="conn-wiz"></div></div></details>`;
   const CONN_PC = `<div class="blk" id="conn-pc"><div class="acts"><button class="chip" id="pc-restart">Restart Chip on the phone</button>` +
     `<button class="chip danger" id="pc-stop">Stop Chip on the phone…</button></div>` +
     `<p class="hint" id="pc-off" hidden>The phone isn't connected, so these can't reach it. Open Termux on the phone (or press Reconnect above).</p>` +
@@ -613,11 +621,8 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
   const CONN_END = `<details id="conn-adv">${summary("Phone's ssh port", "Only change it if you moved sshd in Termux")}<div class="body">` +
     `<p class="warnbox"><b>Careful.</b> A wrong port stops the tunnel, and nothing here can fix it from the phone. Use the port you gave <code>sshd -p</code>, from 1024 to 65535.</p>` +
     `<div class="line"><label for="conn-port">Port</label><input type="number" class="field" id="conn-port" min="1024" max="65535" step="1" inputmode="numeric">` +
-    `<button class="chip" id="conn-port-save">Save</button></div></div></details>` +
-    `<details id="conn-rep">${summary("Add phone", "Pair another phone with this laptop")}<div class="body">` +
-    `<p class="hint">The new phone is trusted only after you type the code it shows. Do this on your home Wi-Fi.</p>` +
-    `<div id="conn-forget"><button class="chip danger" id="conn-forget-btn">Disconnect this phone…</button></div><div id="conn-ask" hidden></div>` +
-    `<div id="conn-wiz"></div></div></details>`;
+    `<button class="chip" id="conn-port-save">Save</button></div></div></details>`;
+
   const THEME_HTML = `<div class="row choice"><span class="txt"><b>Theme</b><small>Pitch black or light, for this page only. Chip's face on the phone is not affected</small></span>` +
     `<div class="pick" id="theme-pick" role="group" aria-label="Theme"><button class="chip" data-theme-pick="system">System</button>` +
     `<button class="chip" data-theme-pick="light">Light</button><button class="chip" data-theme-pick="dark">Dark</button></div></div>`;
@@ -817,8 +822,9 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     ] },
     { id: "connections", nav: "Laptop", title: "Connections", cls: "conn",
       desc: "The Wi-Fi link between this laptop and the phone. Everything goes over an ssh tunnel, and these settings can only be changed on this page.", groups: [
-      { title: "Your phones", rows: [raw(CONN_PHONES)] },
       { title: "Status", rows: [raw(CONN_TOP)] },
+      { title: "Your phones", rows: [raw(CONN_PHONES)] },
+      { fold: "Advanced", note: "Everything else about the link, for when you want to look around.", groups: [
       { title: "Chip on the phone", rows: [raw(CONN_PC)] },
       { title: "This laptop", rows: [raw(CONN_LAPTOP)] },
       { title: "This phone", rows: [
@@ -832,7 +838,8 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
         range("linkKeepAlive", "Keep-alive", 5, 60, 5, "sec"),
         range("linkRetry", "Retry every", 5, 60, 5, "sec"),
       ] },
-      { title: "Advanced", rows: [raw(CONN_END)] },
+      { title: "Phone's ssh port", rows: [raw(CONN_END)] },
+      ] },
     ] },
     { id: "troubleshoot", nav: "Laptop", title: "Troubleshooting", desc: "Every error Chip can show and how to fix it yourself. Tap a problem to open its fix. Or use the search box on the left.", groups: [
       { title: "Check everything at once", rows: [raw(`<div class="row"><span class="txt"><b>Run the doctor</b><small>Checks the laptop, the Wi-Fi link and Termux, and prints a fix next to every failed check</small></span><a class="chip" href="#connections">Open Connections</a></div>`)] },
@@ -926,10 +933,10 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
   }
   $("#pages").innerHTML = PAGES.map((p) => `<section class="page${p.cls ? " " + p.cls : ""}" id="page-${p.id}" data-page="${p.id}" aria-labelledby="h-${p.id}" hidden>` +
     `<header class="phead"><h1 id="h-${p.id}">${esc(p.title)}</h1><p>${esc(p.desc)}</p></header>` +
-    p.groups.map((g) => `<section class="grp"${g.needs ? ` data-needs="${g.needs}"` : ""}${g.attrs || ""}>` +
+    p.groups.map(function grp(g) { if (g.fold) return `<details class="fold"><summary><b>${esc(g.fold)}</b><small>${esc(g.note)}</small><span class="chev"></span></summary><div class="foldbody">${g.groups.map(grp).join("")}</div></details>`; return `<section class="grp"${g.needs ? ` data-needs="${g.needs}"` : ""}${g.attrs || ""}>` +
       (g.title ? `<h2>${esc(g.title)}</h2>` : "") + (g.note ? `<p class="gnote">${esc(g.note)}</p>` : "") +
       (g.needs ? `<p class="blocked">${g.blocked}</p>` : "") +
-      `<div class="panel">${g.rows.map(rowHTML).join("")}</div></section>`).join("") + `</section>`).join("");
+      `<div class="panel">${g.rows.map(rowHTML).join("")}</div></section>`;}).join("") + `</section>`).join("");
   const NAV = [...new Set(PAGES.map((p) => p.nav))];
   $("#nav").innerHTML = NAV.map((n) => `<div class="navgrp"><span class="navlabel">${esc(n)}</span>` +
     PAGES.filter((p) => p.nav === n).map((p) => `<a class="nav" href="#${p.id}" data-page="${p.id}">` +
