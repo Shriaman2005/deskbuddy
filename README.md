@@ -1,11 +1,16 @@
-# Turn your old Android phone into a living desk buddy
+# Turn any Android phone into a living desk buddy
 
-**That old phone in your drawer can be a tiny pixel-art friend on your desk.** Chip blinks, gets happy when you tap
-it, loves being petted, puts on headphones when your music plays, types along with you, tells you when Claude Code
-is done, and types whatever you say straight into your laptop.
+**Your phone can be a tiny pixel-art friend on your desk.** Chip blinks, gets happy when you tap it, loves being
+petted, puts on headphones when your music plays, types along with you, tells you when Claude Code is done, and types
+whatever you say straight into your laptop.
 
-Free and open source. Runs over your home Wi-Fi. No cable, no cloud account, no app store, no subscription.
-Works with almost any Android phone, even a very slow one: it was built on a budget Samsung Galaxy M01 Core.
+**You don't need a spare phone.** Use your own personal phone if you like: Chip runs as a small app inside Termux, only
+over your home Wi-Fi, with no account, no cloud and no camera (see [Privacy and security](#privacy-and-security)).
+It takes very few resources: it was built and tested on a **Samsung Galaxy M01 Core**, a budget Android Go phone with a
+weak CPU. If it runs smoothly there, it will run on yours. A retired phone that stays on the desk works too.
+
+Free and open source. No cable, no cloud account, no app store, no subscription. Works on **Android 7 and newer**
+(Termux, which Chip runs on, only supports Android 7+).
 
 <p align="center">
   <img src="docs/img/chip-face.gif" width="80%" alt="Chip waking up, smiling, getting heart eyes and being petted">
@@ -23,6 +28,14 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
 <p align="center">
   <img src="docs/img/eyes-toon.png" width="49%" alt="Toon eyes in violet">
   <img src="docs/img/eyes-button.png" width="49%" alt="Button eyes in rose">
+</p>
+
+**Custom skins**, made with an AI chatbot in a few minutes (fan-made examples, not included in the repo):
+
+<p align="center">
+  <img src="docs/img/skin-knight.png" width="32%" alt="A dark knight skin">
+  <img src="docs/img/skin-mask.png" width="32%" alt="A red masked hero skin">
+  <img src="docs/img/skin-web.png" width="32%" alt="A web-slinger skin">
 </p>
 
 ## Gallery
@@ -46,12 +59,20 @@ Works with almost any Android phone, even a very slow one: it was built on a bud
 |---|---|
 | <img src="docs/img/timer.png" alt="Pomodoro timer screen"> | <img src="docs/img/headphones.png" alt="Chip wearing headphones while music plays"> |
 
-**Custom skins**, made with an AI chatbot in a few minutes (fan-made examples, not included in the repo):
+**Music visualizer, 7 styles** (tap the screen to switch): bars, mirror, radial, neon, waves, LED and silk.
 
 <p align="center">
-  <img src="docs/img/skin-knight.png" width="32%" alt="A dark knight skin">
-  <img src="docs/img/skin-mask.png" width="32%" alt="A red masked hero skin">
-  <img src="docs/img/skin-web.png" width="32%" alt="A web-slinger skin">
+  <img src="docs/img/viz-bars.png" width="49%" alt="Bars visualizer">
+  <img src="docs/img/viz-mirror.png" width="49%" alt="Mirror visualizer">
+</p>
+<p align="center">
+  <img src="docs/img/viz-radial.png" width="49%" alt="Radial visualizer with Chip in the middle">
+  <img src="docs/img/visualizer.png" width="49%" alt="Neon visualizer">
+</p>
+<p align="center">
+  <img src="docs/img/viz-waves.png" width="32%" alt="Waves visualizer">
+  <img src="docs/img/viz-led.png" width="32%" alt="LED visualizer">
+  <img src="docs/img/viz-silk.png" width="32%" alt="Silk visualizer">
 </p>
 
 **The dashboard** on the laptop, with a page for every setting:
@@ -211,8 +232,9 @@ features), but idle/lock, media, notifications, typing and eye tracking use GNOM
 
 Optional: [Node.js](https://nodejs.org/) 18+ for custom skins.
 
-**An Android phone** (any Android 7+ phone that can run Termux; it was built on a Samsung Galaxy M01 Core, a very weak
-Android Go phone, so almost anything works) with these free apps from **[F-Droid](https://f-droid.org/)**:
+**An Android phone, your own or a spare one.** It needs **Android 7 or newer** (Termux only supports Android 7+).
+Chip is light: it was tested on a Samsung Galaxy M01 Core, a very weak Android Go phone, so almost anything works.
+You need these free apps from **[F-Droid](https://f-droid.org/)**:
 - [Termux](https://f-droid.org/packages/com.termux/) — runs Chip's small server on the phone
 - [Termux:API](https://f-droid.org/packages/com.termux.api/) — battery, torch and voice
 - Optional, for a phone that stays on the desk all the time:
@@ -381,6 +403,11 @@ Only the JSON file reaches the laptop, never your pictures. Skins need Node.js o
 Everything below is on the dashboard's **Connections** page (<http://127.0.0.1:8765/#connections>). Windows commands
 use `py -3` instead of `python3` and `laptop\chip.py` for the path.
 
+**Keep the manual.** Press **Download the manual** at the top of the Connections page. It is one page, made for your
+laptop's system (Windows, macOS or Linux), with the commands to copy and paste to start, stop or set up Chip again, for
+when the dashboard can't open (after a reboot with start-at-login off, or after you close Chip). The dashboard offers it
+again after you add a phone and when you switch start-at-login off.
+
 **Switch between phones you paired before**
 1. Open **Your phones**. Every phone you paired with the code is listed.
 2. Get that phone ready (next section), then press **Switch to this phone**. No new code is needed.
@@ -432,6 +459,10 @@ use `py -3` instead of `python3` and `laptop\chip.py` for the path.
 - **The bridge** listens only on `127.0.0.1:8765`. Only the dashboard (origin `http://127.0.0.1:8765`) can change link
   settings or pair a phone; web pages and the phone's page can't. The only port opened to the network is the
   10-minute pairing download.
+- **Safe on your own phone.** Chip only uses the battery level, the Wi-Fi signal, the torch (for alerts) and, while you
+  hold the face to dictate, the microphone. It never reads your photos, messages, contacts or other apps, and never uses
+  the camera. It runs inside Termux's own sandbox, and with **Personal phone** switched on it never changes your
+  screen brightness.
 - **Notifications:** only the sending app's name is kept, never the content. **Typing along** counts key presses,
   never which keys. **Eye tracking** reads only the pointer position while it's on. No webcam, no analytics.
 - Your settings, keys and data live in `~/.config/deskbuddy/` and `~/.local/share/deskbuddy/` (the same folders on
@@ -532,9 +563,6 @@ Preview the phone page without a phone (bridge running):
 
 CI (`.github/workflows/ci.yml`) runs the checks on Linux, Windows and macOS on every push, including a fake phone
 for the tunnel and real typing into Notepad on Windows.
-
-Releasing an update: bump `VERSION`, commit and push, then create a GitHub release tagged `v` + the version
-(e.g. `v1.1.0`) on that commit. Its release notes are what users see on the dashboard (`laptop/updates.py`).
 
 Contributions and bug reports are welcome: please include the output of `doctor.py`.
 
