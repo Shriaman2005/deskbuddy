@@ -39,4 +39,10 @@ def popen(cmd, text=True, detached=False, **kw):
     flags = dict(_FLAGS)
     if detached and os.name == "nt":
         flags["creationflags"] |= subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    if detached and os.name == "nt":  # also leave the caller's job (OpenSSH kills its session's job when ssh ends)
+        try:
+            return subprocess.Popen(cmd, **(_TEXT if text else {}),
+                                    **dict(flags, creationflags=flags["creationflags"] | 0x01000000), **kw)
+        except PermissionError:  # the job doesn't allow breakaway: stay in it
+            pass
     return subprocess.Popen(cmd, **(_TEXT if text else {}), **flags, **kw)
