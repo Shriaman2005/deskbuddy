@@ -248,7 +248,7 @@ def install_windows(args):
     say("It starts by itself at login. To remove it: py -3 laptop\\install.py --uninstall")
     if not args.ci:
         import webbrowser
-        webbrowser.open(DASHBOARD)
+        webbrowser.open(DASHBOARD + "#connections")  # first job: pair the phone
         say("Next: open the dashboard's Connections card to pair the phone.")
 
 
@@ -382,7 +382,7 @@ def install_macos(args):
     say("  type too. (A signed Chip app, planned for later, will fix that.)")
     if not args.ci:
         import webbrowser
-        webbrowser.open(DASHBOARD)
+        webbrowser.open(DASHBOARD + "#connections")  # first job: pair the phone
         proc.run("open", ACCESSIBILITY_PANE, timeout=10)
         say("\nNext: open the dashboard's Connections card to pair the phone.")
 
