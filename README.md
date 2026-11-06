@@ -226,8 +226,8 @@ features), but idle/lock, media, notifications, typing and eye tracking use GNOM
 
 **A laptop** running one of:
 - **Linux** with GNOME (Ubuntu 24.04+ recommended), Python 3.12+, `ssh` (openssh-client), `git`
-- **Windows 10 or 11** with Python 3.12+ from [python.org](https://www.python.org/downloads/) (not the Microsoft Store
-  version). Windows' built-in OpenSSH client is used.
+- **Windows 10 or 11**. `Install Chip.cmd` gets Python 3.12+ from python.org for you if it's missing (the Microsoft
+  Store Python doesn't work for Chip). Windows' built-in OpenSSH client is used.
 - **macOS 14+** (experimental) with Python 3.12+ from python.org or Homebrew
 
 Optional: [Node.js](https://nodejs.org/) 18+ for custom skins.
@@ -279,18 +279,19 @@ Optional extras:
 
 ### Windows 10/11
 
-1. Install **Python 3.12+** from <https://www.python.org/downloads/>. In the installer tick **"Add python.exe to PATH"**.
-   (The Microsoft Store Python doesn't work for this; the installer will tell you if it finds it.)
-2. Get the Chip folder (git clone or Download ZIP, see above).
-3. Run the installer, either by double-clicking `laptop\install.py` or from a terminal in the Chip folder:
-   ```powershell
-   py -3 laptop\install.py
-   ```
-   It creates a private Python environment, creates Chip's own ssh key, sets Chip to start when you log in, starts it
-   and opens the dashboard.
+1. Get the Chip folder: on GitHub click **Code → Download ZIP**, then right-click the ZIP in Downloads and choose
+   **Extract All… → Extract** (or git clone, see above).
+2. In the extracted folder (with a ZIP it's `deskbuddy-main` inside `deskbuddy-main`), double-click
+   **`Install Chip.cmd`**. Windows warns that the publisher could not be verified: click **Run**.
+3. Wait about a minute. If Python 3.12+ isn't installed, it installs Python 3.14 from python.org with winget, just for
+   your Windows user (no admin needed). Then it creates a private Python environment and Chip's own ssh key, sets Chip
+   to start when you log in, starts it and opens the dashboard. (The first time Edge opens, it shows its own welcome
+   screen first.)
 4. When Windows asks whether to allow Python on the network (during pairing), choose **Allow** on **private networks**.
 
-Running the installer again updates or repairs Chip. Logs are in `%USERPROFILE%\.local\share\deskbuddy\bridge.log`.
+Running `Install Chip.cmd` again updates or repairs Chip; it also moves Chip to a new folder if you run it from a
+newer download. From a terminal: `"Install Chip.cmd" --uninstall` or `--repair` (the same options as `laptop\install.py`).
+Logs are in `%USERPROFILE%\.local\share\deskbuddy\bridge.log`.
 
 Notes for Windows:
 - Dictation can't type into a window that runs **as administrator** (Windows blocks this); click a normal window first.
@@ -541,7 +542,7 @@ or the whole check with **Check for updates**).
 | `laptop/link.py`, `sshlink.py`, `deploy.py` | The Wi-Fi ssh tunnel, pairing, key pinning, and auto-deploy of `phone/` to the phone. |
 | `laptop/platforms/` | Everything OS-specific: `linux.py` (GNOME), `windows.py`, `macos.py`. |
 | `laptop/dashboard.html` | The settings dashboard. |
-| `laptop/install.sh`, `install.py`, `supervise.py` | Installers (Linux / Windows + macOS) and the Windows restart-on-crash supervisor. |
+| `laptop/install.sh`, `install.py`, `supervise.py` | Installers (Linux / Windows + macOS) and the Windows restart-on-crash supervisor. `Install Chip.cmd` (top folder) is the Windows double-click wrapper: Python via winget, then install.py. |
 | `laptop/doctor.py` | Health check for every link. |
 | `laptop/hooks.py`, `attention.py` | AI-agent hooks and the alert they send. |
 | `laptop/skin.js`, `merge_pack.js` | Skin checker / prompt generator, and the pack merge tool. |

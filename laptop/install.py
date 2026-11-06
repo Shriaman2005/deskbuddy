@@ -121,7 +121,7 @@ def wait_until_stopped(seconds=10):
 
 
 def stop_strays():
-    """Stops Chip's supervisor and bridges started from this folder (supervise.py --stop, run by the venv's Python
+    """Stops Chip's supervisors and bridges, from any Chip folder (supervise.py --stop, run by the venv's Python
     which has psutil)."""
     if os.path.isfile(VENV_PY):
         r = proc.complete([VENV_PY, "-I", "-X", "utf8", SUPERVISE, "--stop"], timeout=60)
@@ -413,7 +413,7 @@ def main():
         try:
             (uninstall_windows if args.uninstall else install_windows)(args)
         finally:
-            if not args.ci and double_clicked():
+            if not args.ci and not os.environ.get("CHIP_LAUNCHER") and double_clicked():  # Install Chip.cmd pauses itself
                 input("\nPress Enter to close this window. ")
         return 0
     if sys.platform == "darwin":

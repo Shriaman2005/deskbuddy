@@ -52,10 +52,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: python -I -X utf8 laptop/install.py --ci
-      - name: Windows - install.py --ci again (stops the running Chip, starts it afresh)
+      - name: Windows - Install Chip.cmd --ci (the double-click path; stops the running Chip, starts it afresh)
         if: runner.os == 'Windows'
-        shell: bash
-        run: python -I -X utf8 laptop/install.py --ci
+        shell: cmd
+        env:
+          CHIP_NO_PAUSE: "1"
+        run: call "Install Chip.cmd" --ci
       - name: Windows - the bridge answers, Chip starts at login
         if: runner.os == 'Windows'
         shell: pwsh
