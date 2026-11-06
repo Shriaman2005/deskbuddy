@@ -1575,10 +1575,16 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     return i;
   };
   const cleanName = (v) => v.replace(/\s+/g, " ").trim().slice(0, 40);
+  // why the skin prompt didn't load: no Node.js on this laptop (the skin checker is a Node script), else the bridge
+  async function promptFail() {
+    const c = await fetch("/caps", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (c && c.skins === false) return "Skins need Node.js on this laptop, and it isn't installed. Get it from nodejs.org (the LTS version), then restart Chip: run chip.py restart, or sign out and in.";
+    return "Couldn't load the prompt. Is the desk buddy bridge running?";
+  }
   async function loadPrompt() {   // one master prompt for every subject and screen
     const box = $("#mk-prompt");
     const r = await fetch("/skins/prompt", { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null);
-    if (r === null) { box.value = "Couldn't load the prompt. Is the desk buddy bridge running?"; return; }
+    if (r === null) { box.value = await promptFail(); return; }
     box.value = r; box.scrollTop = 0; $("#mk-copy").disabled = false;
   }
   $("#mk-copy").addEventListener("click", () => copyText($("#mk-prompt").value, "Prompt"));
@@ -1695,8 +1701,8 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     const prompt = mk("textarea"), copy = mk("button", "chip", "Copy prompt");
     prompt.readOnly = true; prompt.rows = 5; prompt.value = "Loading the prompt…"; prompt.setAttribute("aria-label", "Headphones prompt for your AI chat");
     copy.disabled = true;
-    fetch(`/skins/${id}/phones-prompt`, { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null).then((t) => {
-      prompt.value = t === null ? "Couldn't load the prompt. Is the desk buddy bridge running?" : t; prompt.scrollTop = 0; copy.disabled = t === null;
+    fetch(`/skins/${id}/phones-prompt`, { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null).then(async (t) => {
+      prompt.value = t === null ? await promptFail() : t; prompt.scrollTop = 0; copy.disabled = t === null;
     });
     copy.addEventListener("click", () => copyText(prompt.value, "Prompt"));
     const how = mk("ol", "howto");
