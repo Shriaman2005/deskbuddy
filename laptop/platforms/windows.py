@@ -103,11 +103,36 @@ DESKTOP_SWITCHDESKTOP = 0x0100
 ERROR_ACCESS_DENIED = 5
 
 
+def _session_locked():
+    """True when WTSSessionInfoEx says this session is locked (WTS_SESSIONSTATE_LOCK = 0). Windows 10 shows its lock
+    screen while OpenInputDesktop still answers "Default", so locked() asks both. False when unknown."""
+    import struct
+    from ctypes import POINTER, byref, c_void_p, wintypes
+    try:
+        w = ctypes.WinDLL("wtsapi32", use_last_error=True)
+        w.WTSQuerySessionInformationW.argtypes = [c_void_p, wintypes.DWORD, wintypes.DWORD, POINTER(c_void_p),
+                                                  POINTER(wintypes.DWORD)]
+        p, n = c_void_p(), wintypes.DWORD()
+        if not w.WTSQuerySessionInformationW(None, 0xFFFFFFFF, 25, byref(p), byref(n)):  # CURRENT_SESSION, SessionInfoEx
+            return False
+        try:
+            raw = ctypes.string_at(p, n.value)
+        finally:
+            w.WTSFreeMemory.argtypes = [c_void_p]
+            w.WTSFreeMemory(p)
+        # WTSINFOEXW: Level (4) + padding (4) + level 1: SessionId, SessionState, SessionFlags (4 each)
+        return len(raw) >= 20 and struct.unpack_from("<I", raw, 0)[0] == 1 and struct.unpack_from("<i", raw, 16)[0] == 0
+    except (OSError, AttributeError):
+        return False
+
+
 def locked():
     """True while the lock screen (or the sign-in screen, a UAC prompt) is in front: the input desktop is Winlogon's
     and can't be opened. None when Windows says something else (no interactive session): then nothing is typed."""
     if not IS_WIN:
         return None
+    if _session_locked():  # Windows 10's lock screen leaves the input desktop reachable, so ask the session too
+        return True
     u, _ = _libs()
     desk = u.OpenInputDesktop(0, False, DESKTOP_SWITCHDESKTOP)
     if not desk:
@@ -152,6 +177,52 @@ def input_size_ok():
     return ctypes.sizeof(INPUT) == (40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28)
 
 
+def foreground_is_admin():
+    """True when the window in front runs elevated (as administrator) and Chip doesn't: Windows (UIPI) then drops
+    our key events silently, SendInput still reports success. An elevated process can't even be opened by a normal
+    one for its token, so "access denied" counts as elevated too. False when unsure."""
+    if not IS_WIN:
+        return False
+    from ctypes import POINTER, byref, c_int, c_uint32, c_void_p, wintypes
+    u, k = _libs()
+    a = ctypes.WinDLL("advapi32", use_last_error=True)
+    u.GetForegroundWindow.restype = c_void_p
+    u.GetWindowThreadProcessId.argtypes = [c_void_p, POINTER(c_uint32)]
+    k.OpenProcess.argtypes, k.OpenProcess.restype = [c_uint32, c_int, c_uint32], c_void_p
+    k.GetCurrentProcess.restype = c_void_p
+    k.CloseHandle.argtypes = [c_void_p]
+    a.OpenProcessToken.argtypes = [c_void_p, c_uint32, POINTER(c_void_p)]
+    a.GetTokenInformation.argtypes = [c_void_p, c_int, c_void_p, c_uint32, POINTER(c_uint32)]
+
+    def elevated(proc):  # True / False / None (token not readable: access denied)
+        tok = c_void_p()
+        if not a.OpenProcessToken(proc, 0x0008, byref(tok)):  # TOKEN_QUERY
+            return True if ctypes.get_last_error() == ERROR_ACCESS_DENIED else None
+        try:
+            val, n = c_uint32(0), c_uint32(0)
+            if not a.GetTokenInformation(tok, 20, byref(val), 4, byref(n)):  # TokenElevation
+                return None
+            return bool(val.value)
+        finally:
+            k.CloseHandle(tok)
+
+    hwnd = u.GetForegroundWindow()
+    if not hwnd:
+        return False
+    pid = c_uint32(0)
+    u.GetWindowThreadProcessId(hwnd, byref(pid))
+    if not pid.value:
+        return False
+    proc = k.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not proc:
+        return ctypes.get_last_error() == ERROR_ACCESS_DENIED
+    try:
+        theirs = elevated(proc)
+    finally:
+        k.CloseHandle(proc)
+    return bool(theirs) and not elevated(k.GetCurrentProcess())
+
+
 def type_text(text):
     """Types text into the focused window and returns what was typed. Never sends Enter (newlines and tabs become
     spaces), refuses while locked. Each UTF-16 unit goes as a KEYEVENTF_UNICODE key down + up, so any language and
@@ -164,6 +235,9 @@ def type_text(text):
     text += " "  # so back-to-back dictations don't run together
     if locked() is not False:
         raise TypingError("locked", "The laptop is locked")
+    if foreground_is_admin():
+        raise TypingError("blocked", "The window in front is running as administrator, and Windows lets a normal "
+                                     "program type only into normal windows. Click a normal window, or run it normally")
     u, _ = _libs()
     units = utf16_units(text)
     for i in range(0, len(units), BATCH):
