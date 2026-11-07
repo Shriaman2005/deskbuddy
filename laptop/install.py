@@ -121,7 +121,7 @@ def wait_until_stopped(seconds=10):
 
 
 def stop_strays():
-    """Stops Chip's supervisor and bridges started from this folder (supervise.py --stop, run by the venv's Python
+    """Stops Chip's supervisors and bridges, from any Chip folder (supervise.py --stop, run by the venv's Python
     which has psutil)."""
     if os.path.isfile(VENV_PY):
         r = proc.complete([VENV_PY, "-I", "-X", "utf8", SUPERVISE, "--stop"], timeout=60)
@@ -148,7 +148,108 @@ def make_venv(python):
     r = proc.complete([VENV_PY, "-I", "-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", REQUIREMENTS],
                       timeout=900)
     if r.returncode != 0:
-        fail("pip could not install psutil (is there an internet connection?):\n" + (r.stderr or r.stdout)[-1500:])
+        fail("pip could not install Chip's Python packages (is there an internet connection?):\n" + (r.stderr or r.stdout)[-1500:])
+
+
+def get_node():
+    """Skins are checked by laptop/skin.js, which needs Node.js (node.exe alone: it uses only Node's own modules).
+    Windows, when node isn't on PATH: the newest LTS node.exe from nodejs.org's official zip, checked against that
+    release's SHASUMS256.txt, into DATA_DIR/node (platforms.NODE). Optional: returns a note, never fails the install."""
+    import platforms
+    if platforms.node():
+        return "already there"
+    import hashlib
+    import io
+    import json
+    import platform
+    import urllib.request
+    import zipfile
+    dist, arch = "https://nodejs.org/dist/", "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
+
+    def get(url, timeout=60):
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.read()
+    try:
+        release = next(r for r in json.loads(get(dist + "index.json"))
+                       if r.get("lts") and f"win-{arch}-zip" in r.get("files", []))
+        version, name = release["version"], f"node-{release['version']}-win-{arch}"
+        sums = get(f"{dist}{version}/SHASUMS256.txt").decode()
+        want = next(l.split()[0] for l in sums.splitlines() if l.strip().endswith("  " + name + ".zip"))
+        data = get(f"{dist}{version}/{name}.zip", timeout=600)
+        if hashlib.sha256(data).hexdigest() != want:
+            return "skipped: the download didn't match nodejs.org's checksum"
+        os.makedirs(os.path.dirname(platforms.NODE_LOCAL), exist_ok=True)
+        with zipfile.ZipFile(io.BytesIO(data)) as z, open(platforms.NODE_LOCAL + ".part", "wb") as f:
+            f.write(z.read(f"{name}/node.exe"))
+        os.replace(platforms.NODE_LOCAL + ".part", platforms.NODE_LOCAL)
+        return f"Node.js {version}"
+    except (OSError, ValueError, KeyError, StopIteration, zipfile.BadZipFile) as e:
+        return f"skipped ({type(e).__name__}: {e}); skins stay off until Node.js is installed"
+
+
+WHISPER_API = "https://api.github.com/repos/ggml-org/whisper.cpp/releases?per_page=30"
+WHISPER_MODELS = {"small-q8_0": "49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f",
+                  "base-q8_0": "c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9"}  # Hugging Face LFS SHA-256
+
+
+def download(url, dest, sha256, timeout=900):
+    """url -> dest, only if its SHA-256 matches (written to dest.part first)."""
+    import hashlib
+    import urllib.request
+    h = hashlib.sha256()
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with urllib.request.urlopen(url, timeout=timeout) as r, open(dest + ".part", "wb") as f:
+        for chunk in iter(lambda: r.read(1 << 20), b""):
+            h.update(chunk)
+            f.write(chunk)
+    if h.hexdigest() != sha256:
+        os.remove(dest + ".part")
+        raise ValueError(f"{os.path.basename(dest)} didn't match its checksum")
+    os.replace(dest + ".part", dest)
+
+
+def get_whisper(models=tuple(WHISPER_MODELS)):
+    """`install.py --stt`: whisper-cli.exe + the models for the Laptop dictation engine, into DATA_DIR/stt.
+    The binaries are on whichever recent whisper.cpp release has whisper-bin-x64.zip (the newest v-tags have none),
+    checked against the SHA-256 GitHub lists for the asset; models against Hugging Face's. Windows only (Linux builds
+    it, macOS uses Homebrew). Safe to run again: what is there stays."""
+    import io
+    import json
+    import urllib.request
+    import zipfile
+    import platforms
+    if not IS_WIN:
+        say("Linux: build whisper.cpp (README). macOS: brew install whisper-cpp.")
+        return 1
+    stt = os.path.dirname(platforms.WHISPER) if os.path.isfile(platforms.WHISPER) else platforms.paths.data("stt")
+    try:
+        if os.path.isfile(platforms.WHISPER):
+            say("whisper-cli.exe: already there")
+        else:
+            with urllib.request.urlopen(WHISPER_API, timeout=60) as r:
+                assets = [(rel["tag_name"], a) for rel in json.load(r) for a in rel["assets"] if a["name"] == "whisper-bin-x64.zip"]
+            tag, asset = next((t, a) for t, a in assets if (a.get("digest") or "").startswith("sha256:"))
+            say(f"whisper-cli.exe: release {tag} ({asset['size'] // 1048576} MB)")
+            zpath = os.path.join(stt, "whisper-bin-x64.zip")
+            download(asset["browser_download_url"], zpath, asset["digest"][7:])
+            with zipfile.ZipFile(zpath) as z:
+                for n in z.namelist():
+                    if n.startswith("Release/") and n.lower().endswith((".exe", ".dll")) and "/" not in n[8:]:
+                        with open(os.path.join(stt, n[8:]), "wb") as f:
+                            f.write(z.read(n))
+            os.remove(zpath)
+        for m in models:
+            dest = os.path.join(stt, "models", f"ggml-{m}.bin")
+            if os.path.isfile(dest):
+                say(f"model {m}: already there")
+                continue
+            say(f"model {m}: downloading")
+            download(f"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{m}.bin", dest, WHISPER_MODELS[m])
+    except (OSError, ValueError, KeyError, StopIteration, zipfile.BadZipFile) as e:
+        say(f"Dictation download failed ({type(e).__name__}: {e}). Run this again; finished files are kept.")
+        return 1
+    say("Done. Chip's Laptop dictation engine is ready (Dashboard -> Dictation -> Test).")
+    return 0
 
 
 def repair_prepare():
@@ -228,10 +329,11 @@ def install_windows(args):
         fail("no Python 3.12 or newer found" + (" (the one from the Microsoft Store doesn't work for Chip)" if skipped else "")
              + ".\n  Install Python from " + PYTHON_ORG + " and run this again.")
     say(f"1/6 Python: {python}")
-    say("2/6 venv + psutil (a minute the first time)")
+    say("2/6 venv + Python packages (a minute the first time)")
     make_venv(python)
-    say("3/6 ssh key")
+    say("3/6 ssh key, Node.js for skins (once, ~30 MB)")
     make_key(OPENSSH_FIX)
+    say("  skins: " + get_node())
     say("4/6 stopping the old Chip, if one runs")
     stop_strays()
     if not wait_until_stopped():
@@ -248,7 +350,7 @@ def install_windows(args):
     say("It starts by itself at login. To remove it: py -3 laptop\\install.py --uninstall")
     if not args.ci:
         import webbrowser
-        webbrowser.open(DASHBOARD)
+        webbrowser.open(DASHBOARD + "#connections")  # first job: pair the phone
         say("Next: open the dashboard's Connections card to pair the phone.")
 
 
@@ -382,7 +484,7 @@ def install_macos(args):
     say("  type too. (A signed Chip app, planned for later, will fix that.)")
     if not args.ci:
         import webbrowser
-        webbrowser.open(DASHBOARD)
+        webbrowser.open(DASHBOARD + "#connections")  # first job: pair the phone
         proc.run("open", ACCESSIBILITY_PANE, timeout=10)
         say("\nNext: open the dashboard's Connections card to pair the phone.")
 
@@ -408,12 +510,19 @@ def main():
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--repair", action="store_true", help="rebuild the venv, keep settings, keys, phones and autostart")
     ap.add_argument("--ci", action="store_true")
+    ap.add_argument("--stt", action="store_true", help="download whisper-cli.exe + models for offline dictation on this laptop (Windows)")
     args = ap.parse_args()
+    if args.stt:
+        try:
+            return get_whisper()
+        finally:
+            if not os.environ.get("CHIP_LAUNCHER") and IS_WIN and double_clicked():
+                input("\nPress Enter to close this window. ")
     if IS_WIN:
         try:
             (uninstall_windows if args.uninstall else install_windows)(args)
         finally:
-            if not args.ci and double_clicked():
+            if not args.ci and not os.environ.get("CHIP_LAUNCHER") and double_clicked():  # Install Chip.cmd pauses itself
                 input("\nPress Enter to close this window. ")
         return 0
     if sys.platform == "darwin":

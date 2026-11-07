@@ -5,12 +5,14 @@
 - BatchMode (no prompts), no agent or X11 forwarding, no local commands.
 - Chip's own key CONFIG_DIR/id_ed25519, when it exists, is the only identity offered (IdentitiesOnly=yes) and the one
   pairing hands out; otherwise ssh's own identities as before (pairing hands out the first one `ssh -G` lists).
+- scan() reads what a phone offers (ssh-keyscan; ssh itself on Windows).
 - ssh, ssh-keygen, ssh-keyscan come from PATH or Windows' System32\\OpenSSH (platforms.proc.which).
 - Paths in -o values use forward slashes and double quotes (user names with spaces), with % doubled where ssh expands
   %-tokens."""
 import os
 import re
 import socket
+import tempfile
 
 from platforms import paths, proc
 
@@ -87,6 +89,38 @@ def options(port):
 def command(ip, port, remote, timeout=8):
     """argv for running one command in Termux (no forwards of any kind)."""
     return [tool("ssh"), *options(port), "-o", "ClearAllForwardings=yes", "-o", f"ConnectTimeout={timeout}", ip, remote]
+
+
+def scan(ip, port, timeout=3):
+    """{(key type, key)} the sshd at ip:port offers now; nothing is trusted or pinned by this.
+    Linux/macOS: ssh-keyscan. Windows: ssh-keyscan of Windows' OpenSSH 9.5 proposes key exchanges its LibreSSL build
+    can't do (sntrup761), so against Termux's OpenSSH 10 it gets no key at all ("choose_kex: unsupported KEX method").
+    There ssh itself reads the ed25519 key (the one the phone's pairing code covers) into a throwaway known_hosts
+    with accept-new, and authenticates with nothing."""
+    if os.name != "nt":
+        return {tuple(l.split()[1:3]) for l in
+                proc.run(tool("ssh-keyscan"), "-T", str(timeout), "-p", str(port), ip, timeout=timeout * 2 + 2).splitlines()
+                if len(l.split()) >= 3 and not l.startswith("#")}
+    fd, tmp = tempfile.mkstemp(prefix="chip-scan-", dir=os.path.dirname(no_global()))
+    os.close(fd)
+    try:
+        proc.run(tool("ssh"), "-F", "none", "-p", str(port), "-o", "BatchMode=yes",
+                 "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={quote(tmp, version() >= (8, 4))}",
+                 "-o", f"GlobalKnownHostsFile={quote(no_global(), version() >= (8, 4))}", "-o", "HashKnownHosts=no",
+                 "-o", "UpdateHostKeys=no", "-o", "CheckHostIP=no", "-o", "HostKeyAlgorithms=ssh-ed25519",
+                 "-o", f"ConnectTimeout={timeout}", "-o", "PubkeyAuthentication=no", "-o", "PasswordAuthentication=no",
+                 "-o", "KbdInteractiveAuthentication=no", "-o", "GSSAPIAuthentication=no",
+                 "-o", "HostbasedAuthentication=no", "-o", "ClearAllForwardings=yes", "-o", "ForwardAgent=no",
+                 "-o", "PermitLocalCommand=no", ip, "exit", timeout=timeout * 2 + 2)
+        with open(tmp, encoding="utf-8", errors="replace") as f:
+            return {tuple(l.split()[1:3]) for l in f if len(l.split()) >= 3 and not l.startswith("#")}
+    except OSError:
+        return set()
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def public_key():

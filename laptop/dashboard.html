@@ -619,7 +619,7 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     `<p class="hint">Battery, torch and spoken replies need no extra permission, but Termux:API must have been opened once.</p>`;
   // shown with the wizard, before and during pairing: the usual reasons it gets stuck
   const PHONE_TROUBLE = `<details>${summary("Trouble connecting?", "Common problems when adding a phone")}<div class="body">` +
-    TS("The command fails in Termux, or the phone can't download the setup", "“Connection refused”, a timeout, or nothing happens", `The phone and laptop must be on the same home Wi-Fi (guest, office and hotspot-isolated networks block it). Allow Python through the laptop's firewall on private networks; on Linux the wizard shows the exact <code>ufw</code> command. If it says <b>port busy</b>, close the other program and start pairing again.`) +
+    TS("The command fails in Termux, or the phone can't download the setup", "“Connection refused”, a timeout, or nothing happens", `The phone and laptop must be on the same home Wi-Fi (guest, office and hotspot-isolated networks block it). Allow Python through the laptop's firewall on private networks; on Linux and Windows the wizard shows the exact command (<code>ufw</code>, <code>netsh</code>). If it says <b>port busy</b>, close the other program and start pairing again.`) +
     TS("Setup stops while installing packages", "pkg errors, “unable to locate package”, signature errors", `Termux and Termux:API must both come from F-Droid. Uninstall both and reinstall from F-Droid, open Termux once, run <code>pkg update</code>, then paste the command again. It is safe to run again.`) +
     TS("The phone shows no pairing code", "Setup ran but no PAIRING CODE appears", `Wait for the packages to finish (a few minutes on a slow phone). If it printed an error, fix that and paste the command again; press <b>Start pairing</b> again if the 10 minutes ran out.`) +
     TS("“Wrong code”", "The laptop says the code doesn't match", `Type the 16 characters exactly as shown (0 and O differ). Five wrong tries cancel pairing for safety.`) +
@@ -876,7 +876,7 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
         raw(TS("Switched phone says key mismatch", "Switch to this phone works, then the phone shows Key mismatch", `Termux was reset or reinstalled on that phone, so its ssh key changed. Press <b>Set up again</b> on that phone in <b>Your phones</b> (or <b>Pair again</b>), run the command in Termux and type the code. Nothing is trusted without the code.`)),
         raw(TS("\u201cNo phone is paired yet\u201d", "First start, nothing pinned", `Open <b>Add phone</b> on the Connections page and follow the wizard: run the setup command in Termux, then type the code the phone shows.`)),
         raw(TS("\u201cPaused\u201d or \u201cnot a home network\u201d", "The link deliberately stays down", `Turn off <b>Pause the link</b>, or add this Wi-Fi to your home networks (Connections), or turn off <b>Only on home networks</b>.`)),
-        raw(TS("Pairing: the phone can't download the setup", "Termux can't reach the laptop's pairing port", `Allow Python through the firewall on private networks. On Linux the wizard shows the exact <code>ufw</code> command for this pairing only. If it says <b>port busy</b>, close the other program using that port and try again.`)),
+        raw(TS("Pairing: the phone can't download the setup", "Termux can't reach the laptop's pairing port", `Allow Python through the firewall on private networks. On Linux and Windows the wizard shows the exact command (<code>ufw</code>, <code>netsh</code>) for this pairing only. If it says <b>port busy</b>, close the other program using that port and try again.`)),
         raw(TS("Pairing: the laptop can't find the phone", "Scanning finds nothing", `Both must be on the same Wi-Fi. Guest and office networks isolate devices: use your home Wi-Fi or the phone's hotspot. Pairing refuses open (password-less) Wi-Fi on purpose.`)),
         raw(TS("Pairing: \u201cno ssh key\u201d or \u201cno network\u201d", "The wizard stops at the first step", `No key: run <code>laptop/install.py</code> (or <code>ssh-keygen -t ed25519</code>). No network: connect the laptop to Wi-Fi first.`)),
         raw(TS("Pairing: wrong code or \u201ctoo many wrong codes\u201d", "Pairing cancelled", `Type the exact characters the phone shows. After several wrong tries the wizard cancels for safety; start Add phone again.`)),
@@ -1211,8 +1211,14 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     $("#stt-models").innerHTML = ["auto", ...installed].map((m) =>
       `<button class="chip" data-stt-model="${esc(m)}" aria-pressed="${S.dictModelLaptop === m}">${m === "auto" ? "Automatic" : esc(m)}</button>`).join("");
     const missing = MORE_MODELS.filter((m) => !installed.includes(m));
-    $("#stt-missing").innerHTML = (lap.available ? "" : `<div class="warn">whisper.cpp isn't installed on this laptop (see the README).</div>`) +
-      missing.map((m) => `<div class="missing"><b>${esc(m)}</b><code>curl -L -o ${MODELS_DIR}/ggml-${esc(m)}.bin ${hfUrl(m)}</code></div>`).join("");
+    const win = CAPS && CAPS.os === "windows";  // Command Prompt: curl.exe, %USERPROFILE%, backslashes
+    const getModel = (m) => win ? `curl.exe -L --create-dirs -o "%USERPROFILE%\\.local\\share\\deskbuddy\\stt\\models\\ggml-${esc(m)}.bin" ${hfUrl(m)}`
+      : `curl -L -o ${MODELS_DIR}/ggml-${esc(m)}.bin ${hfUrl(m)}`;
+    $("#stt-missing").innerHTML = (lap.available ? "" : win
+      ? `<div class="warn">whisper.cpp isn't installed on this laptop. Open Command Prompt (Start, type cmd, Enter) and paste: <code>%USERPROFILE%\\.local\\share\\deskbuddy\\venv\\Scripts\\python.exe -I "%USERPROFILE%\\Downloads\\Chip\\laptop\\install.py" --stt</code> (use your Chip folder). Or double-click <b>Install Chip.cmd</b> from a terminal with <b>--stt</b>. About 300 MB, once.</div>`
+      : `<div class="warn">whisper.cpp isn't installed on this laptop (see the README).</div>`) +
+      (missing.length && win ? `<small class="sublbl">To add a model, paste its line into Command Prompt (Start, type cmd, Enter):</small>` : "") +
+      missing.map((m) => `<div class="missing"><b>${esc(m)}</b><code>${getModel(m)}</code></div>`).join("");
     // cloud
     const provs = Object.entries(stt.providers), prov = stt.providers[S.dictProvider] || {};
     $("#stt-providers").innerHTML = provs.map(([id, p]) =>
@@ -1575,10 +1581,16 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     return i;
   };
   const cleanName = (v) => v.replace(/\s+/g, " ").trim().slice(0, 40);
+  // why the skin prompt didn't load: no Node.js on this laptop (the skin checker is a Node script), else the bridge
+  async function promptFail() {
+    const c = await fetch("/caps", { cache: "no-store" }).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (c && c.skins === false) return "Skins need Node.js on this laptop, and it isn't installed. On Windows, run the installer again (Install Chip.cmd): it downloads it. Or get it from nodejs.org (the LTS version), then restart Chip: run chip.py restart, or sign out and in.";
+    return "Couldn't load the prompt. Is the desk buddy bridge running?";
+  }
   async function loadPrompt() {   // one master prompt for every subject and screen
     const box = $("#mk-prompt");
     const r = await fetch("/skins/prompt", { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null);
-    if (r === null) { box.value = "Couldn't load the prompt. Is the desk buddy bridge running?"; return; }
+    if (r === null) { box.value = await promptFail(); return; }
     box.value = r; box.scrollTop = 0; $("#mk-copy").disabled = false;
   }
   $("#mk-copy").addEventListener("click", () => copyText($("#mk-prompt").value, "Prompt"));
@@ -1695,8 +1707,8 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     const prompt = mk("textarea"), copy = mk("button", "chip", "Copy prompt");
     prompt.readOnly = true; prompt.rows = 5; prompt.value = "Loading the prompt…"; prompt.setAttribute("aria-label", "Headphones prompt for your AI chat");
     copy.disabled = true;
-    fetch(`/skins/${id}/phones-prompt`, { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null).then((t) => {
-      prompt.value = t === null ? "Couldn't load the prompt. Is the desk buddy bridge running?" : t; prompt.scrollTop = 0; copy.disabled = t === null;
+    fetch(`/skins/${id}/phones-prompt`, { cache: "no-store" }).then((x) => (x.ok ? x.text() : null)).catch(() => null).then(async (t) => {
+      prompt.value = t === null ? await promptFail() : t; prompt.scrollTop = 0; copy.disabled = t === null;
     });
     copy.addEventListener("click", () => copyText(prompt.value, "Prompt"));
     const how = mk("ol", "howto");
@@ -2218,12 +2230,13 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
         (CAPS && CAPS.os && CAPS.os !== "linux" ? `<p class="hint">Your computer may ask to allow Python on the network: allow it (private networks).</p>` : "") +
         `<div class="acts"><button class="chip go" id="wiz-start">Start pairing</button></div>` + msg + PHONE_TROUBLE;
     } else {
-      const fw = p.firewall && p.firewall.match(/^(.*?pairing only), (sudo .*?)\s+\(after: (sudo .*)\)$/);
+      const fw = p.firewall && p.firewall.match(/^(.*?pairing only), (.*?)\s+\(after: (.*)\)$/);
       h = `<p class="step">Expires in <span class="count" id="conn-count"></span></p>` + (p.serving ? PHONE_PREP : "");
       if (p.serving) {
         h += `<p class="step"><b>1.</b> In Termux on the new phone, paste this one line (it checks the script before running it):</p>` +
           `<div class="cmdbox cmd" id="wiz-cmd">${esc(p.command)}</div><div class="acts"><button class="chip" id="wiz-copy">Copy command</button></div>`;
-        if (p.firewall) h += `<div class="warnbox"><b>Firewall.</b> The laptop's firewall blocks the phone from this port. Allow it for this pairing only:` +
+        if (p.firewall) h += `<div class="warnbox"><b>Firewall.</b> The laptop's firewall blocks the phone from this port. Allow it for this pairing only` +
+          (CAPS && CAPS.os === "windows" ? ` (in a Command Prompt opened with <b>Run as administrator</b>; on a standard account, an administrator of this PC types it):` : `:`) +
           (fw ? `<div class="cmdbox cmd" style="margin-top:6px">${esc(fw[2])}</div>Then remove it afterwards:<div class="cmdbox cmd" style="margin-top:6px">${esc(fw[3])}</div>` : `<div class="cmdbox cmd">${esc(p.firewall)}</div>`) + `</div>`;
         h += `<p class="step">${p.script_by ? `${esc(p.script_by)} got the script and is fetching the files…` : "Waiting for the phone to run the command…"}</p>`;
       } else if (p.fetched_by) {

@@ -188,6 +188,10 @@ def run_laptop(audio, lang, model, fast):
     """whisper.cpp's text for a WAV clip. model "auto" = small, or base in fast mode."""
     if model == "auto":
         model = AUTO_MODELS[bool(fast)]
+    if not os.path.isfile(os.path.join(MODELS_DIR, f"ggml-{model}.bin")):
+        # a chosen model that was deleted, or only one of small/base downloaded: use what is installed
+        have = laptop_models()
+        model = next((m for m in (*AUTO_MODELS.values(), *have) if m in have), model)
     path = os.path.join(MODELS_DIR, f"ggml-{model}.bin")
     if not os.path.isfile(WHISPER) or not os.path.isfile(path):
         raise SttError("provider_error", "whisper.cpp or its model isn't installed on the laptop")
@@ -196,10 +200,15 @@ def run_laptop(audio, lang, model, fast):
     seconds, _ = clip_info(audio)
     audio_ctx = min(1500, int(seconds * 50) + 128)  # the same speed-ups as on the phone: short window, greedy
     args = ["-l", "en", "--prompt", HINGLISH_PROMPT] if lang == "hinglish" else ["-l", lang]
-    # The clip is only written to XDG_RUNTIME_DIR, which is in RAM, and is gone when this returns.
-    with stt_lock, tempfile.NamedTemporaryFile(suffix=".wav", dir=os.environ.get("XDG_RUNTIME_DIR")) as f:
+    # The clip is only written to XDG_RUNTIME_DIR, which is in RAM (Windows: %TEMP%), and is gone when this returns.
+    # Windows: whisper-cli can't open a file another program holds open, so it is closed first (and still deleted
+    # when the with block ends); Linux keeps it open as before.
+    win = {"delete_on_close": False} if os.name == "nt" else {}
+    with stt_lock, tempfile.NamedTemporaryFile(suffix=".wav", dir=os.environ.get("XDG_RUNTIME_DIR"), **win) as f:
         f.write(audio)
         f.flush()
+        if win:
+            f.close()
         try:
             out = platforms.proc.complete([WHISPER, "-m", path, "-f", f.name, "-t", "4", "-nt", "-np", "-bs", "1", "-bo", "1",
                                   "-ac", str(audio_ctx), *args], timeout=60, text=False, check=True)

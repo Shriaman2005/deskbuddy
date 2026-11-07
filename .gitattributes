@@ -1,0 +1,2 @@
+# cmd.exe misreads labels and gotos in LF-only batch files: keep them CRLF in every checkout and in GitHub's ZIP
+*.cmd text eol=crlf

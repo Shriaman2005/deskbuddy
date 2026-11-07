@@ -46,6 +46,15 @@ watch_notifications, audio_monitor = backend.watch_notifications, backend.audio_
 gaze_call, gaze_pointer, gaze_monitors = backend.gaze_call, backend.gaze_pointer, backend.gaze_monitors
 prepare_listener = backend.prepare_listener
 interface, is_wireless, wifi_ssid, firewall_on = backend.interface, backend.is_wireless, backend.wifi_ssid, backend.firewall_on
+firewall_rule = backend.firewall_rule
+
+NODE_LOCAL = paths.data("node", "node.exe")  # Windows: install.py puts node.exe here when Node.js isn't installed
+
+
+def node():
+    """The node to run laptop/skin.js with: on PATH, else install.py's copy (Windows), else None."""
+    return shutil.which("node") or (NODE_LOCAL if os.name == "nt" and os.path.isfile(NODE_LOCAL) else None)
+
 
 _WHISPER_EXE = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
 WHISPER = paths.data("stt", _WHISPER_EXE)   # Windows/macOS also take a whisper-cli found on PATH (looked up at start)
@@ -64,7 +73,7 @@ def fake_caps():
 
 
 def _detect():
-    found = dict(backend.caps(), termuxLink=bool(proc.which("ssh")), skins=bool(shutil.which("node")),
+    found = dict(backend.caps(), termuxLink=bool(proc.which("ssh")), skins=bool(node()),
                  laptopStt=os.path.isfile(WHISPER))
     return {k: bool(found.get(k)) for k in CAP_KEYS} | fake_caps()
 

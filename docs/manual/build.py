@@ -14,14 +14,16 @@ OSES = {
                 "SETUP": r"py -3 laptop\install.py --repair",
                 "OPEN": "Open the folder in File Explorer, click the address bar, type <code>cmd</code>, press "
                         + K.format("Enter") + ".",
-                "PASTE": K.format("Ctrl") + " + " + K.format("V") + " or right-click"},
+                "PASTE": K.format("Ctrl") + " + " + K.format("V") + " or right-click",
+                "EXTRA": """<div class="task"><h2>Offline dictation <small>(downloads about 300 MB once)</small></h2>"""
+                         + r"""<span class="cmd">py -3 laptop\install.py --stt</span></div>"""},
     "macos": {"OS": "macOS", "PY": "python3", "CHIP": "laptop/chip.py", "ENTER": "Return",
-              "SETUP": "python3 laptop/install.py --repair",
+              "SETUP": "python3 laptop/install.py --repair", "EXTRA": "",
               "OPEN": "Open Terminal, type <code>cd</code> and a space, drag the folder in, press "
                       + K.format("Return") + ".",
               "PASTE": K.format("Command") + " + " + K.format("V")},
     "linux": {"OS": "Linux", "PY": "python3", "CHIP": "laptop/chip.py", "ENTER": "Enter",
-              "SETUP": "laptop/install.sh",
+              "SETUP": "laptop/install.sh", "EXTRA": "",
               "OPEN": "Open the folder in Files, right-click an empty spot, choose <b>Open in Terminal</b>.",
               "PASTE": K.format("Ctrl") + " + " + K.format("Shift") + " + " + K.format("V")},
 }

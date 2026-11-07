@@ -115,9 +115,10 @@ def _read(path):
     return data
 
 
-def _write(path, data):
+def _write(path, data, backup=True):
+    """backup: keep the file as it was before Chip's first edit. Removing never makes one (it would only hold Chip's own hooks)."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    if os.path.exists(path) and not os.path.exists(path + ".chip-bak"):
+    if backup and os.path.exists(path) and not os.path.exists(path + ".chip-bak"):
         shutil.copy2(path, path + ".chip-bak")
     tmp = path + ".chip-tmp"
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
@@ -252,7 +253,7 @@ def remove(agent):
     if changed:
         if not hooks:
             data.pop("hooks", None)
-        _write(path, data)
+        _write(path, data, backup=False)
     return status(agent)
 
 

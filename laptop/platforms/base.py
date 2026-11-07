@@ -155,6 +155,12 @@ def firewall_on():
     return False
 
 
+def firewall_rule(ip, net, port):
+    """(why, allow command, undo command) if this laptop's firewall will block the phone from the pairing download
+    port on ip (net = the LAN it pairs on), else None."""
+    return None
+
+
 # ---------------------------------------------------------------- the bridge as a service (chip.py, /bridge/*)
 # Each answers (ok, message) except autostart_get (True/False, None = Chip isn't set up to start by itself here).
 # They only call the OS's service manager, so chip.py works while the bridge is down.

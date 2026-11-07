@@ -3,7 +3,7 @@
 5 s if it exits, and exits itself if a Chip bridge already answers on the port. The bridge's output goes to
 DATA_DIR/bridge.log (the old log is kept as bridge.log.1 once it passes 1 MB).
   pythonw -I -X utf8 supervise.py           run (no console window under pythonw)
-  python  -I -X utf8 supervise.py --stop    stop every Chip supervisor and bridge started from this folder (needs psutil)
+  python  -I -X utf8 supervise.py --stop    stop every Chip supervisor and bridge of this user, from any Chip folder (needs psutil)
 Standard library only, except --stop."""
 import http.client
 import json
@@ -21,7 +21,6 @@ LOG = paths.data("bridge.log")
 LOG_MAX = 1 << 20
 RESTART_AFTER = 5     # s
 BRIDGE = os.path.join(HERE, "bridge.py")
-ME = os.path.abspath(__file__)
 
 
 def chip_answers():
@@ -66,20 +65,29 @@ def run():
         time.sleep(RESTART_AFTER)
 
 
+def is_chip_script(path, name):
+    """True if path is Chip's laptop/<name> in any Chip folder (an older ZIP, a git clone, "deskbuddy-main (1)")."""
+    folder = os.path.dirname(path)
+    return (os.path.basename(path).lower() == name and os.path.isfile(os.path.join(folder, "supervise.py"))
+            and os.path.isfile(os.path.join(folder, "platforms", "paths.py")))
+
+
 def stop():
-    """Ends the supervisors first (so they can't start the bridge again), then the bridges, of this folder only."""
+    """Ends the supervisors first (so they can't start the bridge again), then the bridges, whichever Chip folder they
+    were started from: installing from a newer download must stop the Chip that runs from the old one."""
     import psutil
-    def found(script):
+    def found(name):
         out = []
-        for p in psutil.process_iter(["pid", "cmdline"]):
+        for p in psutil.process_iter(["pid", "cmdline", "cwd"]):
             cmd = (p.info["cmdline"] or [])[1:]
-            args = [os.path.normcase(os.path.abspath(a)) for a in cmd if a.lower().endswith(".py")]
-            if p.pid != os.getpid() and "--stop" not in cmd and os.path.normcase(script) in args:  # not this run's own launcher
-                out.append(p)
+            cwd = p.info["cwd"] or os.getcwd()
+            scripts = [os.path.abspath(os.path.join(cwd, a)) for a in cmd if a.lower().endswith(".py")]
+            if p.pid != os.getpid() and "--stop" not in cmd and any(is_chip_script(s, name) for s in scripts):
+                out.append(p)  # (not this run's own launcher: it has --stop)
         return out
 
     count = 0
-    for script in (ME, BRIDGE):
+    for script in ("supervise.py", "bridge.py"):
         procs = found(script)
         for p in procs:
             try:

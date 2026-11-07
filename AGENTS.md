@@ -32,6 +32,9 @@ user. Stage 2 (Android app + installers) waits in `docs/port/later/`: don't star
 - Windows: `laptop/install.py` (venv in DATA_DIR/venv, Chip key, HKCU Run "Chip" → pythonw supervise.py, `--ci`, `--uninstall`) and
   `laptop/supervise.py` (restarts bridge.py within 5 s, log DATA_DIR/bridge.log, `--stop`). CI proves it on windows-latest:
   `CHIP_EXPECT_CAPS=stats,idle,locked,typing` for selftest.py, `tests/test_typing_windows.py` (Notepad + Tk, exit 77 = no desktop).
+  `Install Chip.cmd` (repo root, CRLF via .gitattributes) = the double-click path: finds Python 3.12+ (skips WindowsApps/Store),
+  else `winget install Python.Python.3.14 --scope user` (no UAC), then install.py (args pass through; CHIP_NO_PAUSE=1 for tests).
+  `supervise.py --stop` stops Chip from any Chip folder (a newer ZIP replaces the old one).
 - macOS: the same install.py (Python 3.12+, certificates, venv, key, LaunchAgent org.deskbuddy.bridge via `launchctl bootstrap gui/<uid>`,
   log ~/Library/Logs/deskbuddy-bridge.log, prints which Python to allow in Accessibility). CI on macos-latest: selftest with the same
   CHIP_EXPECT_CAPS, `tests/test_macos.py` (key events read back, nothing posted), install --ci twice, --uninstall.

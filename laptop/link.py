@@ -277,8 +277,7 @@ class PhoneLink:
         port = self.port()
         lines = [l for l in run(tool("ssh-keygen"), "-F", f"[{ip}]:{port}").splitlines() if l and not l.startswith("#")]
         if not lines:
-            lines = [l for l in run(tool("ssh-keyscan"), "-T", "4", "-p", str(port), ip, timeout=10).splitlines()
-                     if l and not l.startswith("#")]
+            lines = [f"{ip} {kind} {key}" for kind, key in sshlink.scan(ip, port, timeout=4)]
         keys = [f"{HOST_ALIAS} {' '.join(l.split()[1:3])}\n" for l in lines if len(l.split()) >= 3]
         if not keys:
             return False
@@ -291,9 +290,7 @@ class PhoneLink:
 
     # ---- finding the phone
     def offered(self, ip):
-        return {tuple(l.split()[1:3]) for l in
-                run(tool("ssh-keyscan"), "-T", "3", "-p", str(self.port()), ip, timeout=8).splitlines()
-                if len(l.split()) >= 3 and not l.startswith("#")}
+        return sshlink.scan(ip, self.port())
 
     def is_phone(self, ip):
         return bool(self.pinned() & self.offered(ip))
@@ -795,12 +792,10 @@ exit
     def host_keys(self, addr):
         """[(kind, key, fingerprint base64)] that addr's sshd offers now."""
         keys = []
-        for l in run(tool("ssh-keyscan"), "-T", "3", "-p", str(self.link.port()), addr, timeout=8).splitlines():
-            f = l.split()
-            if len(f) >= 3 and not l.startswith("#"):
-                fp = run(tool("ssh-keygen"), "-lf", "-", input=f"x {f[1]} {f[2]}\n").split()
-                if len(fp) >= 2 and fp[1].startswith("SHA256:"):
-                    keys.append((f[1], f[2], fp[1][7:]))
+        for kind, key in sorted(sshlink.scan(addr, self.link.port())):
+            fp = run(tool("ssh-keygen"), "-lf", "-", input=f"x {kind} {key}\n").split()
+            if len(fp) >= 2 and fp[1].startswith("SHA256:"):
+                keys.append((kind, key, fp[1][7:]))
         return keys
 
     def watch_candidate(self, s):
@@ -833,10 +828,9 @@ exit
                "wrong_codes": s["wrong"], "code_length": self.CODE_LEN}
         if s["error"]:
             out["error"] = s["error"]
-        if platforms.firewall_on():
-            out["firewall"] = (f"ufw is on, so the phone can't reach port {PAIR_PORT}: for this pairing only, "
-                               f"sudo ufw allow from {s['net']} to any port {PAIR_PORT} proto tcp   "
-                               f"(after: sudo ufw delete allow from {s['net']} to any port {PAIR_PORT} proto tcp)")
+        fw = platforms.firewall_rule(s["ip"], s["net"], PAIR_PORT) if serving else None  # only the download needs it
+        if fw:
+            out["firewall"] = f"{fw[0]}: for this pairing only, {fw[1]}   (after: {fw[2]})"
         return out
 
     def confirm(self, code):
@@ -850,10 +844,15 @@ exit
             if not self.status().get("active") or not s["fetched_by"] or s["error"]:
                 return {"ok": False, "error": "no candidate", "message": "no phone has finished setup yet"}, 409
             ip = s["fetched_by"]
-        keys = [k for k in self.host_keys(ip) if k[2].startswith(code.rstrip("="))]  # what the phone offers right now
+        offered = self.host_keys(ip)  # what the phone offers right now
+        keys = [k for k in offered if k[2].startswith(code.rstrip("="))]
         with self.lock:
             if self.session is not s:
                 return {"ok": False, "error": "no candidate"}, 409
+            if not offered:  # nothing to compare the code with: not a wrong code
+                return {"ok": False, "error": "phone unreachable",
+                        "message": f"can't reach ssh on {ip} port {self.link.port()} right now: check that the "
+                                   "phone is on and Termux is open, then try the same code again"}, 409
             if not keys:
                 s["wrong"] += 1
                 if s["wrong"] >= self.MAX_WRONG:

@@ -121,7 +121,7 @@ check(why != "not home network", "laptop on a home network" + (f" ({link['laptop
       "join a network listed in linkNetworks, or turn off “Only on home networks” in the dashboard")
 check(why != "key mismatch", "something at the phone's address presents the pinned key",
       "a different device answers there, or the phone was reset: dashboard, Connections, “Add phone”")
-check(link["tunnel"], f"ssh tunnel up to {link['ip']}",
+check(link["tunnel"], f"ssh tunnel up to {link['ip'] or 'the phone'}",
       "phone and laptop on the same Wi-Fi? Termux open (or Termux:Boot installed)? The bridge rescans the network by itself")
 if link.get("files"):  # PhoneLink.sync_files: the phone's copy of phone/, checked when the tunnel comes up
     check(link["files"] != "failed", f"phone's files match the laptop's ({link['files']})",

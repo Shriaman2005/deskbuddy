@@ -763,7 +763,7 @@ class Skins:
 
     @staticmethod
     def run(*args, stdin=b""):
-        done = platforms.proc.complete(["node", SKIN_JS, *args], timeout=10, input=stdin, text=False)
+        done = platforms.proc.complete([platforms.node() or "node", SKIN_JS, *args], timeout=10, input=stdin, text=False)
         if done.returncode:
             raise SubprocessError(done.stderr.decode("utf-8", "replace")[:300])
         return done.stdout
