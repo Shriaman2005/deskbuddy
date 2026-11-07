@@ -1215,7 +1215,7 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     const getModel = (m) => win ? `curl.exe -L --create-dirs -o "%USERPROFILE%\\.local\\share\\deskbuddy\\stt\\models\\ggml-${esc(m)}.bin" ${hfUrl(m)}`
       : `curl -L -o ${MODELS_DIR}/ggml-${esc(m)}.bin ${hfUrl(m)}`;
     $("#stt-missing").innerHTML = (lap.available ? "" : win
-      ? `<div class="warn">whisper.cpp isn't installed on this laptop: from github.com/ggml-org/whisper.cpp/releases take <b>whisper-bin-x64.zip</b> and put whisper-cli.exe, whisper.dll and the ggml*.dll files from its Release folder in <code>%USERPROFILE%\\.local\\share\\deskbuddy\\stt</code>, then add a model below.</div>`
+      ? `<div class="warn">whisper.cpp isn't installed on this laptop. Open Command Prompt (Start, type cmd, Enter) and paste: <code>%USERPROFILE%\\.local\\share\\deskbuddy\\venv\\Scripts\\python.exe -I "%USERPROFILE%\\Downloads\\Chip\\laptop\\install.py" --stt</code> (use your Chip folder). Or double-click <b>Install Chip.cmd</b> from a terminal with <b>--stt</b>. About 300 MB, once.</div>`
       : `<div class="warn">whisper.cpp isn't installed on this laptop (see the README).</div>`) +
       (missing.length && win ? `<small class="sublbl">To add a model, paste its line into Command Prompt (Start, type cmd, Enter):</small>` : "") +
       missing.map((m) => `<div class="missing"><b>${esc(m)}</b><code>${getModel(m)}</code></div>`).join("");

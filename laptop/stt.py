@@ -188,6 +188,10 @@ def run_laptop(audio, lang, model, fast):
     """whisper.cpp's text for a WAV clip. model "auto" = small, or base in fast mode."""
     if model == "auto":
         model = AUTO_MODELS[bool(fast)]
+    if not os.path.isfile(os.path.join(MODELS_DIR, f"ggml-{model}.bin")):
+        # a chosen model that was deleted, or only one of small/base downloaded: use what is installed
+        have = laptop_models()
+        model = next((m for m in (*AUTO_MODELS.values(), *have) if m in have), model)
     path = os.path.join(MODELS_DIR, f"ggml-{model}.bin")
     if not os.path.isfile(WHISPER) or not os.path.isfile(path):
         raise SttError("provider_error", "whisper.cpp or its model isn't installed on the laptop")

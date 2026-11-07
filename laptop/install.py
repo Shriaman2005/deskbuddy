@@ -187,6 +187,71 @@ def get_node():
         return f"skipped ({type(e).__name__}: {e}); skins stay off until Node.js is installed"
 
 
+WHISPER_API = "https://api.github.com/repos/ggml-org/whisper.cpp/releases?per_page=30"
+WHISPER_MODELS = {"small-q8_0": "49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f",
+                  "base-q8_0": "c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9"}  # Hugging Face LFS SHA-256
+
+
+def download(url, dest, sha256, timeout=900):
+    """url -> dest, only if its SHA-256 matches (written to dest.part first)."""
+    import hashlib
+    import urllib.request
+    h = hashlib.sha256()
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with urllib.request.urlopen(url, timeout=timeout) as r, open(dest + ".part", "wb") as f:
+        for chunk in iter(lambda: r.read(1 << 20), b""):
+            h.update(chunk)
+            f.write(chunk)
+    if h.hexdigest() != sha256:
+        os.remove(dest + ".part")
+        raise ValueError(f"{os.path.basename(dest)} didn't match its checksum")
+    os.replace(dest + ".part", dest)
+
+
+def get_whisper(models=tuple(WHISPER_MODELS)):
+    """`install.py --stt`: whisper-cli.exe + the models for the Laptop dictation engine, into DATA_DIR/stt.
+    The binaries are on whichever recent whisper.cpp release has whisper-bin-x64.zip (the newest v-tags have none),
+    checked against the SHA-256 GitHub lists for the asset; models against Hugging Face's. Windows only (Linux builds
+    it, macOS uses Homebrew). Safe to run again: what is there stays."""
+    import io
+    import json
+    import urllib.request
+    import zipfile
+    import platforms
+    if not IS_WIN:
+        say("Linux: build whisper.cpp (README). macOS: brew install whisper-cpp.")
+        return 1
+    stt = os.path.dirname(platforms.WHISPER) if os.path.isfile(platforms.WHISPER) else platforms.paths.data("stt")
+    try:
+        if os.path.isfile(platforms.WHISPER):
+            say("whisper-cli.exe: already there")
+        else:
+            with urllib.request.urlopen(WHISPER_API, timeout=60) as r:
+                assets = [(rel["tag_name"], a) for rel in json.load(r) for a in rel["assets"] if a["name"] == "whisper-bin-x64.zip"]
+            tag, asset = next((t, a) for t, a in assets if (a.get("digest") or "").startswith("sha256:"))
+            say(f"whisper-cli.exe: release {tag} ({asset['size'] // 1048576} MB)")
+            zpath = os.path.join(stt, "whisper-bin-x64.zip")
+            download(asset["browser_download_url"], zpath, asset["digest"][7:])
+            with zipfile.ZipFile(zpath) as z:
+                for n in z.namelist():
+                    if n.startswith("Release/") and n.lower().endswith((".exe", ".dll")) and "/" not in n[8:]:
+                        with open(os.path.join(stt, n[8:]), "wb") as f:
+                            f.write(z.read(n))
+            os.remove(zpath)
+        for m in models:
+            dest = os.path.join(stt, "models", f"ggml-{m}.bin")
+            if os.path.isfile(dest):
+                say(f"model {m}: already there")
+                continue
+            say(f"model {m}: downloading")
+            download(f"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{m}.bin", dest, WHISPER_MODELS[m])
+    except (OSError, ValueError, KeyError, StopIteration, zipfile.BadZipFile) as e:
+        say(f"Dictation download failed ({type(e).__name__}: {e}). Run this again; finished files are kept.")
+        return 1
+    say("Done. Chip's Laptop dictation engine is ready (Dashboard -> Dictation -> Test).")
+    return 0
+
+
 def repair_prepare():
     """--repair: stop Chip (it runs from the venv, which Windows won't let go of) and delete the venv; remember
     whether start-at-login was on, so repair_finish can put that back."""
@@ -445,7 +510,14 @@ def main():
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--repair", action="store_true", help="rebuild the venv, keep settings, keys, phones and autostart")
     ap.add_argument("--ci", action="store_true")
+    ap.add_argument("--stt", action="store_true", help="download whisper-cli.exe + models for offline dictation on this laptop (Windows)")
     args = ap.parse_args()
+    if args.stt:
+        try:
+            return get_whisper()
+        finally:
+            if not os.environ.get("CHIP_LAUNCHER") and IS_WIN and double_clicked():
+                input("\nPress Enter to close this window. ")
     if IS_WIN:
         try:
             (uninstall_windows if args.uninstall else install_windows)(args)

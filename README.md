@@ -202,7 +202,7 @@ every laptop. The differences are in what the laptop can report or do:
 | Dictation typed into the focused window | ✅ | ✅ | 🧪 (needs Accessibility) |
 | Dictation engine: phone (offline) | ✅ | ✅ | ✅ |
 | Dictation engine: cloud | ✅ | ✅ | ✅ |
-| Dictation engine: laptop (offline whisper.cpp) | ✅ | ⚠️ bring your own `whisper-cli.exe` | ⚠️ `whisper-cli` from Homebrew |
+| Dictation engine: laptop (offline whisper.cpp) | ✅ | ✅ `Install Chip.cmd --stt` downloads it | ⚠️ `whisper-cli` from Homebrew |
 | Knows when you're idle or the screen is locked | ✅ | ✅ | 🧪 |
 | AI-agent alerts (Claude Code, Gemini CLI, opencode) | ✅ | ✅ (hooks not yet tested by a person) | 🧪 |
 | Alerts for other apps' notifications | ✅ | ❌ | ❌ |
@@ -295,8 +295,10 @@ Logs are in `%USERPROFILE%\.local\share\deskbuddy\bridge.log`.
 
 Notes for Windows:
 - Dictation can't type into a window that runs **as administrator** (Windows blocks this); click a normal window first.
-- For offline dictation on the laptop, put `whisper-cli.exe` on your PATH or in `%USERPROFILE%\.local\share\deskbuddy\stt\`.
-  The phone and cloud engines work without it.
+- For offline dictation on the laptop run `"Install Chip.cmd" --stt` in a terminal in the Chip folder: it downloads
+  whisper-cli.exe and the small and base models (about 300 MB, checksummed, safe to repeat) into
+  `%USERPROFILE%\.local\share\deskbuddy\stt\`. A `whisper-cli.exe` on your PATH also works. The phone and cloud engines
+  work without it.
 
 ### macOS (experimental)
 
