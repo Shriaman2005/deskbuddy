@@ -103,8 +103,8 @@ Free and open source. No cable, no cloud account, no app store, no subscription.
 - 🔒 **Private by design.** Everything stays on your Wi-Fi. Notifications keep only the app's name, typing along only
   counts key presses, and there's no camera, analytics or account.
 
-> **Status: beta.** Linux (GNOME) is the main platform and has every feature. Windows 10/11 works for the core
-> features and is tested in CI. macOS support is written but not finished yet. See the [comparison table](#what-works-where).
+> **Status: beta.** Linux (GNOME) is the main platform and has every feature. Windows 10 is tested end to end on a
+> real PC with a real phone (Windows 11 has the same code but no test yet). macOS support is written but not finished. See the [comparison table](#what-works-where).
 
 ---
 
@@ -196,21 +196,21 @@ every laptop. The differences are in what the laptop can report or do:
 | Dashboard (all settings) | ✅ | ✅ | 🧪 |
 | Start automatically at login / boot | ✅ systemd (at boot) | ✅ at login | 🧪 LaunchAgent |
 | CPU, RAM, uptime, network | ✅ | ✅ | 🧪 |
-| Laptop battery | ✅ | ✅ | 🧪 |
+| Laptop battery | ✅ | ✅ (code only: the test PC had no battery) | 🧪 |
 | GPU ring | ✅ (AMD) | ❌ | ❌ |
 | Temperatures and fan | ✅ | ❌ | ❌ |
 | Dictation typed into the focused window | ✅ | ✅ | 🧪 (needs Accessibility) |
 | Dictation engine: phone (offline) | ✅ | ✅ | ✅ |
 | Dictation engine: cloud | ✅ | ✅ | ✅ |
 | Dictation engine: laptop (offline whisper.cpp) | ✅ | ✅ `Install Chip.cmd --stt` downloads it | ⚠️ `whisper-cli` from Homebrew |
-| Knows when you're idle or the screen is locked | ✅ | ✅ | 🧪 |
-| AI-agent alerts (Claude Code, Gemini CLI, opencode) | ✅ | ✅ (hooks not yet tested by a person) | 🧪 |
+| Knows when you're idle or the screen is locked | ✅ | ✅ (Windows 10 lock screen proven) | 🧪 |
+| AI-agent alerts (Claude Code, Gemini CLI, opencode) | ✅ | ✅ (Claude Code hooks tested from cmd, PowerShell and Git Bash) | 🧪 |
 | Alerts for other apps' notifications | ✅ | ❌ | ❌ |
-| Music card: now playing, play/pause, next | ✅ | ❌ | ❌ |
+| Music card: now playing, play/pause, next | ✅ | ✅ (read from Windows' media sessions) | ❌ |
 | Volume control | ✅ | ❌ | ❌ |
 | Music visualizer | ✅ | ❌ | ❌ |
 | Headphones on Chip while music plays | ✅ | ❌ | ❌ |
-| Chip types along with you | ✅ | ❌ | ❌ |
+| Chip types along with you | ✅ | ✅ (counts key presses only) | ❌ |
 | Eyes follow the mouse pointer | ✅ (GNOME extension) | ❌ | ❌ |
 | "Only connect on my home Wi-Fi" | ✅ | ✅ | ⚠️ macOS may hide the Wi-Fi name |
 | Custom skins | ✅ | ✅ (needs Node.js) | ✅ (needs Node.js) |
@@ -280,25 +280,43 @@ Optional extras:
 ### Windows 10/11
 
 1. Get the Chip folder: on GitHub click **Code → Download ZIP**, then right-click the ZIP in Downloads and choose
-   **Extract All… → Extract** (or git clone, see above).
-2. In the extracted folder (with a ZIP it's `deskbuddy-main` inside `deskbuddy-main`), double-click
-   **`Install Chip.cmd`**. Windows warns that the publisher could not be verified: click **Run**.
+   **Extract All… → Extract** (or git clone, see above). With a ZIP the folder is `deskbuddy-main` inside
+   `deskbuddy-main`: use the inner one, the one that has `Install Chip.cmd`.
+2. Double-click **`Install Chip.cmd`**. If Windows says the publisher could not be verified, click **Run**.
 3. Wait about a minute. If Python 3.12+ isn't installed, it installs Python 3.14 from python.org with winget, just for
-   your Windows user (no admin needed). Then it creates a private Python environment and Chip's own ssh key, sets Chip
-   to start when you log in, starts it and opens the dashboard. (The first time Edge opens, it shows its own welcome
-   screen first.)
-4. When Windows asks whether to allow Python on the network (during pairing), choose **Allow** on **private networks**.
+   your Windows user (no admin, no UAC). Then it creates a private Python environment and Chip's own ssh key, fetches
+   Node.js for skins, sets Chip to start when you sign in, starts it and opens the dashboard. (The first time Edge
+   opens, it shows its own welcome screen first.)
+4. In the dashboard open **Connections → Add phone**. If Windows asks whether to allow Python on the network, choose
+   **Allow** on **private networks**. If it doesn't ask and the phone can't download, the wizard shows one
+   `netsh` command to paste into an administrator terminal (and the command that undoes it).
 
 Running `Install Chip.cmd` again updates or repairs Chip; it also moves Chip to a new folder if you run it from a
 newer download. From a terminal: `"Install Chip.cmd" --uninstall` or `--repair` (the same options as `laptop\install.py`).
 Logs are in `%USERPROFILE%\.local\share\deskbuddy\bridge.log`.
 
-Notes for Windows:
-- Dictation can't type into a window that runs **as administrator** (Windows blocks this); click a normal window first.
-- For offline dictation on the laptop run `"Install Chip.cmd" --stt` in a terminal in the Chip folder: it downloads
+**Tested on:** Windows 10 Pro 22H2 (build 19045), a desktop PC (Ryzen 5, wired network, no battery), a standard
+(non-admin) account, Python 3.14 and 3.15, Microsoft Edge, a phone running Termux with OpenSSH 10.6; reboot and sign-in,
+a killed bridge (back in about 8 s), pairing, auto-deploy, typing along, music, skins and dictation. CI also runs
+Windows Server's `windows-latest` on every push.
+**Not tested yet:** Windows 11, a laptop (battery, Wi-Fi name, sleep and resume), a Chip folder on a drive without 8.3
+short names, the phone's own (offline) dictation engine, and the music card on the phone with real music.
+
+Known limits on Windows:
+- Dictation can't type into a window that runs **as administrator** (Windows blocks this). Chip answers "The window in
+  front is running as administrator" instead of typing; click a normal window first. It also won't type while the PC is
+  locked.
+- Chip runs when you are signed in (it starts at sign-in, not at boot) and only in your own Windows user.
+- No GPU ring, temperatures or fan, other apps' notifications, volume control, music visualizer, headphones while music
+  plays, or eyes following the mouse (all ❌ in the table above; the dashboard says so).
+- Custom skins need Node.js; the installer fetches it itself (checksummed). Without it the Skins page says so.
+- Offline dictation on the laptop: run `"Install Chip.cmd" --stt` in a terminal in the Chip folder. It downloads
   whisper-cli.exe and the small and base models (about 300 MB, checksummed, safe to repeat) into
-  `%USERPROFILE%\.local\share\deskbuddy\stt\`. A `whisper-cli.exe` on your PATH also works. The phone and cloud engines
-  work without it.
+  `%USERPROFILE%\.local\share\deskbuddy\stt\`. Short sentences take about a second. A `whisper-cli.exe` on your PATH
+  also works. The phone and cloud engines work without it.
+- If the phone's Termux keeps stopping (Android kills it), give Termux, Termux:Boot and the kiosk app **Unrestricted**
+  battery use and run `termux-wake-lock`.
+- Don't use the Microsoft Store Python: Chip skips it and installs the python.org one next to it.
 
 ### macOS (experimental)
 

@@ -13,10 +13,10 @@ body { font-family: "DejaVu Sans", "Segoe UI", Helvetica, Arial, sans-serif; fon
 .head img { width: 20mm; height: 20mm; }
 h1 { font-size: 22pt; margin: 0; }
 .head p { margin: 1mm 0 0; color: #555; }
-.how { display: flex; gap: 4mm; margin: 6mm 0 7mm; }
+.how { display: flex; gap: 4mm; margin: 5mm 0 5mm; }
 .how div { flex: 1; background: #f4f4f2; border-radius: 3mm; padding: 3.5mm 4mm; }
 .how b { display: block; color: #00737b; font-size: 10pt; margin-bottom: 1mm; }
-.task { margin: 0 0 5.5mm; }
+.task { margin: 0 0 4mm; }
 .task h2 { font-size: 12.5pt; margin: 0 0 1.5mm; }
 .task h2 small { font-weight: normal; color: #666; font-size: 10pt; }
 .cmd { display: block; white-space: pre; font-family: "DejaVu Sans Mono", Consolas, Menlo, monospace; font-size: 12pt;
@@ -24,7 +24,7 @@ h1 { font-size: 22pt; margin: 0; }
 .key { border: 1px solid #999; border-bottom-width: 2px; border-radius: 1mm; padding: 0 1.2mm; white-space: nowrap;
        background: #fff; font-size: .92em; }
 code { font-family: "DejaVu Sans Mono", Consolas, Menlo, monospace; font-size: .95em; }
-.foot { margin-top: 8mm; padding-top: 4mm; border-top: 1px solid #ddd; color: #555; font-size: 10pt; }
+.foot { margin-top: 4mm; padding-top: 4mm; border-top: 1px solid #ddd; color: #555; font-size: 10pt; }
 </style>
 </head>
 <body>
@@ -47,6 +47,8 @@ code { font-family: "DejaVu Sans Mono", Consolas, Menlo, monospace; font-size: .
   <div class="task"><h2>Stop Chip</h2><span class="cmd">{{PY}} {{CHIP}} stop</span></div>
   <div class="task"><h2>Set Chip up again <small>(if the commands above fail)</small></h2><span class="cmd">{{SETUP}}</span></div>
   <div class="task"><h2>Start Chip on the phone <small>(type in Termux on the phone)</small></h2><span class="cmd">chip-start</span></div>
+
+  {{EXTRA}}
 
   <div class="foot">The Chip folder is the one you downloaded (<code>deskbuddy</code> or <code>deskbuddy-main</code>);
   it has a <code>laptop</code> folder inside. Then open <code>http://127.0.0.1:8765</code> for the dashboard.</div>
