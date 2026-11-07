@@ -279,6 +279,25 @@ def main():
                                   "BatchMode=yes", "IdentitiesOnly=yes")) and "GlobalKnownHostsFile=/dev/null" not in opts)
     check("GlobalKnownHostsFile is an empty file in CONFIG_DIR", os.path.getsize(sshlink.NO_GLOBAL) == 0)
 
+    # ---- Windows Firewall vs the pairing port (the rule logic; the COM query itself only runs on Windows)
+    from platforms import windows
+    pyw = os.path.normcase(os.path.join(TMP, "Python314", "pythonw.exe"))
+    verdict = lambda rules, blk=True: windows.firewall_verdict(  # noqa: E731
+        {"on": True, "blk": blk, "cur": 2, "rules": rules}, "192.168.0.141", "192.168.0.0/24", 8766, {pyw})
+    rule = lambda **kw: dict({"n": "r", "a": "", "p": "*", "k": 1, "l": "*", "r": "*", "t": "All", "i": False}, **kw)  # noqa: E731
+    check("firewall: nothing allows Python, the port or the address: say so",
+          verdict([]) == ("allow", None) and verdict([rule(a=os.path.join(TMP, "other.exe"))]) == ("allow", None)
+          and verdict([rule(p="RPC"), rule(l="100.97.243.70/255.255.255.255")]) == ("allow", None)  # Tailscale-In
+          and verdict([rule(r="10.0.0.0/255.0.0.0"), rule(i=True), rule(t="RemoteAccess")]) == ("allow", None))
+    check("firewall: a rule for this Python, the port, LocalSubnet or a range covers it",
+          verdict([rule(a=pyw)]) is None and verdict([rule(p="8000-9000")]) is None
+          and verdict([rule(r="LocalSubnet", l="192.168.0.141/255.255.255.255")]) is None
+          and verdict([rule(r="192.168.0.1-192.168.0.254")]) is None and verdict([], blk=False) is None
+          and windows.firewall_verdict({"on": False, "rules": []}, "192.168.0.141", "192.168.0.0/24", 8766, {pyw}) is None)
+    check("firewall: a block rule for this Python wins over allow rules",
+          verdict([rule(n="pythonw.exe", a=pyw, k=0), rule(p="8766")]) == ("blocked", "pythonw.exe")
+          and verdict([rule(n="pythonw.exe", a=pyw, k=0)], blk=False) == ("blocked", "pythonw.exe"))
+
     # ---- deploy.py lands the files, with the hash last
     real = phone(good_key)
     write_json("state.json", {"ip": "127.0.0.1"})

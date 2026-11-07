@@ -408,6 +408,13 @@ def firewall_on():
     return run("systemctl", "is-active", "ufw") == "active"
 
 
+def firewall_rule(ip, net, port):
+    if not firewall_on():
+        return None
+    rule = f"from {net} to any port {port} proto tcp"
+    return f"ufw is on, so the phone can't reach port {port}", f"sudo ufw allow {rule}", f"sudo ufw delete allow {rule}"
+
+
 # ---------------------------------------------------------------- the bridge as a service (chip.py, /bridge/*)
 
 UNIT = "deskbuddy-bridge"  # the systemd user service install.sh sets up

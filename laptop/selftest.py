@@ -82,6 +82,11 @@ def check_backends():
             check("windows INPUT struct is 40 bytes on 64-bit (28 on 32-bit)", m.input_size_ok(), ctypes.sizeof(m.INPUT))
             check("windows splits characters outside the BMP into two UTF-16 units", m.utf16_units("a\U0001F600") == [97, 0xD83D, 0xDE00])
             check("windows typing never sends Enter, Tab or control keys", m.typable("a\nb\tc\r\n\x08d\x1b") == "a b c d")
+            big = ctypes.sizeof(ctypes.c_void_p) == 8
+            check("windows job limits struct is 144 bytes on 64-bit (112 on 32-bit): helpers end with Chip",
+                  ctypes.sizeof(platforms.proc._JobLimits) == (144 if big else 112), ctypes.sizeof(platforms.proc._JobLimits))
+            check("windows player names", [m._player_name(a) for a in ("Spotify.exe", "Microsoft.ZuneMusic_8wekyb3d8bbwe!App", "")]
+                  == ["Spotify", "ZuneMusic", "Media"])
         if mod == "macos":
             check("macos keeps surrogate pairs together in 20-unit events",
                   [len(c) for c in m.chunks([97] * 19 + [0xD83D, 0xDE00] + [98] * 30)] == [19, 20, 12])
@@ -130,7 +135,7 @@ def main():
         expect = [k for k in os.environ.get("CHIP_EXPECT_CAPS", "").split(",") if k]  # CI: what this runner must do
         check("CHIP_EXPECT_CAPS are all true", all(caps.get(k) is True for k in expect), [k for k in expect if not caps.get(k)])
         check("termuxLink = ssh found", caps.get("termuxLink") == bool(shutil.which("ssh")) or "termuxLink" in fake)
-        check("skins = node found", caps.get("skins") == bool(shutil.which("node")) or "skins" in fake)
+        check("skins = node found", caps.get("skins") == bool(platforms.node()) or "skins" in fake)
         check("laptopStt = false with an empty data dir", caps.get("laptopStt") is False or "laptopStt" in fake)
         if platforms.NAME == "linux" and not platforms.backend.session_bus():
             on = [k for k in BUS_CAPS if caps.get(k) and k not in fake]

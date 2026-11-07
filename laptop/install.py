@@ -148,7 +148,43 @@ def make_venv(python):
     r = proc.complete([VENV_PY, "-I", "-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", REQUIREMENTS],
                       timeout=900)
     if r.returncode != 0:
-        fail("pip could not install psutil (is there an internet connection?):\n" + (r.stderr or r.stdout)[-1500:])
+        fail("pip could not install Chip's Python packages (is there an internet connection?):\n" + (r.stderr or r.stdout)[-1500:])
+
+
+def get_node():
+    """Skins are checked by laptop/skin.js, which needs Node.js (node.exe alone: it uses only Node's own modules).
+    Windows, when node isn't on PATH: the newest LTS node.exe from nodejs.org's official zip, checked against that
+    release's SHASUMS256.txt, into DATA_DIR/node (platforms.NODE). Optional: returns a note, never fails the install."""
+    import platforms
+    if platforms.node():
+        return "already there"
+    import hashlib
+    import io
+    import json
+    import platform
+    import urllib.request
+    import zipfile
+    dist, arch = "https://nodejs.org/dist/", "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x64"
+
+    def get(url, timeout=60):
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.read()
+    try:
+        release = next(r for r in json.loads(get(dist + "index.json"))
+                       if r.get("lts") and f"win-{arch}-zip" in r.get("files", []))
+        version, name = release["version"], f"node-{release['version']}-win-{arch}"
+        sums = get(f"{dist}{version}/SHASUMS256.txt").decode()
+        want = next(l.split()[0] for l in sums.splitlines() if l.strip().endswith("  " + name + ".zip"))
+        data = get(f"{dist}{version}/{name}.zip", timeout=600)
+        if hashlib.sha256(data).hexdigest() != want:
+            return "skipped: the download didn't match nodejs.org's checksum"
+        os.makedirs(os.path.dirname(platforms.NODE_LOCAL), exist_ok=True)
+        with zipfile.ZipFile(io.BytesIO(data)) as z, open(platforms.NODE_LOCAL + ".part", "wb") as f:
+            f.write(z.read(f"{name}/node.exe"))
+        os.replace(platforms.NODE_LOCAL + ".part", platforms.NODE_LOCAL)
+        return f"Node.js {version}"
+    except (OSError, ValueError, KeyError, StopIteration, zipfile.BadZipFile) as e:
+        return f"skipped ({type(e).__name__}: {e}); skins stay off until Node.js is installed"
 
 
 def repair_prepare():
@@ -228,10 +264,11 @@ def install_windows(args):
         fail("no Python 3.12 or newer found" + (" (the one from the Microsoft Store doesn't work for Chip)" if skipped else "")
              + ".\n  Install Python from " + PYTHON_ORG + " and run this again.")
     say(f"1/6 Python: {python}")
-    say("2/6 venv + psutil (a minute the first time)")
+    say("2/6 venv + Python packages (a minute the first time)")
     make_venv(python)
-    say("3/6 ssh key")
+    say("3/6 ssh key, Node.js for skins (once, ~30 MB)")
     make_key(OPENSSH_FIX)
+    say("  skins: " + get_node())
     say("4/6 stopping the old Chip, if one runs")
     stop_strays()
     if not wait_until_stopped():
