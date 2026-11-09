@@ -45,7 +45,7 @@
     pomoFocus: 25, pomoShort: 5, pomoLong: 15, pomoLongEvery: 4, pomoAutoBreak: true, pomoAutoFocus: false, pomoGoal: 8,
     workScene: true, typingScene: true, typingAfter: 10, accent: "cyan", accentColor: "#2ee6f2", chipGlow: 100, eyeGap: 0, phonesGap: 0, faceSize: 100, idleRate: "normal", idleOff: [],
     phonesFollowSkin: true, phonesDefault: "",  // a skin's own headphones when it has a pair; else "" = Chip's own, or an installed skin id to borrow from
-    eyeStyle: "", pupilSize: "M", showPupils: true, skin: "", locName: "", locLat: 0, locLon: 0,  // weather place from the dashboard ("" = config.js); eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
+    eyeStyle: "", pupilSize: "M", showPupils: false, skin: "", locName: "", locLat: 0, locLon: 0,  // weather place from the dashboard ("" = config.js); eye style (a pack style id, "" = the pack's default), pupil size S/M/L, pupils on/off, installed skin id ("" = none)
     brightnessDay: C.brightness.day,
     personalPhone: false,  // the phone is also in use (Chrome web app): never touch its screen brightness
     sleep: true, sleepAt: C.night.start, wakeAt: C.night.end, brightnessNight: C.brightness.night, drowsy: true, drowsyMin: 45,
