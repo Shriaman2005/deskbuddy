@@ -38,9 +38,9 @@ export const DeskbuddyAttention = async ({ directory }) => {
 
 # agent id -> label, file under HOME, hook events
 AGENTS = {
-    "claude-code": {"label": "Claude Code", "file": (".claude", "settings.json"), "events": ("Notification", "Stop")},
-    "gemini": {"label": "Gemini CLI", "file": (".gemini", "settings.json"), "events": ("Notification", "AfterAgent")},
-    "opencode": {"label": "opencode", "file": (".config", "opencode", "plugin", PLUGIN_NAME), "events": ()},
+    "claude-code": {"label": "Claude Code", "file": (".claude", "settings.json"), "events": ("Notification", "Stop"), "exe": "claude"},
+    "gemini": {"label": "Gemini CLI", "file": (".gemini", "settings.json"), "events": ("Notification", "AfterAgent"), "exe": "gemini"},
+    "opencode": {"label": "opencode", "file": (".config", "opencode", "plugin", PLUGIN_NAME), "events": (), "exe": "opencode"},
 }
 
 
@@ -157,12 +157,19 @@ def _new_entry(agent):
     return {"hooks": [{"type": "command", "command": cmd, "timeout": 5, "async": True}]}
 
 
+def on_laptop(agent):
+    """Is this agent on the laptop? Its command is on PATH, or its settings folder exists (a fresh install makes one)."""
+    import shutil
+    spec = AGENTS[agent]
+    return bool(shutil.which(spec["exe"])) or os.path.isdir(os.path.dirname(target(agent)))
+
+
 def status(agent):
     """{id, label, file, installed, current, note?}. installed = every event has a Chip hook; current = and it is
     the command this install would write (False: the repo or python moved, Install refreshes it)."""
     spec = AGENTS[agent]
     path = target(agent)
-    info = {"id": agent, "label": spec["label"], "file": path, "installed": False, "current": False}
+    info = {"id": agent, "label": spec["label"], "file": path, "installed": False, "current": False, "found": on_laptop(agent)}
     try:
         if agent == "opencode":
             if os.path.exists(path):

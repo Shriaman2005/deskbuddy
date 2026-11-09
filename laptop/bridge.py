@@ -117,7 +117,7 @@ DEFAULTS = dict.fromkeys(TOGGLES, True) | {
     "torchSeconds": 3, "soundSeconds": 2, "soundVolume": 80, "soundStyle": "chime", "remindEvery": 20, "remindMinutes": 3,
     "pomoFocus": 25, "pomoShort": 5, "pomoLong": 15, "pomoLongEvery": 4, "pomoGoal": 8, "typingAfter": 10,
     "accent": "cyan", "accentColor": "#2ee6f2", "chipGlow": 100, "eyeGap": 0, "phonesGap": 0, "faceSize": 100, "idleRate": "normal", "idleOff": [],
-    "eyeStyle": pack_eyes()[0], "pupilSize": "M", "showPupils": True, "skin": "", "phonesFollowSkin": True, "phonesDefault": "",  # eye style (a style id of the pack), pupil size, pupils on/off, installed skin id ("" = none)
+    "eyeStyle": pack_eyes()[0], "pupilSize": "M", "showPupils": False, "skin": "", "phonesFollowSkin": True, "phonesDefault": "",  # eye style (a style id of the pack), pupil size, pupils on/off, installed skin id ("" = none)
     "locName": "", "locLat": 0.0, "locLon": 0.0,  # weather place picked on the dashboard; "" = the one in phone/www/config.js
     "apps": {},  # app name -> APP_RULES choice; apps not listed follow the switches above
     # dictation: engine, one language for all engines (stt.LANGS), cloud provider/model/URL, laptop whisper model
