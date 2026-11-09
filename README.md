@@ -209,7 +209,7 @@ every laptop. The differences are in what the laptop can report or do:
 | Music card: now playing, play/pause, next | ✅ | ✅ (read from Windows' media sessions) | ❌ |
 | Volume control | ✅ | ❌ | ❌ |
 | Music visualizer | ✅ | ❌ | ❌ |
-| Headphones on Chip while music plays | ✅ | ❌ | ❌ |
+| Headphones on Chip while music plays | ✅ | ✅ | ❌ |
 | Chip types along with you | ✅ | ✅ (counts key presses only) | ❌ |
 | Eyes follow the mouse pointer | ✅ (GNOME extension) | ❌ | ❌ |
 | "Only connect on my home Wi-Fi" | ✅ | ✅ | ⚠️ macOS may hide the Wi-Fi name |
@@ -594,4 +594,4 @@ Contributions and bug reports are welcome: please include the output of `doctor.
 Chip's art and animation were designed in Claude Design. Pixel font: VT323. Weather and air quality:
 [Open-Meteo](https://open-meteo.com/). Speech: [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
 
-[MIT License](LICENSE) © 2026 Aman
+[MIT License](LICENSE) © 2026 Aman Shrivastava
