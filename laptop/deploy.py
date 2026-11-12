@@ -31,7 +31,8 @@ def files():
     """[(path relative to phone/ with forward slashes, full path)] of what goes to the phone, sorted."""
     out = []
     for root, dirs, names in os.walk(PHONE):
-        dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+        # phone/tests/ is for the laptop and CI only (www/ may have folders of any name)
+        dirs[:] = sorted(d for d in dirs if d != "__pycache__" and not (root == PHONE and d == "tests"))
         for name in names:
             full = os.path.join(root, name)
             rel = os.path.relpath(full, PHONE).replace(os.sep, "/")
