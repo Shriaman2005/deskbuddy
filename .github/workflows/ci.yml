@@ -28,6 +28,7 @@ jobs:
       - run: python -I laptop/selftest.py
       - run: python -I laptop/tests/test_link.py
       - run: python3 -I laptop/tests/test_hooks.py
+      - run: python3 -I phone/tests/test_server.py
   desktop:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
