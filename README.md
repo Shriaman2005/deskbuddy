@@ -529,8 +529,10 @@ or the whole check with **Check for updates**).
 - **Installed with `git clone`:** press **Update now**. Chip pulls the release, restarts the bridge, and the phone
   gets the new files by itself when it reconnects. It refuses if you've edited files in the Chip folder, so your
   changes are never overwritten.
-- **Installed from a ZIP:** press **Download**, unzip the new version over the old folder and run the installer
-  again. Your settings, skins and paired phone are kept (they live outside the Chip folder).
+- **Installed from a ZIP:** press **Update now** too (from 1.3.4 on). Chip downloads the release's ZIP from
+  GitHub, checks it, puts the new files into the same folder and restarts. Your settings, skins and paired phone are
+  kept (they live outside the Chip folder). Coming from 1.3.3 or older, or if the folder can't be written: press
+  **Download**, unzip the new version over the old folder and run the installer again.
 
 ## Uninstall
 

@@ -2330,10 +2330,10 @@ ul.perms { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13.5px;
     $("#upd-notes").hidden = !v || !u.notes;
     $("#upd-notes").textContent = (u.name && u.name !== v ? u.name + "\n\n" : "") + (u.notes || "");
     const warn = !v ? "" : u.mode === "zip"
-      ? "This Chip folder came from a ZIP download, so it can't update itself. Download the new version, unzip it over the old folder (or in its place) and run the installer again. Your settings and skins stay."
+      ? "This Chip folder came from a ZIP download: Update now downloads the new version into the same folder. Your settings, skins and phone pairing stay. If it can't, download it yourself, unzip it over the old folder and run the installer again."
       : u.dirty.length ? `Some files in the Chip folder have local changes, so updating would overwrite them: ${u.dirty.join(", ")}. Undo or commit them first.` : "";
     $("#upd-warn").hidden = !warn; $("#upd-warn").textContent = warn;
-    $("#upd-go").hidden = !v || u.mode !== "git";
+    $("#upd-go").hidden = !v;
     $("#upd-go").disabled = !!u.dirty.length || !!u.busy;
     $("#upd-dl").hidden = !v || u.mode !== "zip"; $("#upd-dl").href = u.zip || u.url;
     $("#upd-page").hidden = !v; $("#upd-page").href = u.url;
