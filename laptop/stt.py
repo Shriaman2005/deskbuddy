@@ -184,6 +184,11 @@ def laptop_languages(model):
     return ("en", "hinglish") if ".en" in model else LANGS  # English-only models
 
 
+def short_window_ok(model):
+    """Whether whisper's -ac (a window as long as the clip) is safe for this model: not for tiny or base."""
+    return not re.match(r"(tiny|base)\b", model)
+
+
 def run_laptop(audio, lang, model, fast):
     """whisper.cpp's text for a WAV clip. model "auto" = small, or base in fast mode."""
     if model == "auto":
@@ -198,7 +203,10 @@ def run_laptop(audio, lang, model, fast):
     if lang not in laptop_languages(model):
         raise SttError("lang_unsupported", f"The {model} model only does English")
     seconds, _ = clip_info(audio)
-    audio_ctx = min(1500, int(seconds * 50) + 128)  # the same speed-ups as on the phone: short window, greedy
+    # Speed-ups: greedy decoding, and -ac shrinks Whisper's 30 s window to the clip. Only small and larger models
+    # take the short window: base and tiny with it repeat the sentence or run on into other languages and get slower
+    # (base-q8_0, a 3.5 s clip: 14 s of garbage with -ac 303, 4 s and the right text with the full window).
+    ac = ["-ac", str(min(1500, int(seconds * 50) + 128))] if short_window_ok(model) else []
     args = ["-l", "en", "--prompt", HINGLISH_PROMPT] if lang == "hinglish" else ["-l", lang]
     # The clip is only written to XDG_RUNTIME_DIR, which is in RAM (Windows: %TEMP%), and is gone when this returns.
     # Windows: whisper-cli can't open a file another program holds open, so it is closed first (and still deleted
@@ -211,7 +219,7 @@ def run_laptop(audio, lang, model, fast):
             f.close()
         try:
             out = platforms.proc.complete([WHISPER, "-m", path, "-f", f.name, "-t", "4", "-nt", "-np", "-bs", "1", "-bo", "1",
-                                  "-ac", str(audio_ctx), *args], timeout=60, text=False, check=True)
+                                  *ac, *args], timeout=60, text=False, check=True)
         except TimeoutExpired:
             raise SttError("timeout") from None
         except (OSError, SubprocessError):
