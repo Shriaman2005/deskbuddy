@@ -10,20 +10,28 @@ Updating (POST /update/apply, dashboard only):
   macOS), pip installs them there. Then the bridge exits and its supervisor starts the new one (systemd
   Restart=always, launchd KeepAlive, supervise.py); the phone gets the new files by itself when the tunnel is
   back (the .chip-hash check in link.py).
-- a Download ZIP folder: nothing to pull, so the dashboard shows the download link and the steps.
+- a Download ZIP folder (most Windows and macOS installs): the release's ZIP from GitHub is downloaded, checked
+  (one Chip folder inside, its VERSION = the tag, no path leaving the folder, no links) and unpacked into
+  .chip-update/ inside the Chip folder; then each file is moved over the old one. The folder keeps its path, so the
+  start-at-login entry stays right. Files a release removed stay behind (harmless). Then pip and the restart as for
+  git. CHIP_UPDATE_ZIP replaces the GitHub ZIP URL (tests: a file:// URL).
 
 Publishing an update: bump VERSION, commit, push, then make a GitHub release whose tag is "v" + VERSION
 (e.g. v1.1.0); the release notes are what the dashboard shows.
 """
 import hashlib
+import io
 import json
 import os
 import re
+import shutil
+import stat
 import sys
 import threading
 import time
 import urllib.error
 import urllib.request
+import zipfile
 
 from platforms import paths, proc
 
@@ -34,6 +42,9 @@ REQUIREMENTS = os.path.join(ROOT, "laptop", "requirements.txt")
 STATE_FILE = paths.config("update.json")  # the last check: when, and what GitHub said
 # CHIP_UPDATE_URL points the check somewhere else (tests); "off" disables it
 API = os.environ.get("CHIP_UPDATE_URL") or f"https://api.github.com/repos/{REPO}/releases/latest"
+ZIP_URL = os.environ.get("CHIP_UPDATE_ZIP") or f"https://github.com/{REPO}/archive/refs/tags/{{tag}}.zip"
+ZIP_MAX = 64 * 1024 * 1024  # a release ZIP is about 3 MB
+STAGING = ".chip-update"
 EVERY = 24 * 3600
 TAG = re.compile(r"v?(\d+)\.(\d+)(?:\.(\d+))?")
 
@@ -50,6 +61,75 @@ def current():
             return f.read().strip()
     except OSError:
         return ""
+
+
+class ZipUpdateError(Exception):
+    pass
+
+
+def zip_files(data, tag):
+    """The release ZIP's files as [(path inside the Chip folder, unix mode or 0, ZipInfo)], after the checks."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+        infos = z.infolist()
+    except (zipfile.BadZipFile, OSError) as e:
+        raise ZipUpdateError(f"the download isn't a ZIP ({e})") from None
+    tops = {i.filename.split("/", 1)[0] for i in infos}
+    if len(tops) != 1:
+        raise ZipUpdateError("the ZIP should hold one Chip folder")
+    top = tops.pop() + "/"
+    files = []
+    for i in infos:
+        rel = i.filename[len(top):]
+        mode = i.external_attr >> 16
+        if not rel or i.is_dir():
+            continue
+        parts = rel.split("/")
+        if (not i.filename.startswith(top) or "\\" in rel or ":" in rel or rel.startswith("/")
+                or any(p in ("", ".", "..") for p in parts) or parts[0] in (".git", STAGING)):
+            raise ZipUpdateError(f"the ZIP has a path Chip won't write: {i.filename[:120]}")
+        if stat.S_ISLNK(mode):
+            raise ZipUpdateError(f"the ZIP has a link: {i.filename[:120]}")
+        files.append((rel, mode, i))
+    names = {rel for rel, _, _ in files}
+    if "laptop/bridge.py" not in names or "VERSION" not in names:
+        raise ZipUpdateError("the ZIP isn't a Chip folder")
+    version = z.read(top + "VERSION").decode("utf-8", "replace").strip()
+    if parse(version) != parse(tag):
+        raise ZipUpdateError(f"the ZIP says version {version[:20]!r}, not {tag}")
+    return z, files
+
+
+def unpack_over(root, data, tag):
+    """Unpacks the checked release ZIP over the Chip folder at root: everything into root/.chip-update first, then
+    file by file into place (os.replace, so no file is ever half written)."""
+    z, files = zip_files(data, tag)
+    stage = os.path.join(root, STAGING)
+    shutil.rmtree(stage, ignore_errors=True)
+    try:
+        for rel, mode, info in files:
+            dest = os.path.join(stage, *rel.split("/"))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with z.open(info) as src, open(dest, "wb") as out:
+                shutil.copyfileobj(src, out)
+            if os.name != "nt" and mode & 0o111:
+                os.chmod(dest, 0o755)
+        for rel, _, _ in files:
+            dest = os.path.join(root, *rel.split("/"))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            os.replace(os.path.join(stage, *rel.split("/")), dest)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    return len(files)
+
+
+def download(url, limit=ZIP_MAX):
+    req = urllib.request.Request(url, headers={"User-Agent": "deskbuddy-bridge"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        data = r.read(limit + 1)
+    if len(data) > limit:
+        raise ZipUpdateError("the download is too big for a Chip release")
+    return data
 
 
 def file_hash(path):
@@ -163,9 +243,11 @@ class Updater:
         tag = self.available()
         if not tag:
             return {"ok": False, "error": "no update", "message": "Chip is up to date"}, 409
-        if self.mode() != "git":
-            return {"ok": False, "error": "zip", "message": "this folder isn't a git clone: download the new version"}, 409
-        dirty = self.dirty()
+        zip_mode = self.mode() != "git"
+        if zip_mode and os.path.isdir(os.path.join(ROOT, ".git")):  # a clone on a laptop without git: not a ZIP's job
+            return {"ok": False, "error": "git", "message": "this folder is a git clone but git isn't installed: "
+                    "install git, or run git pull yourself"}, 409
+        dirty = [] if zip_mode else self.dirty()
         if dirty:
             return {"ok": False, "error": "dirty", "files": dirty,
                     "message": "files in the Chip folder have local changes; undo or commit them first"}, 409
@@ -175,13 +257,27 @@ class Updater:
             self.busy = "updating"
         try:
             req_before = file_hash(REQUIREMENTS)
-            r = self.git("fetch", "--quiet", "origin", f"refs/tags/{tag}:refs/tags/{tag}", timeout=120)
-            if r.returncode:
-                return {"ok": False, "error": "fetch", "message": (r.stderr or r.stdout).strip()[-400:]}, 502
-            r = self.git("merge", "--ff-only", "--quiet", tag)
-            if r.returncode:
-                return {"ok": False, "error": "merge", "message": "this folder has commits the release doesn't: "
-                        + (r.stderr or r.stdout).strip()[-300:]}, 409
+            if zip_mode:
+                try:
+                    data = download(ZIP_URL.format(tag=tag))
+                except (OSError, ValueError) as e:
+                    return {"ok": False, "error": "download",
+                            "message": f"couldn't download {tag}: {getattr(e, 'reason', None) or e}"[:300]}, 502
+                try:
+                    unpack_over(ROOT, data, tag)
+                except ZipUpdateError as e:
+                    return {"ok": False, "error": "zip", "message": str(e)[:300]}, 502
+                except OSError as e:
+                    return {"ok": False, "error": "write", "message": "couldn't write the Chip folder ("
+                            + str(e)[:200] + "): download the new version and run the installer again"}, 500
+            else:
+                r = self.git("fetch", "--quiet", "origin", f"refs/tags/{tag}:refs/tags/{tag}", timeout=120)
+                if r.returncode:
+                    return {"ok": False, "error": "fetch", "message": (r.stderr or r.stdout).strip()[-400:]}, 502
+                r = self.git("merge", "--ff-only", "--quiet", tag)
+                if r.returncode:
+                    return {"ok": False, "error": "merge", "message": "this folder has commits the release doesn't: "
+                            + (r.stderr or r.stdout).strip()[-300:]}, 409
             note = ""
             if file_hash(REQUIREMENTS) != req_before:
                 if sys.prefix != sys.base_prefix:  # the installer's venv (Windows, macOS)
