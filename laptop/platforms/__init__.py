@@ -57,9 +57,18 @@ def node():
 
 
 _WHISPER_EXE = "whisper-cli.exe" if os.name == "nt" else "whisper-cli"
-WHISPER = paths.data("stt", _WHISPER_EXE)   # Windows/macOS also take a whisper-cli found on PATH (looked up at start)
-if not os.path.isfile(WHISPER) and not sys.platform.startswith("linux"):
-    WHISPER = shutil.which(_WHISPER_EXE) or WHISPER
+WHISPER_LOCAL = paths.data("stt", _WHISPER_EXE)
+
+
+def whisper():
+    """The whisper-cli to run: DATA_DIR/stt's, else (Windows/macOS) one on PATH, e.g. Homebrew's whisper-cpp.
+    Looked up on every call, so one installed while the bridge runs is used without a restart."""
+    if os.path.isfile(WHISPER_LOCAL) or sys.platform.startswith("linux"):
+        return WHISPER_LOCAL
+    return shutil.which(_WHISPER_EXE) or WHISPER_LOCAL
+
+
+WHISPER = whisper()  # at start; stt.py and caps() call whisper()
 
 
 def fake_caps():
@@ -74,7 +83,7 @@ def fake_caps():
 
 def _detect():
     found = dict(backend.caps(), termuxLink=bool(proc.which("ssh")), skins=bool(node()),
-                 laptopStt=os.path.isfile(WHISPER))
+                 laptopStt=os.path.isfile(whisper()))
     return {k: bool(found.get(k)) for k in CAP_KEYS} | fake_caps()
 
 

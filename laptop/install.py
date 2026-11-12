@@ -208,23 +208,59 @@ def download(url, dest, sha256, timeout=900):
     os.replace(dest + ".part", dest)
 
 
+def mac_whisper(stt):
+    """macOS: Homebrew's whisper-cli (`brew install whisper-cpp` when missing), linked as DATA_DIR/stt/whisper-cli
+    so the bridge finds it whatever PATH launchd gives it. A message on failure, else None."""
+    dest = os.path.join(stt, "whisper-cli")
+    if os.path.isfile(dest):
+        say("whisper-cli: already there")
+        return None
+    found = shutil.which("whisper-cli", path=MAC_PATH + os.pathsep + os.environ.get("PATH", ""))
+    if not found:
+        brew = shutil.which("brew", path=MAC_PATH)
+        if not brew:
+            return "whisper-cli needs Homebrew (https://brew.sh): install it, then run this again"
+        say("whisper-cli: brew install whisper-cpp (a few minutes)")
+        try:
+            r = proc.complete([brew, "install", "whisper-cpp"], timeout=1800)
+        except proc.TimeoutExpired:
+            return "brew install whisper-cpp took over 30 minutes; run it in a terminal, then run this again"
+        if r.returncode != 0:
+            return "brew install whisper-cpp failed:\n" + "\n".join((r.stderr or r.stdout).strip().splitlines()[-8:])
+        found = shutil.which("whisper-cli", path=MAC_PATH)
+        if not found:
+            return "brew installed whisper-cpp but no whisper-cli appeared on " + MAC_PATH
+    if os.path.lexists(dest):  # a link to a whisper-cli that is gone
+        os.remove(dest)
+    os.symlink(os.path.realpath(found), dest)
+    say(f"whisper-cli: {found}")
+    return None
+
+
 def get_whisper(models=tuple(WHISPER_MODELS)):
-    """`install.py --stt`: whisper-cli.exe + the models for the Laptop dictation engine, into DATA_DIR/stt.
-    The binaries are on whichever recent whisper.cpp release has whisper-bin-x64.zip (the newest v-tags have none),
-    checked against the SHA-256 GitHub lists for the asset; models against Hugging Face's. Windows only (Linux builds
-    it, macOS uses Homebrew). Safe to run again: what is there stays."""
+    """`install.py --stt`: whisper-cli + the models for the Laptop dictation engine, into DATA_DIR/stt (the folder
+    stt.py reads). Windows: whisper-cli.exe from whichever recent whisper.cpp release has whisper-bin-x64.zip (the
+    newest v-tags have none), checked against the SHA-256 GitHub lists for the asset. macOS: Homebrew's whisper-cpp
+    (mac_whisper). Models are checked against Hugging Face's SHA-256. Linux builds it (README). Safe to run again:
+    what is there stays."""
     import io
     import json
     import urllib.request
     import zipfile
     import platforms
-    if not IS_WIN:
-        say("Linux: build whisper.cpp (README). macOS: brew install whisper-cpp.")
+    if not IS_WIN and sys.platform != "darwin":
+        say("Linux: build whisper.cpp (README).")
         return 1
-    stt = os.path.dirname(platforms.WHISPER) if os.path.isfile(platforms.WHISPER) else platforms.paths.data("stt")
+    stt = platforms.paths.data("stt")
     try:
-        if os.path.isfile(platforms.WHISPER):
-            say("whisper-cli.exe: already there")
+        os.makedirs(os.path.join(stt, "models"), exist_ok=True)
+        if sys.platform == "darwin":
+            problem = mac_whisper(stt)
+            if problem:
+                say(problem)
+                return 1
+        elif os.path.isfile(platforms.whisper()):
+            say(f"whisper-cli.exe: already there ({platforms.whisper()})")
         else:
             with urllib.request.urlopen(WHISPER_API, timeout=60) as r:
                 assets = [(rel["tag_name"], a) for rel in json.load(r) for a in rel["assets"] if a["name"] == "whisper-bin-x64.zip"]
@@ -486,6 +522,9 @@ def install_macos(args):
         import webbrowser
         webbrowser.open(DASHBOARD + "#connections")  # first job: pair the phone
         proc.run("open", ACCESSIBILITY_PANE, timeout=10)
+        if app.endswith(".app"):  # Finder with Python.app selected: drag it into the Accessibility list
+            proc.run("open", "-R", app, timeout=10)
+            say("  Finder shows that Python.app selected: drag it into the Accessibility list and switch it on.")
         say("\nNext: open the dashboard's Connections card to pair the phone.")
 
 
@@ -510,7 +549,7 @@ def main():
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--repair", action="store_true", help="rebuild the venv, keep settings, keys, phones and autostart")
     ap.add_argument("--ci", action="store_true")
-    ap.add_argument("--stt", action="store_true", help="download whisper-cli.exe + models for offline dictation on this laptop (Windows)")
+    ap.add_argument("--stt", action="store_true", help="whisper-cli + models for offline dictation on this laptop (Windows: download; macOS: Homebrew)")
     args = ap.parse_args()
     if args.stt:
         try:

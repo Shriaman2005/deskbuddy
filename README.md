@@ -202,7 +202,7 @@ every laptop. The differences are in what the laptop can report or do:
 | Dictation typed into the focused window | ✅ | ✅ | 🧪 (needs Accessibility) |
 | Dictation engine: phone (offline) | ✅ | ✅ | ✅ |
 | Dictation engine: cloud | ✅ | ✅ | ✅ |
-| Dictation engine: laptop (offline whisper.cpp) | ✅ | ✅ `Install Chip.cmd --stt` downloads it | ⚠️ `whisper-cli` from Homebrew |
+| Dictation engine: laptop (offline whisper.cpp) | ✅ | ✅ `Install Chip.cmd --stt` downloads it | ✅ `install.py --stt` (Homebrew) |
 | Knows when you're idle or the screen is locked | ✅ | ✅ (Windows 10 lock screen proven) | 🧪 |
 | AI-agent alerts (Claude Code, Gemini CLI, opencode) | ✅ | ✅ (Claude Code hooks tested from cmd, PowerShell and Git Bash) | 🧪 |
 | Alerts for other apps' notifications | ✅ | ❌ | ❌ |
@@ -328,7 +328,11 @@ python3 laptop/install.py
 
 Use Python 3.12+ from python.org or Homebrew (the one that comes with Xcode is too old). The installer adds a
 LaunchAgent so Chip starts at login, and opens **System Settings → Privacy & Security → Accessibility**: allow the
-**Python** it names there, otherwise dictation can't type. Log: `~/Library/Logs/deskbuddy-bridge.log`.
+**Python** it names there, otherwise dictation can't type. It also shows that Python.app selected in Finder: drag it
+into the Accessibility list and switch it on. Log: `~/Library/Logs/deskbuddy-bridge.log`.
+Offline dictation on the laptop: `python3 laptop/install.py --stt` installs Homebrew's `whisper-cpp` (if it isn't
+there yet), links its `whisper-cli` into `~/.local/share/deskbuddy/stt/` and downloads the small and base models
+(about 300 MB, checksummed, safe to repeat). Needs [Homebrew](https://brew.sh). Chip picks it up within 30 s.
 Please open an issue with what you see.
 
 ---

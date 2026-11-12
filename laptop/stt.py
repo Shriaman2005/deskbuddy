@@ -31,7 +31,6 @@ from platforms.proc import SubprocessError, TimeoutExpired
 
 SECRETS_FILE = paths.config("secrets.json")
 STT = paths.data("stt")
-WHISPER = platforms.WHISPER  # STT/whisper-cli
 MODELS_DIR = os.path.join(STT, "models")
 # today's laptop models: small (best with Hinglish), base in fast mode
 AUTO_MODELS = {False: "small-q8_0", True: "base-q8_0"}
@@ -198,7 +197,8 @@ def run_laptop(audio, lang, model, fast):
         have = laptop_models()
         model = next((m for m in (*AUTO_MODELS.values(), *have) if m in have), model)
     path = os.path.join(MODELS_DIR, f"ggml-{model}.bin")
-    if not os.path.isfile(WHISPER) or not os.path.isfile(path):
+    whisper = platforms.whisper()
+    if not os.path.isfile(whisper) or not os.path.isfile(path):
         raise SttError("provider_error", "whisper.cpp or its model isn't installed on the laptop")
     if lang not in laptop_languages(model):
         raise SttError("lang_unsupported", f"The {model} model only does English")
@@ -218,7 +218,7 @@ def run_laptop(audio, lang, model, fast):
         if win:
             f.close()
         try:
-            out = platforms.proc.complete([WHISPER, "-m", path, "-f", f.name, "-t", "4", "-nt", "-np", "-bs", "1", "-bo", "1",
+            out = platforms.proc.complete([whisper, "-m", path, "-f", f.name, "-t", "4", "-nt", "-np", "-bs", "1", "-bo", "1",
                                   *ac, *args], timeout=60, text=False, check=True)
         except TimeoutExpired:
             raise SttError("timeout") from None
@@ -581,7 +581,7 @@ def status(cfg):
                              "needsUrl": bool(p.get("needsUrl")), "needsRegion": bool(p.get("needsRegion"))} for name, p in PROVIDERS.items()},
         "engines": {
             "phone": {"languages": list(LANGS)},
-            "laptop": {"available": os.path.isfile(WHISPER) and bool(models), "models": ["auto"] + models,
+            "laptop": {"available": os.path.isfile(platforms.whisper()) and bool(models), "models": ["auto"] + models,
                        "languages": list(laptop_languages(AUTO_MODELS[False] if laptop_model == "auto" else laptop_model))},
             "cloud": {"provider": cfg.get("dictProvider"),
                       "languages": list(PROVIDERS.get(cfg.get("dictProvider"), PROVIDERS["groq"])["languages"])},
