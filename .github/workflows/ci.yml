@@ -28,24 +28,29 @@ jobs:
       - run: python -I laptop/selftest.py
       - run: python -I laptop/tests/test_link.py
       - run: python3 -I laptop/tests/test_hooks.py
+      - run: python3 -I phone/tests/test_server.py
   desktop:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, windows-11-arm, macos-latest]  # windows-11-arm: ARM64 laptops (Snapdragon) run Chip too
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - run: python -m pip install -r laptop/requirements.txt asyncssh==2.24.1
+      - run: python -m pip install -r laptop/requirements.txt
+      # asyncssh is only for the fake phone in test_link.py; its cryptography has no Windows ARM64 wheel (builds fail)
+      - run: python -m pip install asyncssh==2.24.1
+        if: runner.arch != 'ARM64'
       - run: python -I -X utf8 -m py_compile laptop/bridge.py laptop/link.py laptop/sshlink.py laptop/deploy.py laptop/doctor.py laptop/chip.py laptop/selftest.py laptop/install.py laptop/tests/test_macos.py phone/server.py phone/alert.py phone/dictation.py
       - run: python -I -X utf8 laptop/selftest.py
         env:
           CHIP_EXPECT_CAPS: stats,idle,locked,typing
       - run: python -I -X utf8 laptop/tests/test_link.py
+        if: runner.arch != 'ARM64'
       - run: python -I -X utf8 laptop/tests/test_hooks.py
       # S5: the Windows installer, the bridge it starts, typing into a real window, then the uninstall
       - name: Windows - install.py --ci

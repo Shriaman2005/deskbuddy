@@ -17,7 +17,12 @@ import alert
 from dictation import Dictation
 
 WWW = os.path.join(os.path.dirname(os.path.abspath(__file__)), "www")
-PORT = 8080
+PORT = int(os.environ.get("CHIP_PHONE_PORT", "8080"))  # overridden by phone/tests/test_server.py only
+# Same rule as the bridge (laptop/bridge.py Handler.allowed): Host guards against DNS rebinding (a website whose name
+# points at 127.0.0.1 reading /api/status), Origin against any other web page in the phone's browser calling the API
+# (mic on, torch, sounds). No Origin = curl over ssh (doctor) or a same-origin GET from the face page.
+HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+ORIGINS = {f"http://{h}" for h in HOSTS}
 
 # What the buddy's app drawer opens: generic intents any Android answers (no vendor apps), or a component that is the
 # same on every phone (Termux). `am start` from Termux is blocked while another app is in front (Android 10+), so the
@@ -86,7 +91,20 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def allowed(self):
+        origin = self.headers.get("Origin")
+        if self.headers.get("Host") in HOSTS and (origin is None or origin in ORIGINS):
+            return True
+        self.send_json({"error": "forbidden"}, 403)
+        return False
+
+    def do_HEAD(self):
+        if self.allowed():
+            super().do_HEAD()
+
     def do_GET(self):
+        if not self.allowed():
+            return
         if urlsplit(self.path).path == "/api/status":
             return self.send_json({
                 "battery": battery.get("percentage"),
@@ -100,6 +118,8 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
+        if not self.allowed():
+            return
         url = urlsplit(self.path)
         q = {k: v[0] for k, v in parse_qs(url.query).items()}
         if url.path == "/api/brightness":

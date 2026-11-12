@@ -97,6 +97,16 @@ def bring_to_front(hwnd):
     return bool(ok) and u32.GetForegroundWindow() == hwnd
 
 
+def ours(hwnd):
+    """True when the foreground window belongs to the same process as the test's window (Notepad's or Tk's)."""
+    def pid(h):
+        p = ctypes.c_uint32()
+        u32.GetWindowThreadProcessId(h, ctypes.byref(p))
+        return p.value
+    fg = u32.GetForegroundWindow()
+    return bool(fg) and pid(fg) == pid(hwnd)
+
+
 def chord(*vks):
     """Presses the keys together (Ctrl+A) and lets go."""
     for vk in vks:
@@ -144,9 +154,18 @@ def wait_window(cls, seconds=30):
     return None
 
 
+def notepad_running():
+    return "notepad.exe" in proc.run("tasklist", "/FI", "IMAGENAME eq notepad.exe", "/NH").lower()
+
+
 def run_notepad():
-    proc.run("taskkill", "/F", "/IM", "notepad.exe")
-    proc.popen(["notepad.exe"], text=False, detached=True, stdin=proc.DEVNULL, stdout=proc.DEVNULL, stderr=proc.DEVNULL)
+    """Our own Notepad. Never one that was already open: Windows 11 would add a tab to it, and the test closes the
+    Notepad it used with taskkill (someone's unsaved notes), so main() takes the Tk box instead then."""
+    try:
+        proc.popen(["notepad.exe"], text=False, detached=True, stdin=proc.DEVNULL, stdout=proc.DEVNULL, stderr=proc.DEVNULL)
+    except OSError as e:  # ssh session: Windows 11's Store Notepad can't start without a desktop (access denied)
+        log(f"Notepad didn't start ({e}): no usable desktop here")
+        return NO_DESKTOP, None
     hwnd = wait_window("Notepad")
     if not hwnd:
         log("no Notepad window appeared in 30 s")
@@ -175,6 +194,9 @@ def run_tk():
 
 def main():
     app = sys.argv[sys.argv.index("--app") + 1] if "--app" in sys.argv else "notepad"
+    if app == "notepad" and notepad_running():
+        log("Notepad is already open (maybe with someone's notes): using the Tk box instead")
+        app = "tk"
     root = None
     if app == "tk":
         hwnd, read, root = run_tk()
@@ -186,8 +208,14 @@ def main():
         if not bring_to_front(hwnd):
             log("could not bring the window to the front: no usable desktop here")
             return NO_DESKTOP
+        if not ours(hwnd):
+            log("the test window is not in front: no usable desktop here")
+            return NO_DESKTOP
         click_inside(hwnd)  # also ends the menu mode bring_to_front's Alt tap starts, which would eat the first letter
         log("focus before typing: %s" % (focus_info()[0],))
+        if not ours(hwnd):  # the click or the person at the laptop moved the focus: never type into their window
+            log("the focus left the test window before typing: nothing typed")
+            return 1
         status, answer = post_type(SPOKEN)
         log(f"POST /type -> {status} {json.dumps(answer, ensure_ascii=True)}")
         if status == 423:

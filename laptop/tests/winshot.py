@@ -37,22 +37,24 @@ def ssh(cmd, check=True, inp=None):
     return r
 
 
-def put(local_text, name):
-    # no scp/sftp dependency: write through stdin
+def put(local_text, name, encoding="UTF8"):
+    # no scp/sftp dependency: write through stdin. A .cmd file needs ASCII: cmd reads UTF8's BOM as a command.
     ps = f"$d=Join-Path $env:USERPROFILE '{DIR}'; New-Item -ItemType Directory -Force $d | Out-Null; " \
-         f"[Console]::In.ReadToEnd() | Set-Content -Encoding UTF8 (Join-Path $d '{name}')"
+         f"[Console]::In.ReadToEnd() | Set-Content -Encoding {encoding} (Join-Path $d '{name}')"
     ssh(f'powershell -NoProfile -Command "{ps}"', inp=local_text)
 
 
 def run_in_desktop(command_line, wait):
     """Create the task (interactive token, only when logged on), run it, wait, delete it."""
     ssh(f"schtasks /delete /tn {TASK} /f", check=False)
-    # a one-off task with a start time already past; we start it by hand with /run
-    tr = command_line.replace('"', '\\"')
-    r = ssh(f'schtasks /create /tn {TASK} /sc once /st 00:00 /it /rl limited /f /tr "{tr}"', check=False)
-    if r.returncode:
-        sys.exit(f"cannot create task: {r.stdout}{r.stderr}")
-    r = ssh(f"schtasks /run /tn {TASK}", check=False)
+    # The command goes in a .cmd file the task runs. Registered through PowerShell, not schtasks /create: a schtasks
+    # task never starts on battery (it sits "Queued" on a laptop that isn't plugged in).
+    put(f"@{command_line}\r\n", "job.cmd", "ascii")
+    ps = (f"$a = New-ScheduledTaskAction -Execute cmd.exe -Argument ('/c \"' + (Join-Path $env:USERPROFILE '{DIR}\\job.cmd') + '\"'); "
+          "$p = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited; "
+          "$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; "
+          f"Register-ScheduledTask {TASK} -Action $a -Principal $p -Settings $s -Force | Out-Null; Start-ScheduledTask {TASK}")
+    r = ssh(f'powershell -NoProfile -Command "{ps.replace(chr(34), chr(92) + chr(34))}"', check=False)
     if r.returncode:
         ssh(f"schtasks /delete /tn {TASK} /f", check=False)
         print("cannot start task (nobody logged on?):", r.stdout, r.stderr, file=sys.stderr)
